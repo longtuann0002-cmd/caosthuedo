@@ -1,0 +1,2 @@
+cd "E:\THIẾT KẾ\APP QUẢN LÝ CHO THUÊ QUẦN ÁO"
+npm run dev
