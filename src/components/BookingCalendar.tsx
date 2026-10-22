@@ -320,6 +320,7 @@ export default function BookingCalendar({
   });
 
   const [prevCalculatedTotal, setPrevCalculatedTotal] = useState(0);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
   const quickDocNoteInputRef = useRef<HTMLInputElement>(null);
 
   const calculatedDays = useMemo(() => {
@@ -2241,72 +2242,107 @@ export default function BookingCalendar({
                             ? `${Math.round(getCameraRateForDuration(first, calculatedDays, false)).toLocaleString()}đ/ngày`
                             : `${(first.price1Day ?? first.dailyRate).toLocaleString()}đ/ngày`;
                           const baseName = first.name.replace(/\s*\(Size\s+\S+\)\s*$/i, '').replace(/\s*\(Freesize\)\s*$/i, '').trim();
+                          const displayImage = sorted.find(c => formData.selectedCameraIds.includes(c.id) && c.image)?.image || sorted.find(c => c.image)?.image || first.image;
 
                           return (
                             <div key={groupKey} className={`p-3 rounded-2xl transition-all border ${anySelected ? 'bg-orange-50/70 border-orange-400 shadow-xs ring-1 ring-orange-300/60' : 'bg-white border-gray-200/90 hover:border-orange-300 hover:shadow-2xs shadow-3xs'}`}>
-                              {/* Dòng 1: Mã sản phẩm (hiển thị nổi bật ở đầu như trước) + Tên trang phục + Giá thuê */}
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1.5">
-                                  {/* Mã sản phẩm nổi bật ở đầu thẻ như trước */}
-                                  <span className={`font-mono text-[10.5px] sm:text-xs font-black px-2 py-0.5 rounded-md border shrink-0 ${
-                                    anySelected 
-                                      ? 'bg-orange-600 text-white border-orange-600 shadow-3xs' 
-                                      : 'bg-gray-100 text-gray-800 border-gray-250 shadow-3xs'
-                                  }`}>
-                                    #{groupKey}
-                                  </span>
-
-                                  {/* Tên trang phục đầy đủ */}
-                                  {baseName && baseName !== groupKey && (
-                                    <span className={`text-xs sm:text-sm font-extrabold leading-snug ${
-                                      anySelected ? 'text-orange-950 font-black' : 'text-gray-900'
-                                    }`}>
-                                      {baseName}
-                                    </span>
+                              <div className="flex gap-2.5 sm:gap-3 items-start">
+                                {/* Thumbnail ảnh đại diện trang phục */}
+                                <div 
+                                  style={{ width: '3.75rem', height: '4.75rem' }} className="sm:w-16 rounded-xl overflow-hidden bg-slate-100 border border-gray-200 shrink-0 relative group/thumb shadow-3xs flex items-center justify-center cursor-pointer"
+                                  onClick={(e) => {
+                                    if (displayImage) {
+                                      e.stopPropagation();
+                                      setPreviewImage({ url: displayImage, title: baseName || groupKey });
+                                    }
+                                  }}
+                                  title={displayImage ? "Nhấp để xem ảnh lớn" : undefined}
+                                >
+                                  {displayImage ? (
+                                    <>
+                                      <img
+                                        src={displayImage}
+                                        alt={baseName}
+                                        className="w-full h-full object-cover object-top hover:scale-105 transition-transform duration-200"
+                                        loading="lazy"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[8px] px-1 py-0.2 rounded opacity-0 group-hover/thumb:opacity-100 transition">🔍</span>
+                                    </>
+                                  ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-slate-50">
+                                      <span className="text-xl">👗</span>
+                                    </div>
                                   )}
                                 </div>
 
-                                <div className="shrink-0 text-right">
-                                  <span className={`font-mono text-[11px] sm:text-xs font-black px-2.5 py-0.5 rounded-lg inline-block shadow-3xs ${
-                                    anySelected 
-                                      ? 'bg-orange-600 text-white' 
-                                      : 'bg-orange-50 text-orange-700 border border-orange-200'
-                                  }`}>
-                                    {basePrice}
-                                  </span>
-                                </div>
-                              </div>
+                                {/* Thông tin trang phục */}
+                                <div className="flex-1 min-w-0">
+                                  {/* Dòng 1: Mã sản phẩm (hiển thị nổi bật ở đầu như trước) + Tên trang phục + Giá thuê */}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1.5">
+                                      {/* Mã sản phẩm nổi bật ở đầu thẻ như trước */}
+                                      <span className={`font-mono text-[10.5px] sm:text-xs font-black px-2 py-0.5 rounded-md border shrink-0 ${
+                                        anySelected 
+                                          ? 'bg-orange-600 text-white border-orange-600 shadow-3xs' 
+                                          : 'bg-gray-100 text-gray-800 border-gray-250 shadow-3xs'
+                                      }`}>
+                                        #{groupKey}
+                                      </span>
 
-                              {/* Dòng 2: Phân loại + Màu sắc (co giãn tự nhiên, không bị cắt chữ) */}
-                              <div className="flex items-center flex-wrap gap-1.5 mt-1.5 mb-2.5">
-                                {first.category && first.category !== 'Printer' && (
-                                  <span className="bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                    {first.category}
-                                  </span>
-                                )}
-                                {(() => {
-                                  const uniqueCols = Array.from(new Set(sorted.map(c => c.color?.trim()).filter(Boolean)));
-                                  if (uniqueCols.length === 0) return null;
-                                  return (
-                                    <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-3xs" title={uniqueCols.join(', ')}>
-                                      <span>🎨</span>
-                                      <span>{uniqueCols.length > 1 ? `${uniqueCols.length} màu: ${uniqueCols.join(', ')}` : uniqueCols[0]}</span>
-                                    </span>
-                                  );
-                                })()}
-                                {(() => {
-                                  const availCount = sorted.filter(c => {
-                                    const isMnt = c.status === 'Maintenance';
-                                    const isLdry = c.cleaningStatus === 'Laundry';
-                                    const isMnd = c.cleaningStatus === 'Mending';
-                                    return !isMnt && !isLdry && !isMnd && !isBookedOnDates(c.id);
-                                  }).length;
-                                  return (
-                                    <span className={`text-[10px] font-bold ml-auto ${availCount > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
-                                      {availCount > 0 ? `• Còn ${availCount}/${sorted.length} size` : '• Hết size ngày này'}
-                                    </span>
-                                  );
-                                })()}
+                                      {/* Tên trang phục đầy đủ */}
+                                      {baseName && baseName !== groupKey && (
+                                        <span className={`text-xs sm:text-sm font-extrabold leading-snug ${
+                                          anySelected ? 'text-orange-950 font-black' : 'text-gray-900'
+                                        }`}>
+                                          {baseName}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="shrink-0 text-right">
+                                      <span className={`font-mono text-[11px] sm:text-xs font-black px-2.5 py-0.5 rounded-lg inline-block shadow-3xs ${
+                                        anySelected 
+                                          ? 'bg-orange-600 text-white' 
+                                          : 'bg-orange-50 text-orange-700 border border-orange-200'
+                                      }`}>
+                                        {basePrice}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Dòng 2: Phân loại + Màu sắc (co giãn tự nhiên, không bị cắt chữ) */}
+                                  <div className="flex items-center flex-wrap gap-1.5 mt-1.5 mb-1">
+                                    {first.category && first.category !== 'Printer' && (
+                                      <span className="bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                        {first.category}
+                                      </span>
+                                    )}
+                                    {(() => {
+                                      const uniqueCols = Array.from(new Set(sorted.map(c => c.color?.trim()).filter(Boolean)));
+                                      if (uniqueCols.length === 0) return null;
+                                      return (
+                                        <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-3xs" title={uniqueCols.join(', ')}>
+                                          <span>🎨</span>
+                                          <span>{uniqueCols.length > 1 ? `${uniqueCols.length} màu: ${uniqueCols.join(', ')}` : uniqueCols[0]}</span>
+                                        </span>
+                                      );
+                                    })()}
+                                    {(() => {
+                                      const availCount = sorted.filter(c => {
+                                        const isMnt = c.status === 'Maintenance';
+                                        const isLdry = c.cleaningStatus === 'Laundry';
+                                        const isMnd = c.cleaningStatus === 'Mending';
+                                        return !isMnt && !isLdry && !isMnd && !isBookedOnDates(c.id);
+                                      }).length;
+                                      return (
+                                        <span className={`text-[10px] font-bold ml-auto ${availCount > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
+                                          {availCount > 0 ? `• Còn ${availCount}/${sorted.length} size` : '• Hết size ngày này'}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
                               </div>
 
                               {/* Dòng 3: Danh sách các nút chọn Size */}
@@ -2445,6 +2481,9 @@ export default function BookingCalendar({
                                   <div className={`w-4.5 h-4.5 rounded-md flex items-center justify-center shrink-0 ${isUnavailable ? 'border-2 border-gray-300 bg-gray-200' : isSelected ? 'bg-orange-600 text-white' : 'border-2 border-gray-300 bg-white'}`}>
                                     {isUnavailable ? <span className="text-[10px] font-black text-gray-500">✕</span> : isSelected ? <Check className="w-3 h-3 stroke-[3]" /> : null}
                                   </div>
+                                  {cam.image && (
+                                    <img src={cam.image} alt={cam.name} className="w-9 h-9 rounded-lg object-cover border border-gray-200 shrink-0" />
+                                  )}
                                   <span className={`text-sm font-extrabold truncate ${isUnavailable ? 'text-gray-500' : isSelected ? 'text-orange-950' : 'text-gray-900'}`}>{cam.name}</span>
                                   <span className="bg-gray-100 text-gray-600 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0">🖨️ Máy in</span>
                                 </div>
@@ -3258,6 +3297,42 @@ export default function BookingCalendar({
               >
                 <Save className="w-3.5 h-3.5" /> Lưu số tài khoản
               </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Image Zoom Preview Modal */}
+      {previewImage && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[10000] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div 
+            className="relative max-w-md w-full bg-white rounded-2xl overflow-hidden shadow-2xl animate-scale-up border border-gray-150 flex flex-col max-h-[90vh]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/80">
+              <h4 className="text-sm font-extrabold text-gray-900 truncate pr-2 flex items-center gap-1.5">
+                <span>👗</span>
+                <span className="truncate">{previewImage.title}</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="w-7 h-7 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition flex items-center justify-center cursor-pointer text-base"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3 overflow-auto flex items-center justify-center bg-slate-900/5">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[75vh] w-auto max-w-full rounded-xl object-contain shadow-sm"
+                referrerPolicy="no-referrer"
+              />
             </div>
           </div>
         </div>,

@@ -2891,6 +2891,16 @@ export default function ContractManager({
                                 <Check className="w-3 h-3 text-white" strokeWidth={3} />
                               ) : null}
                             </div>
+
+                            {/* Outfit thumbnail */}
+                            <div style={{ width: '2.5rem', height: '3.25rem' }} className="rounded-lg overflow-hidden bg-slate-100 border border-gray-200 shrink-0 flex items-center justify-center shadow-3xs">
+                              {cam.image ? (
+                                <img src={cam.image} alt={cam.name} className="w-full h-full object-cover object-top" loading="lazy" referrerPolicy="no-referrer" />
+                              ) : (
+                                <span className="text-base">{isPrinter ? '🖨️' : '👗'}</span>
+                              )}
+                            </div>
+
                             {/* Outfit info */}
                             <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
                               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
