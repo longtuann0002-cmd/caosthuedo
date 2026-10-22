@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Camera, RentalContract } from '../types';
 import MoneyInput from './MoneyInput';
 import { DressIcon } from './DressIcon';
-import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers } from 'lucide-react';
+import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List } from 'lucide-react';
 import { getInitialTieredPrices } from '../utils/pricing';
 import { matchCamera } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
@@ -90,6 +90,17 @@ export default function EquipmentTracker({
     setViewMode(mode);
     try {
       localStorage.setItem('outfit_inventory_view_mode', mode);
+    } catch {}
+  };
+
+  const [mobileLayout, setMobileLayout] = useState<'1-col' | '2-col'>(() => {
+    return (localStorage.getItem('outfit_mobile_layout') as '1-col' | '2-col') || '2-col';
+  });
+
+  const handleSetMobileLayout = (layout: '1-col' | '2-col') => {
+    setMobileLayout(layout);
+    try {
+      localStorage.setItem('outfit_mobile_layout', layout);
     } catch {}
   };
 
@@ -751,6 +762,36 @@ export default function EquipmentTracker({
               </button>
             </div>
 
+            {/* Mobile Layout Switcher: 1 Cột (Chữ to) vs 2 Cột (Gọn) */}
+            <div className="inline-flex sm:hidden items-center p-0.5 bg-gray-100 rounded-lg border border-gray-250 shadow-3xs">
+              <button
+                type="button"
+                onClick={() => handleSetMobileLayout('1-col')}
+                className={`px-2 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  mobileLayout === '1-col'
+                    ? 'bg-orange-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Chế độ 1 cột: Chữ to rõ, thông tin thoáng đãng, dễ đọc nhất"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>1 Cột To</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetMobileLayout('2-col')}
+                className={`px-2 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  mobileLayout === '2-col'
+                    ? 'bg-orange-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Chế độ 2 cột: Xem lướt nhiều mẫu"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>2 Cột</span>
+              </button>
+            </div>
+
             <button
               onClick={handleExportCSV}
               className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"
@@ -801,7 +842,7 @@ export default function EquipmentTracker({
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full pl-7.5 pr-5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+              className="w-full pl-7.5 pr-6 py-2 text-xs sm:text-sm font-medium border border-gray-250 rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
               title="Lọc theo phân loại trang phục"
             >
               <option value="ALL">Tất cả phân loại ({categoryCounts.ALL})</option>
@@ -812,7 +853,7 @@ export default function EquipmentTracker({
               <option value="Phụ kiện">Phụ kiện ({categoryCounts['Phụ kiện'] || 0})</option>
               <option value="Khác">Khác ({categoryCounts['Khác'] || 0})</option>
             </select>
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">
+            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
               ▼
             </div>
           </div>
@@ -820,12 +861,12 @@ export default function EquipmentTracker({
           {/* Size Filter */}
           <div className="relative col-span-1 sm:col-span-1 lg:col-span-1">
             <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-amber-600">
-              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <Sparkles className="w-3.5 h-3.5" />
             </div>
             <select
               value={sizeFilter}
               onChange={e => setSizeFilter(e.target.value)}
-              className="w-full pl-7.5 pr-5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+              className="w-full pl-7.5 pr-6 py-2 text-xs sm:text-sm font-medium border border-gray-250 rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
               title="Lọc theo kích cỡ trang phục"
             >
               <option value="ALL">Tất cả kích cỡ</option>
@@ -837,7 +878,7 @@ export default function EquipmentTracker({
               <option value="XXL">Size XXL</option>
               <option value="Freesize">Freesize</option>
             </select>
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">
+            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
               ▼
             </div>
           </div>
@@ -845,12 +886,12 @@ export default function EquipmentTracker({
           {/* Status Filter */}
           <div className="relative col-span-1 sm:col-span-1 lg:col-span-1">
             <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-blue-600">
-              <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <Clock className="w-3.5 h-3.5" />
             </div>
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="w-full pl-7.5 pr-5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+              className="w-full pl-7.5 pr-6 py-2 text-xs sm:text-sm font-medium border border-gray-250 rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
               title="Lọc theo trạng thái"
             >
               <option value="ALL">Tất cả trạng thái</option>
@@ -858,7 +899,7 @@ export default function EquipmentTracker({
               <option value="Rented">⏳ Đang thuê</option>
               <option value="Maintenance">🧺 Giặt / sửa</option>
             </select>
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">
+            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
               ▼
             </div>
           </div>
@@ -908,8 +949,8 @@ export default function EquipmentTracker({
         </div>
       </div>
 
-      {/* Equipment Grid Layout: 2 cols on mobile, 3 cols on tablet, 4-5 cols on desktop to show more items per row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-4">
+      {/* Equipment Grid Layout: dynamic 1-col or 2-cols on mobile, 3 cols on tablet, 4-5 cols on desktop */}
+      <div className={`grid ${mobileLayout === '1-col' ? 'grid-cols-1' : 'grid-cols-2'} sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4`}>
         {viewMode === 'grouped' ? (
           paginatedOutfitGroups.map((group, groupIndex) => {
             const activeCam = group.items.find(c => c.id === selectedGroupSizes[group.groupKey]) || group.items[0];
@@ -947,19 +988,19 @@ export default function EquipmentTracker({
                       referrerPolicy="no-referrer"
                     />
                     {/* Top-left: Category & ShortName & Sizes count badge */}
-                    <div className="absolute top-2 left-2 flex items-center gap-1 max-w-[90%] flex-wrap z-10">
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 max-w-[90%] flex-wrap z-10">
                       {currentUserRole === 'admin' && (
                         <div
                           draggable={true}
                           onDragStart={(e) => handleDragStart(e, activeCam.id)}
                           onDragEnd={handleDragEnd}
-                          className="bg-black/60 hover:bg-orange-600 backdrop-blur-xs text-white text-[10px] font-bold p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
+                          className="bg-black/60 hover:bg-orange-600 backdrop-blur-xs text-white p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
                           title="Kéo & thả để đổi vị trí thứ tự mẫu áo"
                         >
-                          <GripVertical className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <GripVertical className="w-3.5 h-3.5" />
                         </div>
                       )}
-                      <span className="bg-black/70 backdrop-blur-xs text-white text-[8.5px] sm:text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded-md tracking-wide truncate max-w-[110px] shadow-xs">
+                      <span className="bg-black/75 backdrop-blur-xs text-white text-[10px] sm:text-[11px] uppercase font-bold px-2 py-0.5 rounded-md tracking-wide truncate max-w-[120px] shadow-xs">
                         {group.category === 'Áo dài' ? '🌸 Áo Dài' :
                          group.category === 'Concept' ? '👘 Concept' :
                          group.category === 'Dạ hội' ? '✨ Dạ Hội' :
@@ -969,11 +1010,11 @@ export default function EquipmentTracker({
                          group.category === 'Printer' ? '🖨️ In ảnh' : group.category}
                       </span>
                       {group.shortName && (
-                        <span className="bg-orange-600 text-white text-[8.5px] sm:text-[9.5px] font-bold px-1.5 py-0.5 rounded-md truncate max-w-[80px] shadow-xs">
+                        <span className="bg-orange-600 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md truncate max-w-[90px] shadow-xs">
                           {group.shortName}
                         </span>
                       )}
-                      <span className="bg-amber-500/90 backdrop-blur-xs text-white text-[8.5px] sm:text-[9.5px] font-black px-1.5 py-0.5 rounded-md shadow-xs">
+                      <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md shadow-xs">
                         {group.items.length} size
                       </span>
                     </div>
@@ -983,34 +1024,34 @@ export default function EquipmentTracker({
                       {(() => {
                         if (group.readyCount === group.items.length) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-emerald-600/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
                               ✓ Sẵn sàng ({group.items.length}/{group.items.length} size)
                             </span>
                           );
                         }
                         if (group.readyCount > 0) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-emerald-600/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
                               ✓ Còn {group.readyCount}/{group.items.length} size
                             </span>
                           );
                         }
                         if (group.laundryCount > 0) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-blue-700/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-blue-700/95 text-white backdrop-blur-xs">
                               🧺 Đang giặt ({group.laundryCount} size)
                             </span>
                           );
                         }
                         if (group.mendingCount > 0) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-amber-700/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-amber-700/95 text-white backdrop-blur-xs">
                               🪡 Đang sửa ({group.mendingCount} size)
                             </span>
                           );
                         }
                         return (
-                          <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-purple-700/90 text-white backdrop-blur-xs">
+                          <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-purple-700/95 text-white backdrop-blur-xs">
                             ⏳ Đang kín lịch
                           </span>
                         );
@@ -1019,15 +1060,15 @@ export default function EquipmentTracker({
                   </div>
 
                   {/* Product text details */}
-                  <div className="p-3 sm:p-4 space-y-2 sm:space-y-2.5">
+                  <div className="p-3 sm:p-4 space-y-2.5">
                     <div>
-                      <h3 className="font-extrabold text-gray-900 text-xs sm:text-sm hover:text-orange-600 transition-colors line-clamp-1" title={group.cleanName}>
+                      <h3 className="font-extrabold text-gray-900 text-sm sm:text-base hover:text-orange-600 transition-colors line-clamp-1" title={group.cleanName}>
                         {group.cleanName}
                       </h3>
-                      <div className="text-gray-400 font-mono text-[10px] sm:text-xs mt-0.5 flex justify-between items-center">
-                        <span>Mã: <b className="text-gray-700">{group.baseSerial}</b></span>
+                      <div className="text-gray-500 font-mono text-[11px] sm:text-xs mt-1 flex justify-between items-center">
+                        <span>Mã: <b className="text-gray-800">{group.baseSerial}</b></span>
                         {group.gender && (
-                          <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded-full ${group.gender === 'Nữ' ? 'bg-pink-50 text-pink-700' : group.gender === 'Nam' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                          <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full ${group.gender === 'Nữ' ? 'bg-pink-50 text-pink-700 border border-pink-200' : group.gender === 'Nam' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-700'}`}>
                             {group.gender}
                           </span>
                         )}
@@ -1035,14 +1076,14 @@ export default function EquipmentTracker({
                     </div>
 
                     {/* Interactive Size & Color selector pills */}
-                    <div className="space-y-1.5 bg-slate-50/90 border border-slate-200/90 rounded-xl p-2 shadow-inner">
-                      <div className="flex items-center justify-between text-[9px] font-black uppercase text-gray-500 tracking-wider">
-                        <span>Chọn size xem chi tiết:</span>
-                        <span className="text-orange-600 font-bold capitalize">
+                    <div className="space-y-1.5 bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 shadow-inner">
+                      <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-black uppercase text-gray-500 tracking-wider">
+                        <span>Chọn size:</span>
+                        <span className="text-orange-600 font-black capitalize">
                           Size {activeCam.size || 'FS'}
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1.5">
                         {group.items.map(cam => {
                           const isCurrent = cam.id === activeCam.id;
                           const isLdry = cam.cleaningStatus === 'Laundry';
@@ -1059,67 +1100,67 @@ export default function EquipmentTracker({
                                 e.stopPropagation();
                                 setSelectedGroupSizes(prev => ({ ...prev, [group.groupKey]: cam.id }));
                               }}
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                                 isCurrent
-                                  ? 'bg-orange-50/95 text-orange-950 border-2 border-orange-500 ring-2 ring-orange-300/80 shadow-xs scale-102 font-black'
+                                  ? 'bg-orange-50 text-orange-950 border-2 border-orange-500 ring-2 ring-orange-300/80 shadow-xs scale-102 font-black'
                                   : 'bg-white text-gray-700 border-gray-250 hover:bg-orange-50/50 hover:border-orange-300'
                               }`}
                               title={`Bấm để chọn xem & thao tác Size ${szLabel}`}
                             >
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${
                                 isCurrent ? 'bg-orange-600' : isLdry ? 'bg-blue-500' : isMnd ? 'bg-amber-500' : isRnt ? 'bg-purple-500' : isMnt ? 'bg-rose-500' : 'bg-emerald-500'
                               }`} />
                               <span>Size {szLabel}</span>
                               {cam.color && (
-                                <span className={`text-[9px] font-bold px-1 py-0.2 rounded truncate max-w-[80px] shadow-3xs ${
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate max-w-[85px] shadow-3xs ${
                                   isCurrent ? 'bg-white text-orange-950 border border-orange-300' : 'bg-gray-100 text-gray-600 border border-gray-200'
                                 }`}>
                                   🎨 {cam.color}
                                 </span>
                               )}
-                              {isLdry && <span className="text-[8.5px] text-blue-600">🧺</span>}
-                              {isMnd && <span className="text-[8.5px] text-amber-600">🪡</span>}
-                              {isRnt && <span className="text-[8.5px] text-purple-600">⏳</span>}
-                              {isMnt && <span className="text-[8.5px] text-rose-600">🛠️</span>}
+                              {isLdry && <span className="text-[10px] text-blue-600">🧺</span>}
+                              {isMnd && <span className="text-[10px] text-amber-600">🪡</span>}
+                              {isRnt && <span className="text-[10px] text-purple-600">⏳</span>}
+                              {isMnt && <span className="text-[10px] text-rose-600">🛠️</span>}
                             </button>
                           );
                         })}
                       </div>
 
                       {/* Status of currently selected size */}
-                      <div className="pt-1 mt-0.5 border-t border-slate-200/60 flex items-center justify-between text-[9px] text-gray-500">
+                      <div className="pt-1.5 mt-1 border-t border-slate-200 flex items-center justify-between text-[10px] sm:text-[11px] text-gray-500">
                         <span className="font-mono">Mã tem: <b className="text-gray-800">{activeCam.serialNumber}</b></span>
                         {(() => {
-                          if (activeCam.status === 'Rented') return <span className="text-purple-700 font-bold bg-purple-50 px-1 rounded">⏳ Đang thuê</span>;
-                          if (activeCam.cleaningStatus === 'Laundry') return <span className="text-blue-700 font-bold bg-blue-50 px-1 rounded">🧺 Đang giặt</span>;
-                          if (activeCam.cleaningStatus === 'Mending') return <span className="text-amber-700 font-bold bg-amber-50 px-1 rounded">🪡 Đang sửa</span>;
-                          if (activeCam.status === 'Maintenance') return <span className="text-rose-700 font-bold bg-rose-50 px-1 rounded">🛠️ Bảo trì</span>;
-                          return <span className="text-emerald-700 font-bold bg-emerald-50 px-1 rounded">✓ Sẵn sàng</span>;
+                          if (activeCam.status === 'Rented') return <span className="text-purple-700 font-bold bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">⏳ Đang thuê</span>;
+                          if (activeCam.cleaningStatus === 'Laundry') return <span className="text-blue-700 font-bold bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">🧺 Đang giặt</span>;
+                          if (activeCam.cleaningStatus === 'Mending') return <span className="text-amber-700 font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">🪡 Đang sửa</span>;
+                          if (activeCam.status === 'Maintenance') return <span className="text-rose-700 font-bold bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">🛠️ Bảo trì</span>;
+                          return <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">✓ Sẵn sàng</span>;
                         })()}
                       </div>
                     </div>
 
-                    <p className="text-gray-500 text-[10px] sm:text-xs line-clamp-1 sm:line-clamp-2 hidden sm:block">
+                    <p className="text-gray-500 text-xs line-clamp-1 sm:line-clamp-2 hidden sm:block">
                       {activeCam.description || group.description || 'Chưa cung cấp mô tả chi tiết cho trang phục.'}
                     </p>
 
                     {/* Vốn nhập & Tiến độ hoàn vốn (ROI & Break-even) */}
-                    <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-1.5 sm:p-2 space-y-1">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-[9px] sm:text-[10.5px]">
-                        <span className="text-gray-500 font-semibold flex items-center gap-1 truncate">
-                          <span>💎</span>
-                          <span className="font-mono font-bold text-gray-800 truncate" title={`Tổng vốn cả mẫu ${group.items.length} size`}>
+                    <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2 sm:p-2.5 space-y-1.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] sm:text-xs">
+                        <span className="text-gray-600 font-semibold flex items-center gap-1 truncate">
+                          <span>💎 Vốn:</span>
+                          <span className="font-mono font-bold text-gray-900 truncate" title={`Tổng vốn cả mẫu ${group.items.length} size`}>
                             {purchase > 0 ? `${purchase.toLocaleString()}đ` : '—'}
                           </span>
-                          <span className="text-[8.5px] text-gray-400">({group.items.length} size)</span>
+                          <span className="text-[10px] text-gray-400">({group.items.length} size)</span>
                         </span>
                         {roiPercent !== null && (
-                          <span className={`px-1 py-0.5 rounded-md font-extrabold text-[8px] sm:text-[9.5px] self-start sm:self-auto shrink-0 ${
+                          <span className={`px-1.5 py-0.5 rounded-md font-black text-[10px] sm:text-[11px] self-start sm:self-auto shrink-0 ${
                             isBreakeven
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : 'bg-amber-100 text-amber-900 border border-amber-200'
                           }`}>
-                            {isBreakeven ? `✓ ${roiPercent}%` : `${roiPercent}%`}
+                            {isBreakeven ? `✓ ${roiPercent}% Hoàn vốn` : `${roiPercent}% Hoàn vốn`}
                           </span>
                         )}
                       </div>
@@ -1127,7 +1168,7 @@ export default function EquipmentTracker({
                       {/* Mini Progress Bar */}
                       {purchase > 0 && (
                         <div>
-                          <div className="w-full bg-gray-200 rounded-full h-1 overflow-hidden">
+                          <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${
                                 isBreakeven ? 'bg-emerald-500' : 'bg-orange-500'
@@ -1135,13 +1176,13 @@ export default function EquipmentTracker({
                               style={{ width: `${Math.min(roiPercent || 0, 100)}%` }}
                             />
                           </div>
-                          <div className="flex justify-between items-center text-[7.5px] sm:text-[9px] text-gray-400 mt-0.5 font-medium">
-                            <span className="truncate">Thu: <b className="text-gray-700">{revenue.toLocaleString()}đ</b></span>
+                          <div className="flex justify-between items-center text-[10px] sm:text-[11px] text-gray-500 mt-1 font-medium">
+                            <span className="truncate">Thu: <b className="text-gray-800 font-mono">{revenue.toLocaleString()}đ</b></span>
                             <span className="shrink-0">
                               {isBreakeven ? (
-                                <span className="text-emerald-600 font-bold">+{(revenue - purchase).toLocaleString()}đ</span>
+                                <span className="text-emerald-700 font-bold font-mono">+{(revenue - purchase).toLocaleString()}đ</span>
                               ) : (
-                                <span>~<b className="text-orange-600">{estRentalsLeft}</b>lượt</span>
+                                <span>~<b className="text-orange-600 font-mono font-bold">{estRentalsLeft}</b> lượt nữa</span>
                               )}
                             </span>
                           </div>
@@ -1150,18 +1191,18 @@ export default function EquipmentTracker({
                     </div>
 
                     {/* Dynamic Tiered Rates info */}
-                    <div className="bg-orange-50/50 border border-orange-200/80 rounded-xl p-2 sm:p-2.5">
+                    <div className="bg-orange-50/60 border border-orange-200/90 rounded-xl p-2.5">
                       <div className="flex items-baseline justify-between gap-1">
-                        <span className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider">Giá thuê:</span>
+                        <span className="text-[10px] sm:text-[11px] text-gray-600 font-bold uppercase tracking-wider">Giá thuê:</span>
                         <div className="text-right">
-                          <span className="text-xs sm:text-sm font-black text-orange-600 font-mono">
+                          <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
                             {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
                           </span>
-                          <span className="text-[8.5px] sm:text-[9.5px] text-gray-400">/ngày</span>
+                          <span className="text-[10px] sm:text-xs text-gray-500 font-medium">/ngày</span>
                         </div>
                       </div>
-                      <div className="mt-1 pt-1 border-t border-orange-200/50 flex items-center justify-between text-[8.5px] sm:text-[9.5px]">
-                        <span className="text-gray-600 font-medium truncate">
+                      <div className="mt-1.5 pt-1.5 border-t border-orange-200/60 flex items-center justify-between text-[10.5px] sm:text-xs">
+                        <span className="text-gray-700 font-medium truncate">
                           Từ 4 ngày: <b className="font-mono font-bold text-orange-700">{(activeCam.price4DaysPlus ?? Math.max(0, (activeCam.price1Day ?? activeCam.dailyRate) - 40000)).toLocaleString()}đ</b>/ng
                         </span>
                         <button
@@ -1173,7 +1214,7 @@ export default function EquipmentTracker({
                         </button>
                       </div>
                       {expandedPrices[group.groupKey] && (
-                        <div className="mt-1.5 pt-1.5 border-t border-orange-200/60 space-y-1 text-[9px] sm:text-[10px]">
+                        <div className="mt-2 pt-2 border-t border-orange-200/70 space-y-1 text-xs">
                           {(() => {
                             const p1 = activeCam.price1Day ?? activeCam.dailyRate;
                             const p2_daily = Math.max(0, p1 - 30000);
@@ -1185,19 +1226,19 @@ export default function EquipmentTracker({
 
                             return (
                               <>
-                                <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-orange-100">
+                                <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
                                   <span className="text-gray-600">1 ngày:</span>
                                   <span className="font-mono font-bold text-gray-800">{p1.toLocaleString()}đ</span>
                                 </div>
-                                <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-orange-100">
+                                <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
                                   <span className="text-gray-600">2 ngày:</span>
                                   <span className="font-mono font-bold text-gray-800">{total2Days.toLocaleString()}đ</span>
                                 </div>
-                                <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-orange-100">
+                                <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
                                   <span className="text-gray-600">3 ngày:</span>
                                   <span className="font-mono font-bold text-gray-800">{total3Days.toLocaleString()}đ</span>
                                 </div>
-                                <div className="flex justify-between items-center bg-orange-100/70 px-2 py-0.5 rounded border border-orange-200 font-medium">
+                                <div className="flex justify-between items-center bg-orange-100/80 px-2.5 py-1 rounded border border-orange-200 font-medium">
                                   <span className="text-orange-950 font-bold">Từ 4 ngày:</span>
                                   <span className="font-mono font-black text-orange-600">{rateFrom4Days.toLocaleString()}đ/ng</span>
                                 </div>
@@ -1211,31 +1252,31 @@ export default function EquipmentTracker({
                 </div>
 
                 {/* Quick Status and Admin tools bar */}
-                <div className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1">
+                <div className="px-2.5 sm:px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1.5">
                   {currentUserRole === 'admin' ? (
                     <>
                       {/* Reorder Buttons */}
-                      <div className="flex items-center gap-0.5 bg-white border border-gray-300 rounded-lg p-0.5 shadow-3xs shrink-0" title="Đổi vị trí mẫu áo trong kho">
+                      <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1 shadow-3xs shrink-0" title="Đổi vị trí mẫu áo trong kho">
                         <button
                           type="button"
                           onClick={() => handleMoveGroup(groupIndex, 'left')}
                           disabled={isFirst}
-                          className="p-0.5 sm:p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
+                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
                           title="Di chuyển lên trước (←)"
                         >
-                          <ArrowLeft className="w-3 h-3" />
+                          <ArrowLeft className="w-3.5 h-3.5" />
                         </button>
-                        <span className="text-[8px] sm:text-[10px] font-mono font-bold text-gray-600 px-0.5 select-none" title={`Vị trí mẫu thứ ${groupIndex + 1}`}>
+                        <span className="text-[10px] sm:text-xs font-mono font-bold text-gray-600 px-1 select-none" title={`Vị trí mẫu thứ ${groupIndex + 1}`}>
                           #{groupIndex + 1}
                         </span>
                         <button
                           type="button"
                           onClick={() => handleMoveGroup(groupIndex, 'right')}
                           disabled={isLast}
-                          className="p-0.5 sm:p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
+                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
                           title="Di chuyển về sau (→)"
                         >
-                          <ArrowRight className="w-3 h-3" />
+                          <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
@@ -1243,20 +1284,20 @@ export default function EquipmentTracker({
                       <button
                         type="button"
                         onClick={() => handleAddSizeToGroup(group)}
-                        className="text-[9px] sm:text-[10px] font-bold text-orange-700 hover:text-white bg-orange-50 hover:bg-orange-600 border border-orange-200 hover:border-orange-600 px-1.5 py-1 rounded-lg transition-colors cursor-pointer shadow-3xs flex items-center gap-0.5 shrink-0"
+                        className="text-[11px] sm:text-xs font-bold text-orange-700 hover:text-white bg-orange-50 hover:bg-orange-600 border border-orange-200 hover:border-orange-600 px-2 py-1.5 rounded-lg transition-colors cursor-pointer shadow-3xs flex items-center gap-1 shrink-0"
                         title={`Thêm size mới cho mẫu "${group.cleanName}"`}
                       >
-                        <Plus className="w-3 h-3" />
-                        <span className="hidden sm:inline">Size</span>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Size</span>
                       </button>
 
-                      <div className="flex items-center gap-1 ml-auto">
+                      <div className="flex items-center gap-1.5 ml-auto">
                         <button
                           onClick={() => handleOpenEditModal(activeCam)}
-                          className="text-gray-700 hover:text-orange-600 p-1 sm:p-1.5 bg-white border border-gray-300 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
+                          className="text-gray-700 hover:text-orange-600 p-1.5 bg-white border border-gray-300 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
                           title={`Sửa thông tin Size ${activeCam.size} (Admin)`}
                         >
-                          <Edit2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
 
                         <button
@@ -1269,7 +1310,7 @@ export default function EquipmentTracker({
                               onUpdateCamera({ ...activeCam, cleaningStatus: 'Laundry' });
                             }
                           }}
-                          className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-1 font-bold rounded-lg transition-all cursor-pointer shadow-3xs whitespace-nowrap ${
+                          className={`text-[10px] sm:text-xs px-2 py-1.5 font-bold rounded-lg transition-all cursor-pointer shadow-3xs whitespace-nowrap ${
                             activeCam.cleaningStatus === 'Laundry'
                               ? 'bg-blue-50 border border-blue-300 text-blue-800 hover:bg-blue-100'
                               : activeCam.cleaningStatus === 'Mending'
@@ -1301,17 +1342,17 @@ export default function EquipmentTracker({
                               setCameraToDelete(activeCam);
                             }
                           }}
-                          className="text-gray-500 hover:text-red-650 p-1 sm:p-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer shadow-3xs"
+                          className="text-gray-500 hover:text-red-650 p-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer shadow-3xs"
                           title={`Xóa Size ${activeCam.size} khỏi kho`}
                         >
-                          <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </>
                   ) : (
                     <>
-                      <span className="text-[11px] font-bold text-gray-500 bg-gray-200/50 px-2 rounded-md py-1 uppercase flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5 text-gray-550 shrink-0" /> Chế độ xem (Staff)
+                      <span className="text-xs font-bold text-gray-600 bg-gray-200/60 px-2.5 py-1 rounded-md uppercase flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-gray-500 shrink-0" /> Chế độ xem (Staff)
                       </span>
 
                       <button
@@ -1360,19 +1401,19 @@ export default function EquipmentTracker({
                       referrerPolicy="no-referrer"
                     />
                     {/* Top-left: Category & ShortName & Drag Handle */}
-                    <div className="absolute top-2 left-2 flex items-center gap-1 max-w-[90%] flex-wrap z-10">
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 max-w-[90%] flex-wrap z-10">
                       {currentUserRole === 'admin' && (
                         <div
                           draggable={true}
                           onDragStart={(e) => handleDragStart(e, cam.id)}
                           onDragEnd={handleDragEnd}
-                          className="bg-black/60 hover:bg-orange-600 backdrop-blur-xs text-white text-[10px] font-bold p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
+                          className="bg-black/60 hover:bg-orange-600 backdrop-blur-xs text-white p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
                           title="Kéo & thả để đổi vị trí thứ tự trang phục"
                         >
-                          <GripVertical className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <GripVertical className="w-3.5 h-3.5" />
                         </div>
                       )}
-                      <span className="bg-black/70 backdrop-blur-xs text-white text-[8.5px] sm:text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded-md tracking-wide truncate max-w-[110px] shadow-xs">
+                      <span className="bg-black/75 backdrop-blur-xs text-white text-[10px] sm:text-[11px] uppercase font-bold px-2 py-0.5 rounded-md tracking-wide truncate max-w-[120px] shadow-xs">
                         {cam.category === 'Áo dài' ? '🌸 Áo Dài' :
                          cam.category === 'Concept' ? '👘 Concept' :
                          cam.category === 'Dạ hội' ? '✨ Dạ Hội' :
@@ -1382,13 +1423,13 @@ export default function EquipmentTracker({
                          cam.category === 'Printer' ? '🖨️ In ảnh' : cam.category}
                       </span>
                       {cam.shortName && (
-                        <span className="bg-orange-600 text-white text-[8.5px] sm:text-[9.5px] font-bold px-1.5 py-0.5 rounded-md truncate max-w-[80px] shadow-xs">
+                        <span className="bg-orange-600 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md truncate max-w-[90px] shadow-xs">
                           {cam.shortName}
                         </span>
                       )}
                     </div>
                   
-                    {/* Bottom: Status Overlay Badge (Placed at bottom to completely avoid colliding with top tags) */}
+                    {/* Bottom: Status Overlay Badge */}
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-end z-10 pointer-events-none">
                       {(() => {
                         const isLaundry = cam.cleaningStatus === 'Laundry';
@@ -1398,34 +1439,34 @@ export default function EquipmentTracker({
 
                         if (isRented) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-purple-700/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-purple-700/95 text-white backdrop-blur-xs">
                               ⏳ Đang thuê
                             </span>
                           );
                         }
                         if (isLaundry) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-blue-700/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-blue-700/95 text-white backdrop-blur-xs">
                               🧺 Đang giặt
                             </span>
                           );
                         }
                         if (isMending) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-amber-700/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-amber-700/95 text-white backdrop-blur-xs">
                               🪡 Đang sửa
                             </span>
                           );
                         }
                         if (isMaintenance) {
                           return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-rose-700/90 text-white backdrop-blur-xs">
+                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-rose-700/95 text-white backdrop-blur-xs">
                               🛠️ Bảo trì
                             </span>
                           );
                         }
                         return (
-                          <span className="inline-flex items-center gap-1 font-bold text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md shadow-md bg-emerald-600/90 text-white backdrop-blur-xs">
+                          <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
                             ✓ Sẵn sàng
                           </span>
                         );
@@ -1434,12 +1475,12 @@ export default function EquipmentTracker({
                   </div>
 
                   {/* Product text details */}
-                  <div className="p-3 sm:p-4 space-y-2 sm:space-y-2.5">
+                  <div className="p-3 sm:p-4 space-y-2.5">
                     <div>
-                      <h3 className="font-bold text-gray-900 text-xs sm:text-sm hover:text-orange-600 transition-colors line-clamp-1" title={cam.name}>{cam.name}</h3>
-                      <div className="text-gray-400 font-mono text-[10px] sm:text-xs mt-0.5 flex justify-between items-center">
-                        <span>Mã: {cam.serialNumber}</span>
-                        {cam.gender && <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded-full ${cam.gender === 'Nữ' ? 'bg-pink-50 text-pink-700' : cam.gender === 'Nam' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{cam.gender}</span>}
+                      <h3 className="font-extrabold text-gray-900 text-sm sm:text-base hover:text-orange-600 transition-colors line-clamp-1" title={cam.name}>{cam.name}</h3>
+                      <div className="text-gray-500 font-mono text-[11px] sm:text-xs mt-1 flex justify-between items-center">
+                        <span>Mã: <b className="text-gray-800">{cam.serialNumber}</b></span>
+                        {cam.gender && <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full ${cam.gender === 'Nữ' ? 'bg-pink-50 text-pink-700 border border-pink-200' : cam.gender === 'Nam' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-700'}`}>{cam.gender}</span>}
                       </div>
                     </div>
 
@@ -1451,13 +1492,13 @@ export default function EquipmentTracker({
                           : (cam.size ? cam.size.split(',').map(s => s.trim()).filter(Boolean) : []);
                         if (rawSizes.length === 0) return null;
                         return (
-                          <div className="inline-flex items-center gap-1 bg-slate-100/90 border border-slate-200 px-1.5 py-0.5 rounded-lg">
-                            <span className="text-[10px] font-bold text-slate-500">Size</span>
-                            <div className="flex items-center gap-0.5">
+                          <div className="inline-flex items-center gap-1 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg">
+                            <span className="text-xs font-bold text-slate-500">Size</span>
+                            <div className="flex items-center gap-1">
                               {rawSizes.map(sz => (
                                 <span
                                   key={sz}
-                                  className="text-[10px] font-extrabold bg-white text-slate-800 px-1 py-0.2 rounded shadow-2xs border border-slate-200/60"
+                                  className="text-xs font-black bg-white text-slate-900 px-1.5 py-0.2 rounded shadow-2xs border border-slate-200"
                                 >
                                   {sz}
                                 </span>
@@ -1467,18 +1508,18 @@ export default function EquipmentTracker({
                         );
                       })()}
                       {cam.color && (
-                        <span className="text-[10px] font-semibold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-lg border border-rose-200 truncate max-w-[120px]" title={cam.color}>
+                        <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-lg border border-rose-200 truncate max-w-[130px]" title={cam.color}>
                           🎨 {cam.color}
                         </span>
                       )}
                       {cam.cleaningStatus && cam.cleaningStatus !== 'Clean' && (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${cam.cleaningStatus === 'Laundry' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${cam.cleaningStatus === 'Laundry' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                           {cam.cleaningStatus === 'Laundry' ? '🧺 Đang giặt' : '🪡 Đang sửa'}
                         </span>
                       )}
                     </div>
 
-                    <p className="text-gray-500 text-[10px] sm:text-xs line-clamp-1 sm:line-clamp-2 hidden sm:block">
+                    <p className="text-gray-500 text-xs line-clamp-1 sm:line-clamp-2 hidden sm:block">
                       {cam.description || 'Chưa cung cấp mô tả chi tiết cho trang phục.'}
                     </p>
 
@@ -1492,21 +1533,21 @@ export default function EquipmentTracker({
                       const estRentalsLeft = remaining > 0 && cam.dailyRate > 0 ? Math.ceil(remaining / cam.dailyRate) : 0;
 
                       return (
-                        <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-1.5 sm:p-2 space-y-1">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-[9px] sm:text-[10.5px]">
-                            <span className="text-gray-500 font-semibold flex items-center gap-1 truncate">
-                              <span>💎</span>
-                              <span className="font-mono font-bold text-gray-800 truncate">
+                        <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2 sm:p-2.5 space-y-1.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] sm:text-xs">
+                            <span className="text-gray-600 font-semibold flex items-center gap-1 truncate">
+                              <span>💎 Vốn:</span>
+                              <span className="font-mono font-bold text-gray-900 truncate">
                                 {purchase > 0 ? `${purchase.toLocaleString()}đ` : '—'}
                               </span>
                             </span>
                             {roiPercent !== null && (
-                              <span className={`px-1 py-0.5 rounded-md font-extrabold text-[8px] sm:text-[9.5px] self-start sm:self-auto shrink-0 ${
+                              <span className={`px-1.5 py-0.5 rounded-md font-black text-[10px] sm:text-[11px] self-start sm:self-auto shrink-0 ${
                                 isBreakeven
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                   : 'bg-amber-100 text-amber-900 border border-amber-200'
                               }`}>
-                                {isBreakeven ? `✓ ${roiPercent}%` : `${roiPercent}%`}
+                                {isBreakeven ? `✓ ${roiPercent}% Hoàn vốn` : `${roiPercent}% Hoàn vốn`}
                               </span>
                             )}
                           </div>
@@ -1514,7 +1555,7 @@ export default function EquipmentTracker({
                           {/* Mini Progress Bar */}
                           {purchase > 0 && (
                             <div>
-                              <div className="w-full bg-gray-200 rounded-full h-1 overflow-hidden">
+                              <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all duration-500 ${
                                     isBreakeven ? 'bg-emerald-500' : 'bg-orange-500'
@@ -1522,13 +1563,13 @@ export default function EquipmentTracker({
                                   style={{ width: `${Math.min(roiPercent || 0, 100)}%` }}
                                 />
                               </div>
-                              <div className="flex justify-between items-center text-[7.5px] sm:text-[9px] text-gray-400 mt-0.5 font-medium">
-                                <span className="truncate">{revenue.toLocaleString()}đ</span>
+                              <div className="flex justify-between items-center text-[10px] sm:text-[11px] text-gray-500 mt-1 font-medium">
+                                <span className="truncate">Thu: <b className="text-gray-800 font-mono">{revenue.toLocaleString()}đ</b></span>
                                 <span className="shrink-0">
                                   {isBreakeven ? (
-                                    <span className="text-emerald-600 font-bold">+{(revenue - purchase).toLocaleString()}đ</span>
+                                    <span className="text-emerald-700 font-bold font-mono">+{(revenue - purchase).toLocaleString()}đ</span>
                                   ) : (
-                                    <span>~<b className="text-orange-600">{estRentalsLeft}</b>lượt</span>
+                                    <span>~<b className="text-orange-600 font-mono font-bold">{estRentalsLeft}</b> lượt nữa</span>
                                   )}
                                 </span>
                               </div>
@@ -1540,17 +1581,17 @@ export default function EquipmentTracker({
 
                     {/* Dynamic Tiered Rates info - Unified Responsive (No overlap on Mobile or Desktop) */}
                     {cam.category === 'Printer' ? (
-                      <div className="bg-rose-50/60 border border-rose-200/80 rounded-xl p-2 sm:p-2.5">
+                      <div className="bg-rose-50/60 border border-rose-200/90 rounded-xl p-2.5">
                         <div className="flex items-baseline justify-between gap-1">
-                          <span className="text-[9px] sm:text-[10px] text-rose-800 font-bold uppercase tracking-wider">In ảnh:</span>
+                          <span className="text-[10px] sm:text-[11px] text-rose-800 font-bold uppercase tracking-wider">In ảnh:</span>
                           <div className="text-right">
-                            <span className="text-xs sm:text-sm font-black text-rose-600 font-mono">
+                            <span className="text-sm sm:text-base font-black text-rose-600 font-mono">
                               {(cam.printPrice1To2 ?? 40000).toLocaleString()}đ
                             </span>
-                            <span className="text-[8.5px] sm:text-[9.5px] text-gray-400">/tấm</span>
+                            <span className="text-[10px] sm:text-xs text-gray-500">/tấm</span>
                           </div>
                         </div>
-                        <div className="mt-1 pt-1 border-t border-rose-200/50 flex items-center justify-between text-[8.5px] sm:text-[9.5px]">
+                        <div className="mt-1.5 pt-1.5 border-t border-rose-200/60 flex items-center justify-between text-[10.5px] sm:text-xs">
                           <span className="text-rose-900 font-medium">10+ tấm: <b>{(cam.printPrice10Plus ?? 33000).toLocaleString()}đ</b></span>
                           <button
                             type="button"
@@ -1561,16 +1602,16 @@ export default function EquipmentTracker({
                           </button>
                         </div>
                         {expandedPrices[cam.id] && (
-                          <div className="mt-1.5 pt-1.5 border-t border-rose-200/60 space-y-1 text-[9px] sm:text-[10px]">
-                            <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-rose-100">
+                          <div className="mt-2 pt-2 border-t border-rose-200/70 space-y-1 text-xs">
+                            <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-rose-100">
                               <span className="text-gray-600">1 - 2 tấm:</span>
                               <span className="font-mono font-bold text-rose-700">{(cam.printPrice1To2 ?? 40000).toLocaleString()}đ</span>
                             </div>
-                            <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-rose-100">
+                            <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-rose-100">
                               <span className="text-gray-600">3 - 9 tấm:</span>
                               <span className="font-mono font-bold text-rose-700">{(cam.printPrice3To9 ?? 35000).toLocaleString()}đ</span>
                             </div>
-                            <div className="flex justify-between items-center bg-rose-100/80 px-2 py-0.5 rounded border border-rose-200">
+                            <div className="flex justify-between items-center bg-rose-100/80 px-2.5 py-1 rounded border border-rose-200 font-medium">
                               <span className="text-rose-950 font-bold">Từ 10 tấm:</span>
                               <span className="font-mono font-black text-rose-700">{(cam.printPrice10Plus ?? 33000).toLocaleString()}đ</span>
                             </div>
@@ -1578,18 +1619,18 @@ export default function EquipmentTracker({
                         )}
                       </div>
                     ) : (
-                      <div className="bg-orange-50/50 border border-orange-200/80 rounded-xl p-2 sm:p-2.5">
+                      <div className="bg-orange-50/60 border border-orange-200/90 rounded-xl p-2.5">
                         <div className="flex items-baseline justify-between gap-1">
-                          <span className="text-[9px] sm:text-[10px] text-gray-500 font-bold uppercase tracking-wider">Giá thuê:</span>
+                          <span className="text-[10px] sm:text-[11px] text-gray-600 font-bold uppercase tracking-wider">Giá thuê:</span>
                           <div className="text-right">
-                            <span className="text-xs sm:text-sm font-black text-orange-600 font-mono">
+                            <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
                               {(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ
                             </span>
-                            <span className="text-[8.5px] sm:text-[9.5px] text-gray-400">/ngày</span>
+                            <span className="text-[10px] sm:text-xs text-gray-500 font-medium">/ngày</span>
                           </div>
                         </div>
-                        <div className="mt-1 pt-1 border-t border-orange-200/50 flex items-center justify-between text-[8.5px] sm:text-[9.5px]">
-                          <span className="text-gray-600 font-medium truncate">
+                        <div className="mt-1.5 pt-1.5 border-t border-orange-200/60 flex items-center justify-between text-[10.5px] sm:text-xs">
+                          <span className="text-gray-700 font-medium truncate">
                             Từ 4 ngày: <b className="font-mono font-bold text-orange-700">{(cam.price4DaysPlus ?? Math.max(0, (cam.price1Day ?? cam.dailyRate) - 40000)).toLocaleString()}đ</b>/ng
                           </span>
                           <button
@@ -1601,7 +1642,7 @@ export default function EquipmentTracker({
                           </button>
                         </div>
                         {expandedPrices[cam.id] && (
-                          <div className="mt-1.5 pt-1.5 border-t border-orange-200/60 space-y-1 text-[9px] sm:text-[10px]">
+                          <div className="mt-2 pt-2 border-t border-orange-200/70 space-y-1 text-xs">
                             {(() => {
                               const p1 = cam.price1Day ?? cam.dailyRate;
                               const p2_daily = Math.max(0, p1 - 30000);
@@ -1613,19 +1654,19 @@ export default function EquipmentTracker({
 
                               return (
                                 <>
-                                  <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-orange-100">
+                                  <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
                                     <span className="text-gray-600">1 ngày:</span>
                                     <span className="font-mono font-bold text-gray-800">{p1.toLocaleString()}đ</span>
                                   </div>
-                                  <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-orange-100">
+                                  <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
                                     <span className="text-gray-600">2 ngày:</span>
                                     <span className="font-mono font-bold text-gray-800">{total2Days.toLocaleString()}đ</span>
                                   </div>
-                                  <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-orange-100">
+                                  <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
                                     <span className="text-gray-600">3 ngày:</span>
                                     <span className="font-mono font-bold text-gray-800">{total3Days.toLocaleString()}đ</span>
                                   </div>
-                                  <div className="flex justify-between items-center bg-orange-100/70 px-2 py-0.5 rounded border border-orange-200 font-medium">
+                                  <div className="flex justify-between items-center bg-orange-100/80 px-2.5 py-1 rounded border border-orange-200 font-medium">
                                     <span className="text-orange-950 font-bold">Từ 4 ngày:</span>
                                     <span className="font-mono font-black text-orange-600">{rateFrom4Days.toLocaleString()}đ/ng</span>
                                   </div>
@@ -1640,41 +1681,41 @@ export default function EquipmentTracker({
                 </div>
 
                 {/* Quick Status and Admin tools bar */}
-                <div className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1">
+                <div className="px-2.5 sm:px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1.5">
                   {currentUserRole === 'admin' ? (
                     <>
                       {/* Reorder Buttons: Left & Right */}
-                      <div className="flex items-center gap-0.5 bg-white border border-gray-300 rounded-lg p-0.5 shadow-3xs shrink-0" title="Đổi vị trí trang phục trong danh sách">
+                      <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1 shadow-3xs shrink-0" title="Đổi vị trí trang phục trong danh sách">
                         <button
                           type="button"
                           onClick={() => handleMoveCamera(cam.id, 'left')}
                           disabled={isFirst}
-                          className="p-0.5 sm:p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
+                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
                           title="Di chuyển lên trước (←)"
                         >
-                          <ArrowLeft className="w-3 h-3" />
+                          <ArrowLeft className="w-3.5 h-3.5" />
                         </button>
-                        <span className="text-[8px] sm:text-[10px] font-mono font-bold text-gray-600 px-0.5 select-none" title={`Vị trí thứ ${globalIndex + 1} trên tổng ${cameras.length} trang phục`}>
+                        <span className="text-[10px] sm:text-xs font-mono font-bold text-gray-600 px-1 select-none" title={`Vị trí thứ ${globalIndex + 1} trên tổng ${cameras.length} trang phục`}>
                           #{globalIndex + 1}
                         </span>
                         <button
                           type="button"
                           onClick={() => handleMoveCamera(cam.id, 'right')}
                           disabled={isLast}
-                          className="p-0.5 sm:p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
+                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
                           title="Di chuyển về sau (→)"
                         >
-                          <ArrowRight className="w-3 h-3" />
+                          <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-1 ml-auto">
+                      <div className="flex items-center gap-1.5 ml-auto">
                         <button
                           onClick={() => handleOpenEditModal(cam)}
-                          className="text-gray-700 hover:text-orange-600 p-1 sm:p-1.5 bg-white border border-gray-300 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
+                          className="text-gray-700 hover:text-orange-600 p-1.5 bg-white border border-gray-300 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
                           title="Sửa thông tin (Admin)"
                         >
-                          <Edit2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
 
                         <button
@@ -1687,7 +1728,7 @@ export default function EquipmentTracker({
                               onUpdateCamera({ ...cam, cleaningStatus: 'Laundry' });
                             }
                           }}
-                          className={`text-[8px] sm:text-[10px] px-1.5 sm:px-2 py-1 font-bold rounded-lg transition-all cursor-pointer shadow-3xs whitespace-nowrap ${
+                          className={`text-[10px] sm:text-xs px-2 py-1.5 font-bold rounded-lg transition-all cursor-pointer shadow-3xs whitespace-nowrap ${
                             cam.cleaningStatus === 'Laundry'
                               ? 'bg-blue-50 border border-blue-300 text-blue-800 hover:bg-blue-100'
                               : cam.cleaningStatus === 'Mending'
@@ -1719,7 +1760,7 @@ export default function EquipmentTracker({
                               setCameraToDelete(cam);
                             }
                           }}
-                          className="text-gray-500 hover:text-red-650 p-1 sm:p-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer shadow-3xs"
+                          className="text-gray-500 hover:text-red-650 p-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer shadow-3xs"
                           title="Xóa trang phục"
                         >
                           <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
