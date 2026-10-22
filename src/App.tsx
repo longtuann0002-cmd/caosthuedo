@@ -17,6 +17,7 @@ import { broadcastToAllDevices, listenToCrossDeviceAlerts, initFirebaseMessaging
 import { matchContract, matchCamera, matchCustomer, smartMatch } from './utils/searchUtils';
 import { compressImageFile } from './utils/imageUtils';
 import { deduplicateContracts, generateNextContractCode } from './utils/contractUtils';
+import { normalizeOutfitsBySize } from './utils/outfitUtils';
 
 
 // Component imports
@@ -243,9 +244,11 @@ export default function App() {
   const [changePasswordSuccess, setChangePasswordSuccess] = useState('');
 
   // Load states from localStorage or use rich mock dataset
-  const [cameras, setCameras] = useState<Camera[]>(() =>
-    loadStoredData('cameras', INITIAL_CAMERAS)
-  );
+  const [cameras, setCameras] = useState<Camera[]>(() => {
+    const loaded = loadStoredData('cameras', INITIAL_CAMERAS);
+    const { normalized } = normalizeOutfitsBySize(loaded);
+    return normalized;
+  });
   const [contracts, setContracts] = useState<RentalContract[]>(() => {
     const loaded = loadStoredData('contracts', INITIAL_CONTRACTS);
     const migrationKey = 'camlease_historical_contracts_migrated_v1';
@@ -903,7 +906,12 @@ export default function App() {
   useEffect(() => {
     const loadInitialData = async () => {
       if (!isSupabaseConfigured) {
-        setCameras(loadStoredData('cameras', INITIAL_CAMERAS));
+        const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
+        const { normalized, splitCount } = normalizeOutfitsBySize(localCams);
+        setCameras(normalized);
+        if (splitCount > 0) {
+          saveStoredData('cameras', normalized);
+        }
         setContracts(loadStoredData('contracts', INITIAL_CONTRACTS));
         setCustomers(loadStoredData('customers', INITIAL_CUSTOMERS));
         setExpenses(loadStoredData('expenses', INITIAL_EXPENSES));
@@ -918,9 +926,22 @@ export default function App() {
         const cloudExpenses = await fetchFromSupabase('expenses');
 
         if (cloudCameras !== null) {
-          setCameras(cloudCameras);
+          const { normalized, splitCount } = normalizeOutfitsBySize(cloudCameras as Camera[]);
+          setCameras(normalized);
+          if (splitCount > 0) {
+            console.log(`[Auto-Repair] Đã tự động tách ${splitCount} trang phục có size gộp thành từng size độc lập.`);
+            saveStoredData('cameras', normalized);
+            if (isSupabaseConfigured) {
+              syncToSupabase('cameras', normalized);
+            }
+          }
         } else {
-          setCameras(loadStoredData('cameras', INITIAL_CAMERAS));
+          const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
+          const { normalized, splitCount } = normalizeOutfitsBySize(localCams);
+          setCameras(normalized);
+          if (splitCount > 0) {
+            saveStoredData('cameras', normalized);
+          }
         }
 
         if (cloudContracts !== null) {

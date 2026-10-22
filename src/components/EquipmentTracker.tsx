@@ -562,12 +562,61 @@ export default function EquipmentTracker({
     };
 
     if (editingCamera) {
-      // Edit
-      onUpdateCamera({
-        ...editingCamera,
-        ...savedFormState,
-        image: imageRef
-      });
+      if (sizesToSave.length > 1) {
+        // Người dùng chọn nhiều size khi sửa -> Cập nhật chiếc hiện tại với size đầu tiên và tự động tạo thêm sản phẩm mới cho các size còn lại
+        const firstSize = sizesToSave[0];
+        const firstSizeCode = firstSize === 'Freesize' ? 'FS' : firstSize;
+        const rawSerial = (formState.serialNumber || 'VC-01').trim();
+        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || 'VC-01';
+        const cleanName = savedFormState.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || savedFormState.name;
+        const firstColor = (formState.sizeColorMap[firstSize] && formState.sizeColorMap[firstSize].trim()) || savedFormState.color || 'Trắng tinh khôi';
+        const firstImg = (formState.sizeImageMap[firstSize] && formState.sizeImageMap[firstSize].trim()) || imageRef;
+
+        onUpdateCamera({
+          ...editingCamera,
+          ...savedFormState,
+          name: `${cleanName} (${firstSize === 'Freesize' ? 'Freesize' : `Size ${firstSize}`})`,
+          serialNumber: `${baseSerial}-${firstSizeCode}`,
+          size: firstSize,
+          availableSizes: [firstSize],
+          color: firstColor,
+          image: firstImg
+        });
+
+        // Tạo sản phẩm riêng cho các size còn lại
+        sizesToSave.slice(1).forEach((sz, idx) => {
+          const sizeCode = sz === 'Freesize' ? 'FS' : sz;
+          const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || 'Trắng tinh khôi';
+          const sizeImg = (formState.sizeImageMap[sz] && formState.sizeImageMap[sz].trim()) || imageRef;
+          onAddCamera({
+            ...savedFormState,
+            id: `outfit-${Date.now()}-${idx + 1}`,
+            name: `${cleanName} (${sz === 'Freesize' ? 'Freesize' : `Size ${sz}`})`,
+            serialNumber: `${baseSerial}-${sizeCode}`,
+            size: sz,
+            availableSizes: [sz],
+            color: sizeColor,
+            image: sizeImg
+          });
+        });
+      } else {
+        const singleSize = sizesToSave[0] || 'Freesize';
+        const rawSerial = (formState.serialNumber || 'VC-01').trim();
+        const cleanName = savedFormState.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || savedFormState.name;
+        const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || 'Trắng tinh khôi';
+        const sizeImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
+
+        onUpdateCamera({
+          ...editingCamera,
+          ...savedFormState,
+          name: `${cleanName} (${singleSize === 'Freesize' ? 'Freesize' : `Size ${singleSize}`})`,
+          serialNumber: rawSerial,
+          size: singleSize,
+          availableSizes: [singleSize],
+          color: sizeColor,
+          image: sizeImg
+        });
+      }
     } else {
       // New: Tự động tách thành từng sản phẩm riêng nếu chọn từ 2 size trở lên
       if (sizesToSave.length > 1) {
