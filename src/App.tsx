@@ -2142,158 +2142,184 @@ export default function App() {
   // If user is not authenticated, render the glorious login experience screen
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row antialiased relative overflow-hidden select-none">
+      <div className="min-h-screen bg-slate-950 flex flex-col lg:flex-row antialiased relative overflow-x-hidden select-none">
 
-        {/* Mobile fullscreen fashion background */}
-        <div
-          className="md:hidden absolute inset-0 bg-cover bg-center pointer-events-none"
-          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=1400&auto=format&fit=crop&q=80')` }}
+        {/* Ambient background glow effects */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-amber-500/8 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none"></div>
+
+        {/* Mobile Fullscreen Fashion Background Overlay */}
+        <div 
+          className="lg:hidden absolute inset-0 bg-cover bg-center pointer-events-none opacity-25"
+          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=1200&auto=format&fit=crop&q=80')` }}
         >
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-950/90 to-slate-950"></div>
         </div>
 
-        {/* Background glow effects */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-500/8 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-orange-500/5 rounded-full blur-3xl pointer-events-none"></div>
-
-        {/* Left fashion image panel - hidden on mobile */}
-        <div className="hidden md:flex md:w-5/12 lg:w-3/5 text-white relative flex-col justify-between overflow-hidden">
-          {/* Full-bleed fashion photo */}
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=1400&auto=format&fit=crop&q=80')` }}
+        {/* Left Hero Decoration Panel (Desktop only) */}
+        <div className="hidden lg:flex lg:w-7/12 xl:w-7/12 bg-slate-900 text-white relative flex-col justify-between p-10 xl:p-14 border-r border-slate-800/80 overflow-hidden">
+          {/* Fashion Atelier Background with Elegant Tint */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity scale-105 transform transition duration-1000" 
+            style={{ backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=1600&auto=format&fit=crop&q=80')` }}
           ></div>
-          {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/60 to-transparent"></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/30"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-slate-950/40 pointer-events-none"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-950/30 to-slate-950 pointer-events-none"></div>
 
-          {/* Brand logo - top left */}
-          <div className="relative z-10 p-8 lg:p-12">
-            <div className="flex items-center gap-3 bg-slate-950/50 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 w-fit">
-              {logoIconType === 'upload' && logoBase64 ? (
-                <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20 bg-white/10 flex items-center justify-center shadow-lg shrink-0">
-                  <img src={logoBase64} alt="Custom Logo" className="w-full h-full object-cover" />
-                </div>
-              ) : (
-                <span
-                  className="w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center shrink-0 font-bold"
-                  style={{ backgroundColor: logoIconColor }}
-                >
-                  {logoIconType === 'dress' && <DressIcon className="w-6 h-6 text-white" />}
-                  {logoIconType === 'aperture' && <Aperture className="w-6 h-6" />}
-                  {logoIconType === 'film' && <Film className="w-6 h-6" />}
-                  {logoIconType === 'sparkles' && <Sparkles className="w-6 h-6 text-yellow-300" />}
-                  {logoIconType === 'smile' && <Smile className="w-6 h-6" />}
-                  {logoIconType === 'image' && <ImageIcon className="w-6 h-6" />}
-                  {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-6 h-6 text-white" />}
-                </span>
-              )}
-              <div className="leading-tight">
-                <span className="font-black text-white text-sm tracking-widest block uppercase">{logoText || 'TIá»†M NHÃ€ CAO'}</span>
-                <span className="text-[9px] text-slate-400 font-mono block tracking-widest uppercase mt-0.5">{logoSubtitle || 'CHO THUÃŠ TRANG PHá»¤C & PHá»¤ KIá»†N'}</span>
+          {/* Dynamic Top Brand section */}
+          <div className="flex items-center gap-3.5 relative z-10 bg-slate-950/60 backdrop-blur-md px-5 py-3.5 rounded-3xl border border-white/10 w-fit shadow-2xl">
+            {logoIconType === 'upload' && logoBase64 ? (
+              <div className="w-13 h-13 rounded-full overflow-hidden border border-white/20 bg-white/10 flex items-center justify-center shadow-xl shrink-0">
+                <img src={logoBase64} alt="Custom Logo" className="w-full h-full object-cover" />
               </div>
+            ) : (
+              <span 
+                className="w-13 h-13 rounded-full text-white shadow-xl flex items-center justify-center transition transform hover:scale-105 font-bold shrink-0"
+                style={{ backgroundColor: logoIconColor }}
+              >
+                {logoIconType === 'dress' && <DressIcon className="w-7 h-7 text-white" />}
+                {logoIconType === 'aperture' && <Aperture className="w-7 h-7" />}
+                {logoIconType === 'film' && <Film className="w-7 h-7" />}
+                {logoIconType === 'sparkles' && <Sparkles className="w-7 h-7 text-yellow-300" />}
+                {logoIconType === 'smile' && <Smile className="w-7 h-7" />}
+                {logoIconType === 'image' && <ImageIcon className="w-7 h-7" />}
+                {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-7 h-7 text-white" />}
+              </span>
+            )}
+            <div className="leading-tight pr-3">
+              <span className="font-sans font-black text-white text-base tracking-widest block uppercase">
+                {logoText || 'TIỆM NHÀ CAO'}
+              </span>
+              <span className="text-[10px] text-amber-400 font-mono block tracking-widest uppercase font-bold mt-0.5">
+                {logoSubtitle || 'CHO THUÊ TRANG PHỤC & PHỤ KIỆN'}
+              </span>
             </div>
           </div>
 
-          {/* Headline - center / bottom */}
-          <div className="relative z-10 p-8 lg:p-12 mt-auto space-y-5">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-orange-400 border border-orange-500/30 rounded-full bg-orange-500/10 uppercase tracking-widest leading-none">
-              <ShieldCheck className="w-3.5 h-3.5 animate-pulse" /> PhiÃªn báº£n Cloud â€¢ Báº£o máº­t
+          {/* Welcome Message Text Block */}
+          <div className="my-auto space-y-6 max-w-xl relative z-10 pt-8 pb-8">
+            <span className="inline-flex items-center gap-2 px-3.5 py-1.5 text-[11px] font-bold text-amber-400 border border-amber-500/30 rounded-full bg-amber-500/10 uppercase tracking-widest backdrop-blur-sm">
+              <ShieldCheck className="w-4 h-4 text-amber-400 animate-pulse" /> Phiên bản máy chủ đám mây bảo mật
             </span>
-            <h2 className="text-4xl lg:text-5xl xl:text-6xl 2xl:text-7xl font-black text-white tracking-tight leading-[0.9]">
-              Quáº£n lÃ½<br />Cho ThuÃª<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-yellow-300">Trang Phá»¥c</span>
-            </h2>
-            <div className="space-y-2.5 pt-2 border-t border-white/10 max-w-sm">
-              <div className="flex items-center gap-2.5 text-sm text-slate-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0"></span>
-                Lá»‹ch trang phá»¥c theo thá»i gian thá»±c, chá»‘ng trÃ¹ng lá»‹ch
+
+            <div className="space-y-4">
+              <h2 className="text-4xl xl:text-5xl 2xl:text-6xl font-display font-black text-white tracking-tight leading-[1.1]">
+                Quản lý Cho thuê <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-200">
+                  Trang Phục & Phụ Kiện
+                </span>
+              </h2>
+              <p className="text-slate-300 text-sm leading-relaxed font-normal">
+                Hệ sinh thái chuyên nghiệp hỗ trợ vận hành tối ưu khâu đặt lịch thử đồ, áo dài, cổ phục, đầm tiệc, fitting số đo, quản lý hợp đồng cọc và lịch giặt hấp chuẩn xác.
+              </p>
+            </div>
+
+            {/* List of elegant key benefits */}
+            <div className="space-y-3 pt-5 border-t border-slate-800/70 max-w-lg">
+              <div className="flex items-start gap-3.5 bg-slate-950/40 p-3 rounded-2xl border border-white/5 backdrop-blur-xs">
+                <span className="p-1.5 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 mt-0.5 shrink-0">
+                  <Check className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100">Đặt lịch biểu quan hợp nhất (Smart Calendar)</h4>
+                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">Xếp lịch trang phục, phụ kiện theo thời gian thực trực quan, hoàn toàn chống trùng lặp lịch đồ.</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5 text-sm text-slate-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0"></span>
-                Quáº£n trá»‹ khÃ¡ch hÃ ng & bÃ¡o cÃ¡o doanh thu tá»©c thÃ¬
+
+              <div className="flex items-start gap-3.5 bg-slate-950/40 p-3 rounded-2xl border border-white/5 backdrop-blur-xs">
+                <span className="p-1.5 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 mt-0.5 shrink-0">
+                  <Check className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100">Quản trị khách hàng & Tổng hợp doanh thu</h4>
+                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">Chụp báo cáo tài chính doanh thu, chi phí phát sinh, công nợ xấu và khấu hao kho thiết bị.</p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="relative z-10 px-8 lg:px-12 pb-6 flex items-center gap-2 text-[11px] text-slate-500 select-none">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-            <span>Â© 2026 {logoText || 'TIá»†M NHÃ€ CAO'} Enterprise Suite â€¢ Káº¿t ná»‘i mÃ¡y chá»§ an toÃ n</span>
+          {/* Footer of decorative block */}
+          <div className="relative z-10 text-[11px] text-slate-400 select-none flex items-center justify-between border-t border-slate-800/60 pt-4">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>© 2026 {logoText || 'TIỆM NHÀ CAO'} Enterprise Suite • Kết nối máy chủ an toàn</span>
+            </div>
+            <span className="text-slate-500 font-mono text-[10px]">Cloud v3.8</span>
           </div>
         </div>
 
-        {/* Right login panel */}
-        <div className="flex-grow flex flex-col justify-center p-3.5 xs:p-5 sm:p-12 lg:p-16 relative z-10 min-h-screen">
+        {/* Right Authentication Panel (PC & Mobile) */}
+        <div className="flex-1 flex flex-col justify-center items-center p-4 sm:p-8 lg:p-12 relative z-10 min-h-screen">
 
-          {/* Ambient glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl pointer-events-none hidden md:block"></div>
+          <div className="max-w-md w-full mx-auto relative z-10 space-y-6">
 
-          <div className="max-w-md w-full mx-auto relative z-10">
-
-            {/* Mobile-only brand pill */}
-            <div className="flex md:hidden items-center justify-center gap-2.5 mb-7 select-none">
-              <div className="flex items-center gap-2.5 bg-slate-900/70 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10">
+            {/* Mobile-only prominent branding header */}
+            <div className="flex lg:hidden flex-col items-center justify-center text-center select-none pt-2 animate-fade-in">
+              <div className="flex items-center gap-3 bg-slate-900/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-700/60 shadow-xl mb-2">
                 {logoIconType === 'upload' && logoBase64 ? (
-                  <div className="w-9 h-9 rounded-full overflow-hidden border border-white/20 bg-slate-900 flex items-center justify-center shadow-md shrink-0">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20 bg-slate-900 flex items-center justify-center shadow-lg shrink-0">
                     <img src={logoBase64} alt="Custom Logo" className="w-full h-full object-cover" />
                   </div>
                 ) : (
-                  <span
-                    className="w-9 h-9 rounded-full text-white shadow-md flex items-center justify-center shrink-0 font-bold"
+                  <span 
+                    className="w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center shrink-0 font-bold"
                     style={{ backgroundColor: logoIconColor }}
                   >
-                    {logoIconType === 'dress' && <DressIcon className="w-5 h-5 text-white" />}
-                    {logoIconType === 'aperture' && <Aperture className="w-5 h-5" />}
-                    {logoIconType === 'film' && <Film className="w-5 h-5" />}
-                    {logoIconType === 'sparkles' && <Sparkles className="w-5 h-5 text-yellow-300" />}
-                    {logoIconType === 'smile' && <Smile className="w-5 h-5" />}
-                    {logoIconType === 'image' && <ImageIcon className="w-5 h-5" />}
-                    {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-5 h-5 text-white" />}
+                    {logoIconType === 'dress' && <DressIcon className="w-6 h-6 text-white" />}
+                    {logoIconType === 'aperture' && <Aperture className="w-6 h-6" />}
+                    {logoIconType === 'film' && <Film className="w-6 h-6" />}
+                    {logoIconType === 'sparkles' && <Sparkles className="w-6 h-6 text-yellow-300" />}
+                    {logoIconType === 'smile' && <Smile className="w-6 h-6" />}
+                    {logoIconType === 'image' && <ImageIcon className="w-6 h-6" />}
+                    {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-6 h-6 text-white" />}
                   </span>
                 )}
                 <div className="leading-tight text-left">
-                  <span className="font-black text-white text-sm tracking-widest block uppercase">{logoText || 'TIá»†M NHÃ€ CAO'}</span>
-                  <span className="text-[9px] text-orange-400 font-mono block tracking-widest uppercase font-bold mt-0.5">{logoSubtitle || 'CHO THUÃŠ TRANG PHá»¤C & PHá»¤ KIá»†N'}</span>
+                  <span className="font-sans font-black text-white text-sm tracking-wider block uppercase">
+                    {logoText || 'TIỆM NHÀ CAO'}
+                  </span>
+                  <span className="text-[9px] text-amber-400 font-mono block tracking-wider uppercase font-bold mt-0.5">
+                    {logoSubtitle || 'CHO THUÊ TRANG PHỤC & PHỤ KIỆN'}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Glass card */}
-            <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 p-5 xs:p-7 sm:p-9 rounded-2xl shadow-2xl space-y-5 transition duration-300 hover:border-slate-600/60 hover:shadow-[0_0_60px_-12px_rgba(234,88,12,0.2)]">
+            {/* Glass Card */}
+            <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/70 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-5 transition duration-300 hover:border-slate-600 hover:shadow-[0_0_50px_-10px_rgba(249,115,22,0.2)]">
 
               {!isRegisterMode ? (
-                // LOGIN UI
+                // LOGIN GIAO DIỆN
                 <>
-                  {/* Card header */}
-                  <div className="flex items-start gap-4 select-none">
-                    <div className="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-6 h-6 text-orange-400" />
-                    </div>
-                    <div className="space-y-0.5 pt-0.5">
-                      <h3 className="text-xl font-black text-white tracking-tight">ChÃ o má»«ng trá»Ÿ láº¡i</h3>
-                      <p className="text-slate-400 text-xs">Nháº­p thÃ´ng tin tÃ i khoáº£n Ä‘á»ƒ tiáº¿p tá»¥c</p>
-                    </div>
+                  <div className="space-y-1.5 select-none">
+                    <span className="text-[10px] font-extrabold text-orange-400 uppercase tracking-widest bg-orange-500/10 px-3 py-1 rounded-lg border border-orange-500/25 inline-block leading-none">
+                      HỆ THỐNG VẬN HÀNH
+                    </span>
+                    <h3 className="text-2xl font-black text-white tracking-tight">Đăng nhập cổng kết nối</h3>
+                    <p className="text-slate-400 text-xs">Vui lòng nhập tài khoản và mật khẩu được cấp để làm việc.</p>
                   </div>
 
                   {/* ERROR FLASH */}
                   {loginError && (
-                    <div className="bg-rose-500/10 border border-rose-500/30 p-3.5 rounded-2xl text-xs text-rose-400 font-medium flex items-center gap-2.5">
-                      <span className="p-1 bg-rose-500/20 text-rose-400 rounded-xl shrink-0">
-                        <Lock className="w-3.5 h-3.5" />
+                    <div className="bg-rose-500/10 border border-rose-500/30 p-3.5 rounded-2xl text-xs text-rose-300 font-medium flex items-center gap-2.5 animate-shake">
+                      <span className="p-1.5 bg-rose-500/20 text-rose-400 rounded-xl shrink-0">
+                        <Lock className="w-4 h-4" />
                       </span>
                       <span>{loginError}</span>
                     </div>
                   )}
 
-                  {/* FORM */}
+                  {/* FORM ĐĂNG NHẬP */}
                   <form onSubmit={handleLogin} className="space-y-4">
 
-                    {/* Username */}
+                    {/* Tên tài khoản */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">TÃªn tÃ i khoáº£n</label>
+                      <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                        TÊN TÀI KHOẢN (USERNAME)
+                      </label>
                       <div className="relative group">
-                        <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-500 transition-colors group-focus-within:text-orange-400">
+                        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500 transition-colors group-focus-within:text-orange-400">
                           <User className="w-4 h-4" />
                         </span>
                         <input
@@ -2301,16 +2327,18 @@ export default function App() {
                           required
                           value={usernameInput}
                           onChange={(e) => setUsernameInput(e.target.value)}
-                          placeholder="vÃ­ dá»¥: admin"
-                          className="w-full pl-11 pr-4 py-3.5 bg-slate-950/80 border border-slate-700/60 rounded-2xl text-sm font-semibold text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 transition-all font-mono"
+                          placeholder="ví dụ: admin"
+                          className="w-full pl-10 pr-4 py-3 bg-slate-950/90 border border-slate-700/80 rounded-2xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all font-mono"
                         />
                       </div>
                     </div>
 
-                    {/* Password */}
+                    {/* Mật khẩu */}
                     <div className="space-y-1.5">
-                      <div className="flex justify-between items-center text-[10px]">
-                        <label className="font-bold text-slate-400 uppercase tracking-wider">Máº­t kháº©u</label>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <label className="font-bold text-slate-300 uppercase tracking-wider">
+                          MẬT KHẨU (PASSWORD)
+                        </label>
                         <button
                           type="button"
                           onClick={() => {
@@ -2325,11 +2353,11 @@ export default function App() {
                           }}
                           className="font-bold text-orange-400 hover:text-orange-300 hover:underline transition-colors cursor-pointer"
                         >
-                          QuÃªn máº­t kháº©u?
+                          Quên mật khẩu?
                         </button>
                       </div>
                       <div className="relative group">
-                        <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-500 transition-colors group-focus-within:text-orange-400">
+                        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500 transition-colors group-focus-within:text-orange-400">
                           <Lock className="w-4 h-4" />
                         </span>
                         <input
@@ -2337,33 +2365,33 @@ export default function App() {
                           required
                           value={passwordInput}
                           onChange={(e) => setPasswordInput(e.target.value)}
-                          placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                          className="w-full pl-11 pr-11 py-3.5 bg-slate-950/80 border border-slate-700/60 rounded-2xl text-sm font-semibold text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 transition-all font-mono"
+                          placeholder="••••••••"
+                          className="w-full pl-10 pr-11 py-3 bg-slate-950/90 border border-slate-700/80 rounded-2xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all font-mono"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                         >
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
 
-                    {/* Submit */}
+                    {/* Nút đăng nhập */}
                     <button
                       type="submit"
-                      className="w-full py-3.5 px-4 rounded-2xl text-sm font-bold text-white shadow-lg shadow-orange-950/30 hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-1 bg-gradient-to-r from-orange-600 to-orange-500"
+                      className="w-full py-3.5 px-4 rounded-2xl text-sm font-bold text-white shadow-xl shadow-orange-950/40 hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-2 bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500"
                     >
                       <UserCheck className="w-4 h-4" />
-                      ÄÄƒng nháº­p ngay â†’
+                      Truy cập hệ thống
                     </button>
 
                   </form>
 
-                  {/* Register link */}
-                  <div className="text-center text-xs text-slate-500 select-none pt-1 border-t border-slate-800/40">
-                    ChÆ°a cÃ³ tÃ i khoáº£n?{' '}
+                  {/* Chuyển sang đăng ký */}
+                  <div className="text-center text-xs text-slate-400 select-none pt-2 border-t border-slate-800/60">
+                    Chưa có tài khoản?{' '}
                     <button
                       type="button"
                       onClick={() => {
@@ -2373,70 +2401,103 @@ export default function App() {
                       }}
                       className="text-orange-400 font-bold hover:text-orange-300 transition-colors hover:underline cursor-pointer"
                     >
-                      ÄÄƒng kÃ½ ngay
+                      Đăng ký tài khoản mới ngay
                     </button>
                   </div>
 
-                  {/* Demo account pills */}
-                  <div className="pt-2 space-y-2.5 border-t border-slate-800/30">
-                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">TÃ i khoáº£n dÃ¹ng thá»­ Demo</span>
-                    <div className="flex gap-2 justify-center flex-wrap">
+                  {/* Tài khoản dùng thử Demo */}
+                  <div className="pt-3 space-y-2.5 border-t border-slate-800/60">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block text-center">
+                      TÀI KHOẢN DÙNG THỬ DEMO
+                    </span>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      
+                      {/* Admin Quick Button */}
                       <button
                         type="button"
                         onClick={() => handleAutofill('admin', '12345')}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-indigo-500/30 bg-indigo-500/5 hover:bg-indigo-500/15 hover:border-indigo-500/50 transition duration-200 cursor-pointer"
+                        className="p-3 rounded-2xl border border-slate-800 hover:border-indigo-500/50 bg-slate-950/60 hover:bg-slate-950 text-left transition duration-200 flex flex-col justify-between cursor-pointer group shadow-sm"
                       >
-                        <span className="text-[9px] text-indigo-400 font-extrabold uppercase tracking-wider">Admin</span>
-                        <span className="text-[9px] text-slate-500 font-mono">admin / 12345</span>
+                        <div className="w-full flex items-center justify-between mb-1.5">
+                          <span className="text-[9px] text-indigo-400 font-extrabold uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20 leading-none">
+                            ADMIN
+                          </span>
+                          <User className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 transition-colors" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-white block group-hover:text-indigo-300 transition-colors truncate">
+                            Tài khoản Quản trị
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">
+                            admin / 12345
+                          </span>
+                        </div>
                       </button>
+
+                      {/* Staff Quick Button */}
                       <button
                         type="button"
                         onClick={() => handleAutofill('nhanvien', '123')}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/15 hover:border-emerald-500/50 transition duration-200 cursor-pointer"
+                        className="p-3 rounded-2xl border border-slate-800 hover:border-emerald-500/50 bg-slate-950/60 hover:bg-slate-950 text-left transition duration-200 flex flex-col justify-between cursor-pointer group shadow-sm"
                       >
-                        <span className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-wider">Staff</span>
-                        <span className="text-[9px] text-slate-500 font-mono">nhanvien / 123</span>
+                        <div className="w-full flex items-center justify-between mb-1.5">
+                          <span className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 leading-none">
+                            STAFF
+                          </span>
+                          <User className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 transition-colors" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-white block group-hover:text-emerald-300 transition-colors truncate">
+                            Tài khoản Nhân viên
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">
+                            nhanvien / 123
+                          </span>
+                        </div>
                       </button>
+
                     </div>
                   </div>
                 </>
               ) : (
-                // REGISTER UI
+                // REGISTER GIAO DIỆN
                 <>
-                  <div className="space-y-2 select-none">
-                    <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest bg-orange-500/10 px-2.5 py-1 rounded-md border border-orange-500/20 inline-block leading-none">
-                      ÄÄƒng kÃ½ thÃ nh viÃªn
+                  <div className="space-y-1.5 select-none">
+                    <span className="text-[10px] font-extrabold text-orange-400 uppercase tracking-widest bg-orange-500/10 px-2.5 py-1 rounded-md border border-orange-500/20 inline-block leading-none">
+                      ĐĂNG KÝ THÀNH VIÊN
                     </span>
                     <h3 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
                       <UserPlus className="w-6 h-6 text-orange-400" />
-                      ÄÄƒng kÃ½ má»›i
+                      Đăng ký mới
                     </h3>
-                    <p className="text-slate-400 text-xs">Vui lÃ²ng Ä‘iá»n thÃ´ng tin Ä‘á»ƒ Ä‘Äƒng kÃ½ thÃ nh viÃªn há»‡ thá»‘ng.</p>
+                    <p className="text-slate-400 text-xs">Vui lòng điền thông tin để đăng ký thành viên hệ thống.</p>
                   </div>
 
                   {/* ERROR/SUCCESS FLASH */}
                   {registerError && (
-                    <div className="bg-rose-500/10 border border-rose-500/30 p-3.5 rounded-xl text-xs text-rose-450 font-medium flex items-center gap-2 animate-pulse">
-                      <span className="p-1 bg-rose-500/20 text-rose-450 rounded-md shrink-0">
+                    <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-2xl text-xs text-rose-300 font-medium flex items-center gap-2">
+                      <span className="p-1 bg-rose-500/20 text-rose-400 rounded-lg shrink-0">
                         <Lock className="w-3.5 h-3.5" />
                       </span>
                       <span>{registerError}</span>
                     </div>
                   )}
                   {registerSuccess && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 rounded-xl text-xs text-emerald-400 font-semibold flex items-center gap-2 animate-pulse">
-                      <span className="p-1 bg-emerald-500/20 text-emerald-450 rounded-md shrink-0">
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-2xl text-xs text-emerald-300 font-semibold flex items-center gap-2">
+                      <span className="p-1 bg-emerald-500/20 text-emerald-400 rounded-lg shrink-0">
                         <ShieldCheck className="w-3.5 h-3.5" />
                       </span>
                       <span>{registerSuccess}</span>
                     </div>
                   )}
 
-                  <form onSubmit={handleRegister} className="space-y-4">
+                  <form onSubmit={handleRegister} className="space-y-3.5">
 
-                    {/* Há» vÃ  tÃªn */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Há» vÃ  tÃªn nhÃ¢n viÃªn</label>
+                    {/* Họ và tên */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Họ và tên nhân viên
+                      </label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
                           <User className="w-4 h-4" />
@@ -2446,15 +2507,17 @@ export default function App() {
                           required
                           value={regFullName}
                           onChange={(e) => setRegFullName(e.target.value)}
-                          placeholder="vÃ­ dá»¥: Tráº§n VÄƒn C"
-                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm font-semibold text-white placeholder-slate-650 focus:outline-hidden focus:border-orange-500 transition-all font-sans"
+                          placeholder="ví dụ: Trần Văn C"
+                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 transition-all font-sans"
                         />
                       </div>
                     </div>
 
                     {/* Username */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">TÃªn Ä‘Äƒng nháº­p (Username)</label>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Tên đăng nhập (Username)
+                      </label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
                           <User className="w-4 h-4" />
@@ -2464,15 +2527,17 @@ export default function App() {
                           required
                           value={regUsername}
                           onChange={(e) => setRegUsername(e.target.value)}
-                          placeholder="vÃ­ dá»¥: nhanvien_c"
-                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-650 focus:outline-hidden focus:border-orange-500 transition-all font-mono lowercase"
+                          placeholder="ví dụ: nhanvien_c"
+                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-700 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 transition-all font-mono lowercase"
                         />
                       </div>
                     </div>
 
                     {/* Password */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Máº­t kháº©u (Password)</label>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Mật khẩu (Password)
+                      </label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
                           <Lock className="w-4 h-4" />
@@ -2482,37 +2547,39 @@ export default function App() {
                           required
                           value={regPassword}
                           onChange={(e) => setRegPassword(e.target.value)}
-                          placeholder="Tá»‘i thiá»ƒu 3 kÃ½ tá»±..."
-                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-650 focus:outline-hidden focus:border-orange-500 transition-all font-mono"
+                          placeholder="Tối thiểu 3 ký tự..."
+                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-700 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 transition-all font-mono"
                         />
                       </div>
                     </div>
 
                     {/* Role segment */}
-                    <div className="space-y-1.5 pt-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Vai trÃ² thÃ nh viÃªn</label>
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Vai trò thành viên
+                      </label>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => setRegRole('staff')}
-                          className={`flex-grow py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
+                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
                             regRole === 'staff'
-                              ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 font-extrabold'
+                              ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 font-extrabold shadow-sm'
                               : 'border-slate-800 text-slate-400 hover:bg-slate-950 bg-transparent'
                           }`}
                         >
-                          NhÃ¢n viÃªn (Staff)
+                          Nhân viên (Staff)
                         </button>
                         <button
                           type="button"
                           onClick={() => setRegRole('admin')}
-                          className={`flex-grow py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
+                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
                             regRole === 'admin'
-                              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 font-extrabold'
+                              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 font-extrabold shadow-sm'
                               : 'border-slate-800 text-slate-400 hover:bg-slate-950 bg-transparent'
                           }`}
                         >
-                          Quáº£n trá»‹ (Admin)
+                          Quản trị (Admin)
                         </button>
                       </div>
                     </div>
@@ -2520,18 +2587,17 @@ export default function App() {
                     {/* Submit */}
                     <button
                       type="submit"
-                      className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white shadow-lg hover:filter hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-4"
-                      style={{ backgroundColor: logoIconColor }}
+                      className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-3 bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500"
                     >
                       <UserPlus className="w-4 h-4" />
-                      ÄÄƒng kÃ½ tÃ i khoáº£n
+                      Đăng ký tài khoản
                     </button>
 
                   </form>
 
-                  {/* Back to login */}
+                  {/* Quay lại đăng nhập */}
                   <div className="text-center text-xs text-slate-400 pt-2 select-none border-t border-slate-800/40">
-                    ÄÃ£ cÃ³ tÃ i khoáº£n?{' '}
+                    Đã có tài khoản?{' '}
                     <button
                       type="button"
                       onClick={() => {
@@ -2539,8 +2605,9 @@ export default function App() {
                         setRegisterError('');
                         setRegisterSuccess('');
                       }}
+                      className="text-orange-400 font-bold hover:text-orange-300 transition-colors hover:underline cursor-pointer"
                     >
-                      Quay láº¡i Ä‘Äƒng nháº­p
+                      Quay lại đăng nhập
                     </button>
                   </div>
                 </>

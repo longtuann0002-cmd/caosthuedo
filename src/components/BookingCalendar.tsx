@@ -628,6 +628,9 @@ export default function BookingCalendar({
   // Lock body scroll whenever any modal is open to prevent background scrolling on mobile
   useScrollLock(Boolean(showAddQuickModal || quickReceiptContract || deleteConfirmId || customAlertMessage || showBankSettings));
 
+  // Detect iOS / iPhone / iPad Safari
+  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   const handleExportReceiptImage = async (elementId: string, filename: string) => {
     const element = document.getElementById(elementId);
     if (!element) {
@@ -637,7 +640,8 @@ export default function BookingCalendar({
     
     setIsExportingReceipt(true);
     setEditingTerms(false);
-    await new Promise(resolve => setTimeout(resolve, 250));
+    // iOS Safari needs extra time to render fonts and external assets
+    await new Promise(resolve => setTimeout(resolve, isIOS ? 600 : 250));
     
     const prevMarginLeft = element.style.marginLeft;
     const prevMarginRight = element.style.marginRight;
@@ -652,18 +656,49 @@ export default function BookingCalendar({
     element.style.maxWidth = '420px';
     
     try {
-      const dataUrl = await toPng(element, {
+      // iOS Safari "double-render" trick:
+      // First pass warms up the canvas (often blank on iOS),
+      // second pass produces the correct output.
+      const toPngOptions = {
         backgroundColor: '#ffffff',
-        pixelRatio: 2,
+        pixelRatio: isIOS ? 1.5 : 2, // lower ratio on iOS to prevent memory crash
         width: 420,
-      });
-      
-      const link = document.createElement('a');
-      link.download = filename;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+        cacheBust: true,             // force reload cross-origin images
+      };
+
+      if (isIOS) {
+        // Warm-up pass (result discarded)
+        await toPng(element, toPngOptions).catch(() => {});
+        // Short pause for Safari to settle
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+
+      const dataUrl = await toPng(element, toPngOptions);
+
+      if (isIOS) {
+        // iOS Safari does NOT support the `download` attribute on <a> tags.
+        // Open image in a new tab — user can long-press → Save Image.
+        const newTab = window.open();
+        if (newTab) {
+          newTab.document.write(
+            `<html><head><title>${filename}</title></head><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;">` +
+            `<img src="${dataUrl}" style="max-width:100%;height:auto;" />` +
+            `<p style="position:fixed;top:10px;left:0;right:0;text-align:center;color:#fff;font-family:sans-serif;font-size:14px;background:rgba(0,0,0,.5);padding:8px;">` +
+            `Nhấn giữ ảnh → Lưu vào Ảnh để tải về</p>` +
+            `</body></html>`
+          );
+          newTab.document.close();
+        } else {
+          setCustomAlertMessage('Trình duyệt đã chặn cửa sổ. Vui lòng cho phép popup và thử lại!');
+        }
+      } else {
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     } catch (err) {
       console.error('Lỗi khi xuất ảnh:', err);
       setCustomAlertMessage('Không thể tạo file ảnh. Vui lòng thử lại!');
