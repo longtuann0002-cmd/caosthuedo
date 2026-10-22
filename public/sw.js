@@ -1,5 +1,5 @@
-// Service Worker for Tiệm Ảnh Nhà Caos - PWA Push Notifications (iOS 16.4+ & Android)
-const CACHE_NAME = 'caos-app-v1';
+// Service Worker for Quản Lý Thuê Đồ - PWA Push Notifications (iOS 16.4+ & Android)
+const CACHE_NAME = 'thuedo-app-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -20,10 +20,10 @@ self.addEventListener('activate', (event) => {
 
 // Handle incoming Web Push from server / FCM / APNs
 self.addEventListener('push', (event) => {
-  let title = '🔔 Trợ lý vận hành - Tiệm ảnh Nhà Caos';
+  let title = '🔔 Quản Lý Thuê Đồ';
   let body = 'Bạn có thông báo mới cần kiểm tra!';
   let url = '/';
-  let tag = 'caos-push'; // Fixed tag so duplicate pushes replace each other
+  let tag = 'thuedo-push'; // Fixed tag so duplicate pushes replace each other
 
   if (event.data) {
     try {

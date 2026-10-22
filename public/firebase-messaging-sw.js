@@ -1,9 +1,9 @@
-// Firebase Messaging Service Worker for Tiệm Ảnh Nhà Caos
+// Firebase Messaging Service Worker for Quản Lý Thuê Đồ (caos-thue-do)
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
 // Cache name for PWA
-const CACHE_NAME = 'caos-app-v1';
+const CACHE_NAME = 'thuedo-app-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -24,20 +24,19 @@ self.addEventListener('activate', (event) => {
 
 try {
   firebase.initializeApp({
-    apiKey: "AIzaSyA33_97jLHcuEz2TGHBpOeo2RS3y1VAnAE",
-    authDomain: "tiem-anh-nha-caos-d827f.firebaseapp.com",
-    projectId: "tiem-anh-nha-caos-d827f",
-    storageBucket: "tiem-anh-nha-caos-d827f.firebasestorage.app",
-    messagingSenderId: "449788423673",
-    appId: "1:449788423673:web:8488b804d60d63a68d2128"
+    apiKey: "AIzaSyDH12pXf1ffyNNQzoEm8SespexL3EM-CXg",
+    authDomain: "caos-thue-do.firebaseapp.com",
+    projectId: "caos-thue-do",
+    storageBucket: "caos-thue-do.firebasestorage.app",
+    messagingSenderId: "569940659255",
+    appId: "1:569940659255:web:a200bc976ed40c901b43b2"
   });
 
   const messaging = firebase.messaging();
 
   // Handle background FCM push messages (app closed / in background)
-  // NOTE: Do NOT importScripts('/sw.js') — that would register a duplicate 'push' listener
   messaging.onBackgroundMessage((payload) => {
-    const title = payload.notification?.title || payload.data?.title || '🔔 Tiệm Ảnh Nhà Caos';
+    const title = payload.notification?.title || payload.data?.title || '🔔 Quản Lý Thuê Đồ';
     const body = payload.notification?.body || payload.data?.body || 'Bạn có thông báo mới!';
 
     // Update app icon badge if supported (iOS 16.4+ PWA / Android)
@@ -46,14 +45,14 @@ try {
       self.navigator.setAppBadge(!isNaN(badgeCount) ? badgeCount : 1).catch(() => {});
     }
 
-    // Use fixed tag 'caos-push' so duplicate FCM pushes replace each other
+    // Use fixed tag 'thuedo-push' so duplicate FCM pushes replace each other
     self.registration.showNotification(title, {
       body: body,
       icon: '/logocaosdt.png',
       badge: '/logocaosdt.png',
       vibrate: [200, 100, 200],
       data: { url: payload.data?.url || '/' },
-      tag: 'caos-push',
+      tag: 'thuedo-push',
       renotify: true
     });
   });

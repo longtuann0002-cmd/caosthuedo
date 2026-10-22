@@ -1,4 +1,4 @@
-﻿import { getGoogleAccessToken, sendFCMMessage, getRegisteredTokens, SERVICE_ACCOUNT } from './_fcmHelper.js';
+import { getGoogleAccessToken, sendFCMMessage, getRegisteredTokens, SERVICE_ACCOUNT } from './_fcmHelper.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,9 +26,15 @@ export default async function handler(req, res) {
 
     const force = req.query?.force === 'true';
     const accessToken = await getGoogleAccessToken();
+    if (!accessToken || !SERVICE_ACCOUNT.project_id) {
+      return res.status(200).json({
+        success: false,
+        message: 'Firebase credentials are not configured for this application. Skipping cron briefing.'
+      });
+    }
 
     // 2. Cloud Deduplication Lock: Check if already sent today in Firestore
-    const briefingDocUrl = `https://firestore.googleapis.com/v1/projects/${SERVICE_ACCOUNT.project_id}/databases/(default)/documents/caos_cloud_data/morning_briefing`;
+    const briefingDocUrl = `https://firestore.googleapis.com/v1/projects/${SERVICE_ACCOUNT.project_id}/databases/(default)/documents/thuedo_cloud_data/morning_briefing`;
     if (!force) {
       try {
         const lockRes = await fetch(briefingDocUrl, {
@@ -50,10 +56,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. Fetch contracts from Firestore doc: caos_cloud_data/contracts
+    // 3. Fetch contracts from Firestore doc: thuedo_cloud_data/contracts
     let contracts = [];
     try {
-      const url = `https://firestore.googleapis.com/v1/projects/${SERVICE_ACCOUNT.project_id}/databases/(default)/documents/caos_cloud_data/contracts`;
+      const url = `https://firestore.googleapis.com/v1/projects/${SERVICE_ACCOUNT.project_id}/databases/(default)/documents/thuedo_cloud_data/contracts`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
