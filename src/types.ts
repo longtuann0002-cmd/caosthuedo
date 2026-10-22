@@ -2,7 +2,7 @@ export interface Camera {
   id: string;
   name: string; // Tên trang phục (VD: "Váy cưới công chúa cúp ngực đính đá")
   shortName: string; // Tên viết tắt (VD: "Váy cưới VC01")
-  category: 'Áo dài' | 'Concept' | 'Dạ hội' | 'Phụ kiện' | 'Chụp ảnh' | 'Khác' | string;
+  category: 'Váy' | 'Áo dài' | 'Dạ hội' | 'Concept' | 'Phụ kiện' | 'Chụp ảnh' | 'Khác' | string;
   dailyRate: number; // Giá thuê theo ngày (VNĐ)
   purchasePrice?: number; // Giá gốc / Vốn nhập sản phẩm (VNĐ)
   price6Hours?: number; // Giá thuê 6 tiếng (nửa ngày / buổi chụp)

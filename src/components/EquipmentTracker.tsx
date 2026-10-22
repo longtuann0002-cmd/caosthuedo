@@ -195,15 +195,15 @@ export default function EquipmentTracker({
   const [formState, setFormState] = useState({
     name: '',
     shortName: '',
-    category: 'Áo dài' as Camera['category'],
+    category: 'Váy' as Camera['category'],
     isPrinter: false,
-    purchasePrice: 1200000,
-    dailyRate: 350000,
-    price1Day: 350000,
-    price2Days: 650000,
-    price3Days: 950000,
-    price4DaysPlus: 300000,
-    depositAmount: 1500000,
+    purchasePrice: 0,
+    dailyRate: 0,
+    price1Day: 0,
+    price2Days: 0,
+    price3Days: 0,
+    price4DaysPlus: 0,
+    depositAmount: 0,
     status: 'Available' as Camera['status'],
     serialNumber: '',
     description: '',
@@ -213,16 +213,16 @@ export default function EquipmentTracker({
     splitBySize: false,
     sizeColorMap: {} as Record<string, string>, // màu riêng cho từng size khi tách
     sizeImageMap: {} as Record<string, string>, // ảnh riêng cho từng size khi tách
-    color: 'Trắng Tinh Khôi',
+    color: '',
     gender: 'Nữ' as 'Nữ' | 'Nam' | 'Unisex',
     cleaningStatus: 'Clean' as 'Clean' | 'Laundry' | 'Mending',
     measurements: '',
     includedAccessories: '',
     brand: '',
     type: '',
-    printPrice1To2: 40000,
-    printPrice3To9: 35000,
-    printPrice10Plus: 33000,
+    printPrice1To2: 0,
+    printPrice3To9: 0,
+    printPrice10Plus: 0,
   });
 
   const filteredCameras = useMemo(() => {
@@ -230,7 +230,7 @@ export default function EquipmentTracker({
       const query = searchQuery.trim();
       const matchesSearch = matchCamera(c, query).matched;
 
-      const matchesCategory = categoryFilter === 'ALL' || c.category === categoryFilter;
+      const matchesCategory = categoryFilter === 'ALL' || c.category === categoryFilter || (categoryFilter === 'Váy' && (c.category === 'Váy' || c.category === 'Váy cưới' || c.category === 'Đầm'));
       const matchesStatus = statusFilter === 'ALL' || (
         statusFilter === 'Available'
           ? (c.status === 'Available' && (c.cleaningStatus === 'Clean' || !c.cleaningStatus))
@@ -260,11 +260,12 @@ export default function EquipmentTracker({
   const categoryCounts = useMemo(() => {
     return {
       ALL: cameras.length,
+      'Váy': cameras.filter(c => c.category === 'Váy' || c.category === 'Váy cưới' || c.category === 'Đầm').length,
       'Áo dài': cameras.filter(c => c.category === 'Áo dài').length,
-      'Concept': cameras.filter(c => c.category === 'Concept').length,
       'Dạ hội': cameras.filter(c => c.category === 'Dạ hội').length,
-      'Chụp ảnh': cameras.filter(c => c.category === 'Chụp ảnh').length,
+      'Concept': cameras.filter(c => c.category === 'Concept').length,
       'Phụ kiện': cameras.filter(c => c.category === 'Phụ kiện').length,
+      'Chụp ảnh': cameras.filter(c => c.category === 'Chụp ảnh').length,
       'Khác': cameras.filter(c => c.category === 'Khác').length,
     } as Record<string, number>;
   }, [cameras]);
@@ -440,9 +441,9 @@ export default function EquipmentTracker({
       size: nextSize,
       selectedSizes: [nextSize],
       splitBySize: false,
-      sizeColorMap: { [nextSize]: rep.color || 'Trắng tinh khôi' },
+      sizeColorMap: { [nextSize]: rep.color || '' },
       sizeImageMap: {},
-      color: rep.color || 'Trắng tinh khôi',
+      color: rep.color || '',
       gender: (rep.gender as any) || 'Nữ',
       cleaningStatus: 'Clean',
       measurements: rep.measurements || '',
@@ -461,34 +462,34 @@ export default function EquipmentTracker({
     setFormState({
       name: '',
       shortName: '',
-      category: 'Áo dài',
+      category: 'Váy',
       isPrinter: false,
-      purchasePrice: 1200000,
-      dailyRate: 350000,
-      price1Day: 350000,
-      price2Days: 650000,
-      price3Days: 950000,
-      price4DaysPlus: 300000,
-      depositAmount: 1500000,
+      purchasePrice: 0,
+      dailyRate: 0,
+      price1Day: 0,
+      price2Days: 0,
+      price3Days: 0,
+      price4DaysPlus: 0,
+      depositAmount: 0,
       status: 'Available',
-      serialNumber: 'VC-',
+      serialNumber: '',
       description: '',
       image: '',
       size: 'M',
       selectedSizes: ['M'],
       splitBySize: false,
-      sizeColorMap: { 'M': 'Trắng tinh khôi' },
+      sizeColorMap: {},
       sizeImageMap: {},
-      color: 'Trắng tinh khôi',
+      color: '',
       gender: 'Nữ',
       cleaningStatus: 'Clean',
       measurements: '',
       includedAccessories: '',
-      brand: 'Caos Atelier',
-      type: 'Lụa Satin / Ren đính đá',
-      printPrice1To2: 40000,
-      printPrice3To9: 35000,
-      printPrice10Plus: 33000,
+      brand: '',
+      type: '',
+      printPrice1To2: 0,
+      printPrice3To9: 0,
+      printPrice10Plus: 0,
     });
     setEditingCamera(null);
     setShowAddModal(true);
@@ -523,9 +524,9 @@ export default function EquipmentTracker({
       size: cam.size || 'M',
       selectedSizes: rawSizes.length > 0 ? rawSizes : ['M'],
       splitBySize: false,
-      sizeColorMap: (rawSizes.length > 0 ? rawSizes : ['M']).reduce((acc, s) => ({ ...acc, [s]: cam.color || 'Trắng tinh khôi' }), {}),
+      sizeColorMap: (rawSizes.length > 0 ? rawSizes : ['M']).reduce((acc, s) => ({ ...acc, [s]: cam.color || '' }), {}),
       sizeImageMap: {},
-      color: cam.color || 'Trắng tinh khôi',
+      color: cam.color || '',
       gender: (cam.gender as any) || 'Nữ',
       cleaningStatus: (cam.cleaningStatus as any) || 'Clean',
       measurements: cam.measurements || '',
@@ -591,10 +592,10 @@ export default function EquipmentTracker({
         // Người dùng chọn nhiều size khi sửa -> Cập nhật chiếc hiện tại với size đầu tiên và tự động tạo thêm sản phẩm mới cho các size còn lại
         const firstSize = sizesToSave[0];
         const firstSizeCode = firstSize === 'Freesize' ? 'FS' : firstSize;
-        const rawSerial = (formState.serialNumber || 'VC-01').trim();
-        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || 'VC-01';
+        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
+        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || rawSerial;
         const cleanName = savedFormState.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || savedFormState.name;
-        const firstColor = (formState.sizeColorMap[firstSize] && formState.sizeColorMap[firstSize].trim()) || savedFormState.color || 'Trắng tinh khôi';
+        const firstColor = (formState.sizeColorMap[firstSize] && formState.sizeColorMap[firstSize].trim()) || savedFormState.color || '';
         const firstImg = (formState.sizeImageMap[firstSize] && formState.sizeImageMap[firstSize].trim()) || imageRef;
 
         onUpdateCamera({
@@ -611,7 +612,7 @@ export default function EquipmentTracker({
         // Tạo sản phẩm riêng cho các size còn lại
         sizesToSave.slice(1).forEach((sz, idx) => {
           const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-          const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || 'Trắng tinh khôi';
+          const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || '';
           const sizeImg = (formState.sizeImageMap[sz] && formState.sizeImageMap[sz].trim()) || imageRef;
           onAddCamera({
             ...savedFormState,
@@ -626,9 +627,9 @@ export default function EquipmentTracker({
         });
       } else {
         const singleSize = sizesToSave[0] || 'Freesize';
-        const rawSerial = (formState.serialNumber || 'VC-01').trim();
+        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
         const cleanName = savedFormState.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || savedFormState.name;
-        const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || 'Trắng tinh khôi';
+        const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || '';
         const sizeImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
 
         onUpdateCamera({
@@ -645,11 +646,11 @@ export default function EquipmentTracker({
     } else {
       // New: Tự động tách thành từng sản phẩm riêng nếu chọn từ 2 size trở lên
       if (sizesToSave.length > 1) {
-        const rawSerial = (formState.serialNumber || 'VC-01').trim();
-        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || 'VC-01';
+        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
+        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || rawSerial;
         sizesToSave.forEach((sz, idx) => {
           const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-          const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || 'Trắng tinh khôi';
+          const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || '';
           const sizeSpecificImg = (formState.sizeImageMap[sz] && formState.sizeImageMap[sz].trim()) || imageRef;
           const newCam: Camera = {
             ...savedFormState,
@@ -666,8 +667,8 @@ export default function EquipmentTracker({
       } else {
         // Chỉ chọn 1 size duy nhất (VD: Freesize hoặc Size M)
         const singleSize = sizesToSave[0] || 'Freesize';
-        const rawSerial = (formState.serialNumber || 'VC-01').trim();
-        const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || 'Trắng tinh khôi';
+        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
+        const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || '';
         const sizeSpecificImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
         const newCam: Camera = {
           id: `outfit-${Date.now()}`,
@@ -860,11 +861,12 @@ export default function EquipmentTracker({
               title="Lọc theo phân loại trang phục"
             >
               <option value="ALL">Tất cả phân loại ({categoryCounts.ALL})</option>
+              <option value="Váy">Váy / Đầm ({categoryCounts['Váy'] || 0})</option>
               <option value="Áo dài">Áo dài ({categoryCounts['Áo dài'] || 0})</option>
-              <option value="Concept">Cổ phục & Concept ({categoryCounts['Concept'] || 0})</option>
               <option value="Dạ hội">Đầm dạ hội ({categoryCounts['Dạ hội'] || 0})</option>
-              <option value="Chụp ảnh">Chụp ảnh & Cosplay ({categoryCounts['Chụp ảnh'] || 0})</option>
+              <option value="Concept">Cổ phục & Concept ({categoryCounts['Concept'] || 0})</option>
               <option value="Phụ kiện">Phụ kiện ({categoryCounts['Phụ kiện'] || 0})</option>
+              <option value="Chụp ảnh">Chụp ảnh & Cosplay ({categoryCounts['Chụp ảnh'] || 0})</option>
               <option value="Khác">Khác ({categoryCounts['Khác'] || 0})</option>
             </select>
             <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
@@ -930,11 +932,12 @@ export default function EquipmentTracker({
             </span>
             {[
               { id: 'ALL', name: 'Tất cả', fullName: 'Tất cả trang phục', count: categoryCounts.ALL, color: 'bg-orange-600 border-orange-600 text-white' },
+              { id: 'Váy', name: 'Váy', fullName: 'Váy thời trang & Váy cưới', count: categoryCounts['Váy'] || 0, color: 'bg-rose-600 border-rose-600 text-white' },
               { id: 'Áo dài', name: 'Áo dài', fullName: 'Áo dài truyền thống & Cách tân', count: categoryCounts['Áo dài'] || 0, color: 'bg-pink-600 border-pink-600 text-white' },
-              { id: 'Concept', name: 'Concept', fullName: 'Cổ phục & Concept chụp ảnh', count: categoryCounts['Concept'] || 0, color: 'bg-purple-600 border-purple-600 text-white' },
               { id: 'Dạ hội', name: 'Dạ hội', fullName: 'Đầm dạ hội tiệc tối', count: categoryCounts['Dạ hội'] || 0, color: 'bg-amber-600 border-amber-600 text-white' },
-              { id: 'Chụp ảnh', name: 'Chụp ảnh', fullName: 'Trang phục chụp ảnh & Cosplay', count: categoryCounts['Chụp ảnh'] || 0, color: 'bg-cyan-600 border-cyan-600 text-white' },
+              { id: 'Concept', name: 'Concept', fullName: 'Cổ phục & Concept chụp ảnh', count: categoryCounts['Concept'] || 0, color: 'bg-purple-600 border-purple-600 text-white' },
               { id: 'Phụ kiện', name: 'Phụ kiện', fullName: 'Phụ kiện đi kèm', count: categoryCounts['Phụ kiện'] || 0, color: 'bg-emerald-600 border-emerald-600 text-white' },
+              { id: 'Chụp ảnh', name: 'Chụp ảnh', fullName: 'Trang phục chụp ảnh & Cosplay', count: categoryCounts['Chụp ảnh'] || 0, color: 'bg-cyan-600 border-cyan-600 text-white' },
               { id: 'Khác', name: 'Khác', fullName: 'Trang phục khác', count: categoryCounts['Khác'] || 0, color: 'bg-slate-600 border-slate-600 text-white' },
             ].map(cat => {
               const isSelected = categoryFilter === cat.id;
@@ -1978,14 +1981,15 @@ export default function EquipmentTracker({
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
                   Phân loại trang phục *
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
                   {[
-                    { id: 'Áo dài', label: 'Áo dài', sub: 'Tết / Cưới / Lễ', icon: '🌸' },
-                    { id: 'Concept', label: 'Concept', sub: 'Cổ phục / Nàng thơ', icon: '👘' },
-                    { id: 'Dạ hội', label: 'Dạ hội', sub: 'Tiệc tối / Event', icon: '✨' },
-                    { id: 'Chụp ảnh', label: 'Chụp ảnh', sub: 'Cosplay / Kỷ yếu', icon: '📸' },
-                    { id: 'Phụ kiện', label: 'Phụ kiện', sub: 'Mấn / Nơ / Túi', icon: '🎀' },
-                    { id: 'Khác', label: 'Khác', sub: 'Trang phục khác', icon: '👗' },
+                    { id: 'Váy', label: 'Váy', icon: '👗' },
+                    { id: 'Áo dài', label: 'Áo dài', icon: '🌸' },
+                    { id: 'Dạ hội', label: 'Dạ hội', icon: '✨' },
+                    { id: 'Concept', label: 'Concept', icon: '👘' },
+                    { id: 'Phụ kiện', label: 'Phụ kiện', icon: '🎀' },
+                    { id: 'Chụp ảnh', label: 'Chụp ảnh', icon: '📸' },
+                    { id: 'Khác', label: 'Khác', icon: '🏷️' },
                   ].map(cat => {
                     const isSelected = formState.category === cat.id;
                     return (
@@ -2000,15 +2004,14 @@ export default function EquipmentTracker({
                           dailyRate: cat.id === 'Printer' && prev.dailyRate === 290000 ? 40000 : prev.dailyRate,
                           price1Day: cat.id === 'Printer' && prev.price1Day === 290000 ? 40000 : prev.price1Day,
                         }))}
-                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                           isSelected
-                            ? 'bg-orange-50 border-orange-500 text-orange-700 font-bold ring-2 ring-orange-200 shadow-3xs'
-                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 font-medium'
+                            ? 'bg-orange-50 border-orange-500 text-orange-700 font-black ring-2 ring-orange-200 shadow-3xs'
+                            : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 font-bold'
                         }`}
                       >
-                        <span className="text-base">{cat.icon}</span>
-                        <span className="text-xs leading-tight font-bold">{cat.label}</span>
-                        <span className="text-[9.5px] text-gray-400 font-normal">{cat.sub}</span>
+                        <span className="text-xl sm:text-2xl">{cat.icon}</span>
+                        <span className="text-xs sm:text-sm leading-tight font-black">{cat.label}</span>
                       </button>
                     );
                   })}
@@ -2024,7 +2027,7 @@ export default function EquipmentTracker({
                     value={formState.shortName}
                     onChange={e => setFormState({ ...formState, shortName: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: Váy Công Chúa VC01"
+                    placeholder="VD: Váy VC01, Đầm D01, Áo AD02..."
                   />
                 </div>
 
@@ -2036,7 +2039,7 @@ export default function EquipmentTracker({
                     value={formState.serialNumber}
                     onChange={e => setFormState({ ...formState, serialNumber: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: VC-01, VEST-02, AD-05"
+                    placeholder="VD: VC-01, AD-05, DH-02..."
                   />
                 </div>
               </div>
@@ -2099,7 +2102,7 @@ export default function EquipmentTracker({
                           const newSizes = ['S', 'M', 'L'];
                           const nextColorMap = { ...formState.sizeColorMap };
                           newSizes.forEach(s => {
-                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || 'Trắng tinh khôi';
+                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || '';
                           });
                           setFormState(prev => ({
                             ...prev,
@@ -2119,7 +2122,7 @@ export default function EquipmentTracker({
                           const newSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
                           const nextColorMap = { ...formState.sizeColorMap };
                           newSizes.forEach(s => {
-                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || 'Trắng tinh khôi';
+                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || '';
                           });
                           setFormState(prev => ({
                             ...prev,
@@ -2137,7 +2140,7 @@ export default function EquipmentTracker({
                         type="button"
                         onClick={() => {
                           const nextColorMap = { ...formState.sizeColorMap };
-                          if (!nextColorMap['Freesize']) nextColorMap['Freesize'] = formState.color || 'Trắng tinh khôi';
+                          if (!nextColorMap['Freesize']) nextColorMap['Freesize'] = formState.color || '';
                           setFormState(prev => ({
                             ...prev,
                             selectedSizes: ['Freesize'],
@@ -2172,7 +2175,7 @@ export default function EquipmentTracker({
                             nextSizes.sort((a, b) => ALL_SIZES.indexOf(a) - ALL_SIZES.indexOf(b));
                             const nextColorMap = { ...formState.sizeColorMap };
                             if (!nextColorMap[sz]) {
-                              nextColorMap[sz] = formState.color || 'Trắng tinh khôi';
+                              nextColorMap[sz] = formState.color || '';
                             }
                             setFormState(prev => ({
                               ...prev,
@@ -2209,14 +2212,14 @@ export default function EquipmentTracker({
                   <div className="divide-y divide-gray-100 max-h-[360px] overflow-y-auto">
                     {formState.selectedSizes.map(sz => {
                       const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-                      const rawSerial = (formState.serialNumber || 'VC-01').trim();
-                      const cleanBase = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || 'VC-01';
-                      const displaySerial = formState.selectedSizes.length > 1
-                        ? `${cleanBase}-${sizeCode}`
-                        : rawSerial;
+                      const rawSerial = (formState.serialNumber || '').trim();
+                      const cleanBase = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '');
+                      const displaySerial = rawSerial
+                        ? (formState.selectedSizes.length > 1 ? `${cleanBase}-${sizeCode}` : rawSerial)
+                        : `VD: V01-${sizeCode}`;
                       const currentColor = formState.sizeColorMap[sz] !== undefined && formState.sizeColorMap[sz] !== ''
                         ? formState.sizeColorMap[sz]
-                        : (formState.color || 'Trắng tinh khôi');
+                        : (formState.color || '');
                       const currentSizeImg = formState.sizeImageMap[sz] || '';
 
                       return (
@@ -2229,7 +2232,7 @@ export default function EquipmentTracker({
                               </span>
                               <div className="flex flex-col">
                                 <span className="text-xs font-bold text-gray-800 font-mono">
-                                  Mã: <strong className="text-orange-700">{displaySerial}</strong>
+                                  Mã: <strong className={rawSerial ? "text-orange-700" : "text-gray-400 italic"}>{displaySerial}</strong>
                                 </span>
                                 <span className="text-[10px] text-gray-400">
                                   {sz === 'Freesize' ? 'Kiểu dáng Freesize' : `Kích cỡ chuẩn ${sz}`}
@@ -2239,8 +2242,12 @@ export default function EquipmentTracker({
 
                             {/* Current color badge pill */}
                             <div className="inline-flex items-center gap-1.5 bg-white border border-orange-200/90 px-2.5 py-1 rounded-full text-[11px] font-bold text-orange-950 shadow-2xs self-start sm:self-auto">
-                              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-1 ring-orange-300 shrink-0"></span>
-                              <span>Màu: <strong className="text-orange-700 font-black">{currentColor}</strong></span>
+                              <span className={`w-2.5 h-2.5 rounded-full ${currentColor ? 'bg-orange-500 ring-1 ring-orange-300' : 'bg-gray-300'} shrink-0`}></span>
+                              {currentColor ? (
+                                <span>Màu: <strong className="text-orange-700 font-black">{currentColor}</strong></span>
+                              ) : (
+                                <span className="text-gray-400 font-medium italic">Chưa nhập màu</span>
+                              )}
                             </div>
                           </div>
 
@@ -2638,6 +2645,7 @@ export default function EquipmentTracker({
                           onChange={v => setFormState(prev => ({ ...prev, price1Day: v, dailyRate: v }))}
                           className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                           suffixColor="gray"
+                          placeholder="VD: 350.000"
                         />
                       </div>
                       <div>
@@ -2647,6 +2655,7 @@ export default function EquipmentTracker({
                           onChange={v => setFormState(prev => ({ ...prev, price2Days: v }))}
                           className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                           suffixColor="gray"
+                          placeholder="VD: 650.000"
                         />
                       </div>
                       <div>
@@ -2656,6 +2665,7 @@ export default function EquipmentTracker({
                           onChange={v => setFormState(prev => ({ ...prev, price3Days: v }))}
                           className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                           suffixColor="gray"
+                          placeholder="VD: 950.000"
                         />
                       </div>
                     </div>
@@ -2667,6 +2677,7 @@ export default function EquipmentTracker({
                         onChange={v => setFormState(prev => ({ ...prev, price4DaysPlus: v }))}
                         className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                         suffixColor="gray"
+                        placeholder="VD: 300.000"
                       />
                     </div>
                   </div>
