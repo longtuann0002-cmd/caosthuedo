@@ -415,9 +415,9 @@ export default function EquipmentTracker({
       size: nextSize,
       selectedSizes: [nextSize],
       splitBySize: false,
-      sizeColorMap: {},
+      sizeColorMap: { [nextSize]: rep.color || 'Trắng tinh khôi' },
       sizeImageMap: {},
-      color: rep.color || 'Trắng Tinh Khôi',
+      color: rep.color || 'Trắng tinh khôi',
       gender: (rep.gender as any) || 'Nữ',
       cleaningStatus: 'Clean',
       measurements: rep.measurements || '',
@@ -452,9 +452,9 @@ export default function EquipmentTracker({
       size: 'M',
       selectedSizes: ['M'],
       splitBySize: false,
-      sizeColorMap: {},
+      sizeColorMap: { 'M': 'Trắng tinh khôi' },
       sizeImageMap: {},
-      color: 'Trắng Tinh Khôi',
+      color: 'Trắng tinh khôi',
       gender: 'Nữ',
       cleaningStatus: 'Clean',
       measurements: '',
@@ -498,9 +498,9 @@ export default function EquipmentTracker({
       size: cam.size || 'M',
       selectedSizes: rawSizes.length > 0 ? rawSizes : ['M'],
       splitBySize: false,
-      sizeColorMap: {},
+      sizeColorMap: (rawSizes.length > 0 ? rawSizes : ['M']).reduce((acc, s) => ({ ...acc, [s]: cam.color || 'Trắng tinh khôi' }), {}),
       sizeImageMap: {},
-      color: cam.color || 'Trắng Tinh Khôi',
+      color: cam.color || 'Trắng tinh khôi',
       gender: (cam.gender as any) || 'Nữ',
       cleaningStatus: (cam.cleaningStatus as any) || 'Clean',
       measurements: cam.measurements || '',
@@ -571,7 +571,8 @@ export default function EquipmentTracker({
     } else {
       // New: Tự động tách thành từng sản phẩm riêng nếu chọn từ 2 size trở lên
       if (sizesToSave.length > 1) {
-        const baseSerial = formState.serialNumber.trim().replace(/-+$/, '');
+        const rawSerial = (formState.serialNumber || 'VC-01').trim();
+        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || 'VC-01';
         sizesToSave.forEach((sz, idx) => {
           const sizeCode = sz === 'Freesize' ? 'FS' : sz;
           const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || 'Trắng tinh khôi';
@@ -591,11 +592,13 @@ export default function EquipmentTracker({
       } else {
         // Chỉ chọn 1 size duy nhất (VD: Freesize hoặc Size M)
         const singleSize = sizesToSave[0] || 'Freesize';
+        const rawSerial = (formState.serialNumber || 'VC-01').trim();
         const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || 'Trắng tinh khôi';
         const sizeSpecificImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
         const newCam: Camera = {
           id: `outfit-${Date.now()}`,
           ...savedFormState,
+          serialNumber: rawSerial,
           size: singleSize,
           availableSizes: [singleSize],
           color: sizeColor,
@@ -1945,10 +1948,15 @@ export default function EquipmentTracker({
                         type="button"
                         onClick={() => {
                           const newSizes = ['S', 'M', 'L'];
+                          const nextColorMap = { ...formState.sizeColorMap };
+                          newSizes.forEach(s => {
+                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || 'Trắng tinh khôi';
+                          });
                           setFormState(prev => ({
                             ...prev,
                             selectedSizes: newSizes,
-                            size: newSizes.join(', ')
+                            size: newSizes.join(', '),
+                            sizeColorMap: nextColorMap
                           }));
                         }}
                         className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
@@ -1960,10 +1968,15 @@ export default function EquipmentTracker({
                         type="button"
                         onClick={() => {
                           const newSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+                          const nextColorMap = { ...formState.sizeColorMap };
+                          newSizes.forEach(s => {
+                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || 'Trắng tinh khôi';
+                          });
                           setFormState(prev => ({
                             ...prev,
                             selectedSizes: newSizes,
-                            size: newSizes.join(', ')
+                            size: newSizes.join(', '),
+                            sizeColorMap: nextColorMap
                           }));
                         }}
                         className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
@@ -1974,10 +1987,13 @@ export default function EquipmentTracker({
                       <button
                         type="button"
                         onClick={() => {
+                          const nextColorMap = { ...formState.sizeColorMap };
+                          if (!nextColorMap['Freesize']) nextColorMap['Freesize'] = formState.color || 'Trắng tinh khôi';
                           setFormState(prev => ({
                             ...prev,
                             selectedSizes: ['Freesize'],
-                            size: 'Freesize'
+                            size: 'Freesize',
+                            sizeColorMap: nextColorMap
                           }));
                         }}
                         className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
@@ -1991,6 +2007,7 @@ export default function EquipmentTracker({
                   <div className="flex flex-wrap gap-1.5">
                     {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'].map(sz => {
                       const isSelected = formState.selectedSizes.includes(sz);
+                      const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'];
                       return (
                         <button
                           key={sz}
@@ -2003,10 +2020,16 @@ export default function EquipmentTracker({
                             } else {
                               nextSizes = [...formState.selectedSizes, sz];
                             }
+                            nextSizes.sort((a, b) => ALL_SIZES.indexOf(a) - ALL_SIZES.indexOf(b));
+                            const nextColorMap = { ...formState.sizeColorMap };
+                            if (!nextColorMap[sz]) {
+                              nextColorMap[sz] = formState.color || 'Trắng tinh khôi';
+                            }
                             setFormState(prev => ({
                               ...prev,
                               selectedSizes: nextSizes,
-                              size: nextSizes.join(', ')
+                              size: nextSizes.join(', '),
+                              sizeColorMap: nextColorMap
                             }));
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border flex items-center gap-1 ${
@@ -2034,24 +2057,25 @@ export default function EquipmentTracker({
                     </span>
                   </div>
 
-                  <div className="divide-y divide-gray-100 max-h-[300px] overflow-y-auto">
+                  <div className="divide-y divide-gray-100 max-h-[360px] overflow-y-auto">
                     {formState.selectedSizes.map(sz => {
                       const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-                      const baseSerial = (formState.serialNumber || 'VC').trim().replace(/-+$/, '');
+                      const rawSerial = (formState.serialNumber || 'VC-01').trim();
+                      const cleanBase = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || 'VC-01';
                       const displaySerial = formState.selectedSizes.length > 1
-                        ? `${baseSerial}-${sizeCode}`
-                        : formState.serialNumber || 'VC-01';
+                        ? `${cleanBase}-${sizeCode}`
+                        : rawSerial;
                       const currentColor = formState.sizeColorMap[sz] !== undefined && formState.sizeColorMap[sz] !== ''
                         ? formState.sizeColorMap[sz]
-                        : 'Trắng tinh khôi';
+                        : (formState.color || 'Trắng tinh khôi');
                       const currentSizeImg = formState.sizeImageMap[sz] || '';
 
                       return (
-                        <div key={sz} className="p-3 flex flex-col gap-2 hover:bg-orange-50/20 transition">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            {/* Size + Tag preview */}
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs font-black bg-orange-600 text-white px-2.5 py-1 rounded-md shadow-2xs min-w-[65px] text-center">
+                        <div key={sz} className="p-3 flex flex-col gap-2.5 hover:bg-orange-50/20 transition">
+                          {/* Header row: Size badge + Clean Tag preview + Current Color pill */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 bg-orange-50/50 p-2 rounded-lg border border-orange-100/90">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black bg-orange-600 text-white px-2.5 py-1 rounded-md shadow-2xs min-w-[55px] text-center">
                                 {sz}
                               </span>
                               <div className="flex flex-col">
@@ -2064,36 +2088,53 @@ export default function EquipmentTracker({
                               </div>
                             </div>
 
-                            {/* Color picker for this specific size */}
-                            <div className="flex-1 max-w-sm flex items-center gap-1.5">
-                              <div className="relative flex-1">
-                                <input
-                                  type="text"
-                                  value={formState.sizeColorMap[sz] ?? ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    setFormState(prev => ({
-                                      ...prev,
-                                      sizeColorMap: {
-                                        ...prev.sizeColorMap,
-                                        [sz]: val
-                                      }
-                                    }));
-                                  }}
-                                  placeholder="Màu sắc (VD: Đỏ đô, Be sữa...)"
-                                  className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-xs text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-500 font-semibold"
-                                />
-                              </div>
+                            {/* Current color badge pill */}
+                            <div className="inline-flex items-center gap-1.5 bg-white border border-orange-200/90 px-2.5 py-1 rounded-full text-[11px] font-bold text-orange-950 shadow-2xs self-start sm:self-auto">
+                              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-1 ring-orange-300 shrink-0"></span>
+                              <span>Màu: <strong className="text-orange-700 font-black">{currentColor}</strong></span>
+                            </div>
+                          </div>
 
-                              {/* Mini quick color tags */}
-                              <div className="flex items-center gap-0.5 shrink-0">
-                                {[
-                                  { name: 'Trắng', full: 'Trắng tinh khôi' },
-                                  { name: 'Đỏ', full: 'Đỏ đô' },
-                                  { name: 'Đen', full: 'Đen tuyền' },
-                                  { name: 'Be', full: 'Be sữa' },
-                                  { name: 'Hồng', full: 'Hồng phấn' }
-                                ].map(col => (
+                          {/* Color picker section: Wide input + Quick color tags */}
+                          <div className="space-y-1.5 bg-gray-50/80 border border-gray-200/80 rounded-lg p-2.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                              <label className="text-[11px] font-bold text-gray-700 shrink-0 flex items-center gap-1">
+                                <span>🎨 Màu sắc riêng cho Size {sz}:</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={formState.sizeColorMap[sz] ?? ''}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setFormState(prev => ({
+                                    ...prev,
+                                    sizeColorMap: {
+                                      ...prev.sizeColorMap,
+                                      [sz]: val
+                                    }
+                                  }));
+                                }}
+                                placeholder="Gõ màu tùy ý (VD: Đỏ đô, Be sữa, Trắng ngà, Xanh pastel...)"
+                                className="flex-1 bg-white border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-850 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
+                              />
+                            </div>
+
+                            {/* Mini quick color tags */}
+                            <div className="flex items-center gap-1 flex-wrap pl-0.5">
+                              <span className="text-[10px] text-gray-400 font-medium shrink-0">Chọn nhanh:</span>
+                              {[
+                                { name: '⚪ Trắng', full: 'Trắng tinh khôi' },
+                                { name: '🔴 Đỏ', full: 'Đỏ đô' },
+                                { name: '⚫ Đen', full: 'Đen tuyền' },
+                                { name: '🌾 Be', full: 'Be sữa' },
+                                { name: '🌸 Hồng', full: 'Hồng phấn' },
+                                { name: '🔵 Xanh', full: 'Xanh pastel' },
+                                { name: '🟡 Vàng', full: 'Vàng đồng' },
+                                { name: '🟣 Tím', full: 'Tím mộng mơ' },
+                                { name: '🟤 Nâu', full: 'Nâu tây' }
+                              ].map(col => {
+                                const isColActive = currentColor === col.full || (formState.sizeColorMap[sz] === col.name);
+                                return (
                                   <button
                                     key={col.name}
                                     type="button"
@@ -2106,17 +2147,17 @@ export default function EquipmentTracker({
                                         }
                                       }));
                                     }}
-                                    className={`text-[9.5px] px-1.5 py-0.5 rounded transition cursor-pointer font-bold border ${
-                                      currentColor === col.full
-                                        ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
-                                        : 'bg-gray-100 hover:bg-orange-100 text-gray-600 hover:text-orange-800 border-gray-200'
+                                    className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer font-bold border ${
+                                      isColActive
+                                        ? 'bg-orange-600 text-white border-orange-600 shadow-2xs ring-1 ring-orange-300'
+                                        : 'bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-800 border-gray-200'
                                     }`}
                                     title={`Chọn màu ${col.full}`}
                                   >
                                     {col.name}
                                   </button>
-                                ))}
-                              </div>
+                                );
+                              })}
                             </div>
                           </div>
 
