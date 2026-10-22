@@ -2835,20 +2835,8 @@ export default function BookingCalendar({
                         <p className="text-[11px] sm:text-xs text-gray-600 font-mono font-bold mt-0.5">SĐT: {quickReceiptContract.customerPhone}</p>
                       </div>
 
-                      {/* Thời hạn thuê lồng ghép gọn gàng */}
-                      <div className="bg-white/90 border border-slate-200/90 rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs space-y-0.5">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Bắt đầu:</span>
-                          <strong className="font-bold font-mono text-gray-900 whitespace-nowrap">{formatDMY(quickReceiptContract.startDate)}</strong>
-                        </div>
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Hạn trả:</span>
-                          <strong className="font-bold font-mono text-orange-600 whitespace-nowrap">{formatDMY(quickReceiptContract.endDate)}</strong>
-                        </div>
-                      </div>
-
-                      {/* Thế chấp */}
-                      <div className="pt-0.5">
+                      {/* Thế chấp (ngay dưới SĐT) */}
+                      <div>
                         <div className="inline-flex items-center gap-1.5 bg-amber-50/90 border border-amber-200/90 px-2 py-0.5 rounded-lg text-amber-950 max-w-full">
                           <span className="text-[9.5px] font-extrabold text-amber-800 uppercase shrink-0">Thế chấp:</span>
                           <span className="text-[10.5px] font-bold font-mono text-gray-800 truncate">
@@ -2861,6 +2849,18 @@ export default function BookingCalendar({
                                     : ''
                                 }`}
                           </span>
+                        </div>
+                      </div>
+
+                      {/* Thời hạn thuê lồng ghép gọn gàng */}
+                      <div className="bg-white/90 border border-slate-200/90 rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs space-y-0.5">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Bắt đầu:</span>
+                          <strong className="font-bold font-mono text-gray-900 whitespace-nowrap">{formatDMY(quickReceiptContract.startDate)}</strong>
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Hạn trả:</span>
+                          <strong className="font-bold font-mono text-orange-600 whitespace-nowrap">{formatDMY(quickReceiptContract.endDate)}</strong>
                         </div>
                       </div>
                     </div>
