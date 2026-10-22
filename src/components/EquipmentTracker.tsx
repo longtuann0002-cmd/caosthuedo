@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Camera, RentalContract } from '../types';
 import MoneyInput from './MoneyInput';
 import { DressIcon } from './DressIcon';
-import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List } from 'lucide-react';
+import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List, X } from 'lucide-react';
 import { getInitialTieredPrices } from '../utils/pricing';
 import { matchCamera } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
@@ -111,8 +111,12 @@ export default function EquipmentTracker({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Detail Bottom Sheet Modal state
+  const [detailGroupKey, setDetailGroupKey] = useState<string | null>(null);
+  const [detailCameraId, setDetailCameraId] = useState<string | null>(null);
+
   // Lock body scroll whenever modal is open
-  useScrollLock(Boolean(showAddModal || cameraToDelete));
+  useScrollLock(Boolean(showAddModal || cameraToDelete || detailGroupKey || detailCameraId));
   const [expandedPrices, setExpandedPrices] = useState<Record<string, boolean>>({});
 
   const togglePricingExpanded = (id: string) => {
@@ -373,6 +377,16 @@ export default function EquipmentTracker({
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredOutfitGroups.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredOutfitGroups, currentPage, itemsPerPage]);
+
+  const detailGroup = useMemo(() => {
+    if (!detailGroupKey) return null;
+    return filteredOutfitGroups.find(g => g.groupKey === detailGroupKey) || null;
+  }, [detailGroupKey, filteredOutfitGroups]);
+
+  const detailCamera = useMemo(() => {
+    if (!detailCameraId) return null;
+    return cameras.find(c => c.id === detailCameraId) || null;
+  }, [detailCameraId, cameras]);
 
   const handleMoveGroup = (groupIndex: number, direction: 'left' | 'right') => {
     const targetIndex = direction === 'left' ? groupIndex - 1 : groupIndex + 1;
@@ -972,10 +986,11 @@ export default function EquipmentTracker({
                 key={group.groupKey}
                 onDragOver={(e) => handleDragOver(e, activeCam.id)}
                 onDrop={(e) => handleDrop(e, activeCam.id)}
-                className={`bg-white border rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative ${
+                onClick={() => setDetailGroupKey(group.groupKey)}
+                className={`bg-white border rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative cursor-pointer group select-none ${
                   isDraggingThis ? 'opacity-35 border-dashed border-orange-500 scale-[0.98]' :
                   isDragTarget ? 'border-orange-500 ring-2 ring-orange-400/60 scale-[1.01] shadow-lg' :
-                  'border-gray-200/90 hover:border-orange-300'
+                  'border-gray-200/90 hover:border-orange-400'
                 }`}
               >
                 <div>
@@ -984,17 +999,21 @@ export default function EquipmentTracker({
                     <img
                       src={activeCam.image || group.image}
                       alt={group.cleanName}
-                      className="w-full h-full object-cover object-top transform hover:scale-105 transition-transform duration-500"
+                      className="w-full h-full object-cover object-top transform group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
                     />
                     {/* Top-left: Category & ShortName & Sizes count badge */}
-                    <div className="absolute top-2 left-2 flex items-center gap-1.5 max-w-[90%] flex-wrap z-10">
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 max-w-[90%] flex-wrap z-10 pointer-events-none">
                       {currentUserRole === 'admin' && (
                         <div
                           draggable={true}
-                          onDragStart={(e) => handleDragStart(e, activeCam.id)}
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            handleDragStart(e, activeCam.id);
+                          }}
                           onDragEnd={handleDragEnd}
-                          className="bg-black/60 hover:bg-orange-600 backdrop-blur-xs text-white p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-black/60 hover:bg-orange-600 pointer-events-auto backdrop-blur-xs text-white p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
                           title="Kéo & thả để đổi vị trí thứ tự mẫu áo"
                         >
                           <GripVertical className="w-3.5 h-3.5" />
@@ -1025,28 +1044,28 @@ export default function EquipmentTracker({
                         if (group.readyCount === group.items.length) {
                           return (
                             <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
-                              ✓ Sẵn sàng ({group.items.length}/{group.items.length} size)
+                              ✓ Sẵn sàng ({group.items.length}/{group.items.length})
                             </span>
                           );
                         }
                         if (group.readyCount > 0) {
                           return (
                             <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
-                              ✓ Còn {group.readyCount}/{group.items.length} size
+                              ✓ Còn {group.readyCount}/{group.items.length}
                             </span>
                           );
                         }
                         if (group.laundryCount > 0) {
                           return (
                             <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-blue-700/95 text-white backdrop-blur-xs">
-                              🧺 Đang giặt ({group.laundryCount} size)
+                              🧺 Đang giặt ({group.laundryCount})
                             </span>
                           );
                         }
                         if (group.mendingCount > 0) {
                           return (
                             <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-amber-700/95 text-white backdrop-blur-xs">
-                              🪡 Đang sửa ({group.mendingCount} size)
+                              🪡 Đang sửa ({group.mendingCount})
                             </span>
                           );
                         }
@@ -1059,316 +1078,122 @@ export default function EquipmentTracker({
                     </div>
                   </div>
 
-                  {/* Product text details */}
-                  <div className="p-3 sm:p-4 space-y-2.5">
+                  {/* Product text details - Siêu gọn, không bao giờ bị rớt dòng */}
+                  <div className="p-2.5 sm:p-3 space-y-1.5">
                     <div>
-                      <h3 className="font-extrabold text-gray-900 text-sm sm:text-base hover:text-orange-600 transition-colors line-clamp-1" title={group.cleanName}>
+                      <h3 className="font-extrabold text-gray-900 text-xs sm:text-sm group-hover:text-orange-600 transition-colors line-clamp-1" title={group.cleanName}>
                         {group.cleanName}
                       </h3>
-                      <div className="text-gray-500 font-mono text-[11px] sm:text-xs mt-1 flex justify-between items-center">
-                        <span>Mã: <b className="text-gray-800">{group.baseSerial}</b></span>
+                      <div className="text-gray-400 font-mono text-[10.5px] sm:text-xs mt-0.5 flex justify-between items-center">
+                        <span className="truncate">Mã: <b className="text-gray-700">{group.baseSerial}</b></span>
                         {group.gender && (
-                          <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full ${group.gender === 'Nữ' ? 'bg-pink-50 text-pink-700 border border-pink-200' : group.gender === 'Nam' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-700'}`}>
+                          <span className={`text-[9.5px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ml-1 ${group.gender === 'Nữ' ? 'bg-pink-50 text-pink-700 border border-pink-100' : group.gender === 'Nam' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-gray-100 text-gray-600'}`}>
                             {group.gender}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Interactive Size & Color selector pills */}
-                    <div className="space-y-1.5 bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 shadow-inner">
-                      <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-black uppercase text-gray-500 tracking-wider">
-                        <span>Chọn size:</span>
-                        <span className="text-orange-600 font-black capitalize">
-                          Size {activeCam.size || 'FS'}
+                    {/* Price row - 1 dòng duy nhất, to rõ */}
+                    <div className="pt-0.5 flex items-baseline justify-between gap-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
+                          {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
                         </span>
+                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">/ngày</span>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {group.items.map(cam => {
-                          const isCurrent = cam.id === activeCam.id;
-                          const isLdry = cam.cleaningStatus === 'Laundry';
-                          const isMnd = cam.cleaningStatus === 'Mending';
-                          const isRnt = cam.status === 'Rented';
-                          const isMnt = cam.status === 'Maintenance';
-                          const szLabel = cam.size || 'FS';
-
-                          return (
-                            <button
-                              key={cam.id}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedGroupSizes(prev => ({ ...prev, [group.groupKey]: cam.id }));
-                              }}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                                isCurrent
-                                  ? 'bg-orange-50 text-orange-950 border-2 border-orange-500 ring-2 ring-orange-300/80 shadow-xs scale-102 font-black'
-                                  : 'bg-white text-gray-700 border-gray-250 hover:bg-orange-50/50 hover:border-orange-300'
-                              }`}
-                              title={`Bấm để chọn xem & thao tác Size ${szLabel}`}
-                            >
-                              <span className={`w-2 h-2 rounded-full shrink-0 ${
-                                isCurrent ? 'bg-orange-600' : isLdry ? 'bg-blue-500' : isMnd ? 'bg-amber-500' : isRnt ? 'bg-purple-500' : isMnt ? 'bg-rose-500' : 'bg-emerald-500'
-                              }`} />
-                              <span>Size {szLabel}</span>
-                              {cam.color && (
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate max-w-[85px] shadow-3xs ${
-                                  isCurrent ? 'bg-white text-orange-950 border border-orange-300' : 'bg-gray-100 text-gray-600 border border-gray-200'
-                                }`}>
-                                  🎨 {cam.color}
-                                </span>
-                              )}
-                              {isLdry && <span className="text-[10px] text-blue-600">🧺</span>}
-                              {isMnd && <span className="text-[10px] text-amber-600">🪡</span>}
-                              {isRnt && <span className="text-[10px] text-purple-600">⏳</span>}
-                              {isMnt && <span className="text-[10px] text-rose-600">🛠️</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Status of currently selected size */}
-                      <div className="pt-1.5 mt-1 border-t border-slate-200 flex items-center justify-between text-[10px] sm:text-[11px] text-gray-500">
-                        <span className="font-mono">Mã tem: <b className="text-gray-800">{activeCam.serialNumber}</b></span>
-                        {(() => {
-                          if (activeCam.status === 'Rented') return <span className="text-purple-700 font-bold bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">⏳ Đang thuê</span>;
-                          if (activeCam.cleaningStatus === 'Laundry') return <span className="text-blue-700 font-bold bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">🧺 Đang giặt</span>;
-                          if (activeCam.cleaningStatus === 'Mending') return <span className="text-amber-700 font-bold bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">🪡 Đang sửa</span>;
-                          if (activeCam.status === 'Maintenance') return <span className="text-rose-700 font-bold bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">🛠️ Bảo trì</span>;
-                          return <span className="text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">✓ Sẵn sàng</span>;
-                        })()}
-                      </div>
-                    </div>
-
-                    <p className="text-gray-500 text-xs line-clamp-1 sm:line-clamp-2 hidden sm:block">
-                      {activeCam.description || group.description || 'Chưa cung cấp mô tả chi tiết cho trang phục.'}
-                    </p>
-
-                    {/* Vốn nhập & Tiến độ hoàn vốn (ROI & Break-even) */}
-                    <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2 sm:p-2.5 space-y-1.5">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] sm:text-xs">
-                        <span className="text-gray-600 font-semibold flex items-center gap-1 truncate">
-                          <span>💎 Vốn:</span>
-                          <span className="font-mono font-bold text-gray-900 truncate" title={`Tổng vốn cả mẫu ${group.items.length} size`}>
-                            {purchase > 0 ? `${purchase.toLocaleString()}đ` : '—'}
-                          </span>
-                          <span className="text-[10px] text-gray-400">({group.items.length} size)</span>
+                      {roiPercent !== null && (
+                        <span className={`text-[9.5px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                          isBreakeven ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-50 text-amber-900 border border-amber-200'
+                        }`}>
+                          {isBreakeven ? '✓ Hòa vốn' : `${roiPercent}% vốn`}
                         </span>
-                        {roiPercent !== null && (
-                          <span className={`px-1.5 py-0.5 rounded-md font-black text-[10px] sm:text-[11px] self-start sm:self-auto shrink-0 ${
-                            isBreakeven
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                              : 'bg-amber-100 text-amber-900 border border-amber-200'
-                          }`}>
-                            {isBreakeven ? `✓ ${roiPercent}% Hoàn vốn` : `${roiPercent}% Hoàn vốn`}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Mini Progress Bar */}
-                      {purchase > 0 && (
-                        <div>
-                          <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                isBreakeven ? 'bg-emerald-500' : 'bg-orange-500'
-                              }`}
-                              style={{ width: `${Math.min(roiPercent || 0, 100)}%` }}
-                            />
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] sm:text-[11px] text-gray-500 mt-1 font-medium">
-                            <span className="truncate">Thu: <b className="text-gray-800 font-mono">{revenue.toLocaleString()}đ</b></span>
-                            <span className="shrink-0">
-                              {isBreakeven ? (
-                                <span className="text-emerald-700 font-bold font-mono">+{(revenue - purchase).toLocaleString()}đ</span>
-                              ) : (
-                                <span>~<b className="text-orange-600 font-mono font-bold">{estRentalsLeft}</b> lượt nữa</span>
-                              )}
-                            </span>
-                          </div>
-                        </div>
                       )}
                     </div>
 
-                    {/* Dynamic Tiered Rates info */}
-                    <div className="bg-orange-50/60 border border-orange-200/90 rounded-xl p-2.5">
-                      <div className="flex items-baseline justify-between gap-1">
-                        <span className="text-[10px] sm:text-[11px] text-gray-600 font-bold uppercase tracking-wider">Giá thuê:</span>
-                        <div className="text-right">
-                          <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
-                            {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
-                          </span>
-                          <span className="text-[10px] sm:text-xs text-gray-500 font-medium">/ngày</span>
-                        </div>
-                      </div>
-                      <div className="mt-1.5 pt-1.5 border-t border-orange-200/60 flex items-center justify-between text-[10.5px] sm:text-xs">
-                        <span className="text-gray-700 font-medium truncate">
-                          Từ 4 ngày: <b className="font-mono font-bold text-orange-700">{(activeCam.price4DaysPlus ?? Math.max(0, (activeCam.price1Day ?? activeCam.dailyRate) - 40000)).toLocaleString()}đ</b>/ng
+                    {/* Quick Size & Color summary */}
+                    <div className="flex items-center gap-1 flex-wrap text-[10px] sm:text-[11px] pt-0.5">
+                      <span className="font-bold bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
+                        {group.items.length > 1
+                          ? `Size: ${group.items.map(i => i.size || 'FS').join(', ')}`
+                          : `Size ${activeCam.size || 'FS'}`}
+                      </span>
+                      {activeCam.color && (
+                        <span className="text-gray-500 bg-gray-50 border border-gray-200/60 px-1.5 py-0.5 rounded truncate max-w-[90px]">
+                          🎨 {activeCam.color}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => togglePricingExpanded(group.groupKey)}
-                          className="text-orange-600 hover:text-orange-700 font-bold hover:underline cursor-pointer flex items-center gap-0.5 shrink-0 ml-auto"
-                        >
-                          <span>{expandedPrices[group.groupKey] ? 'Thu gọn ▲' : 'Bảng giá ▼'}</span>
-                        </button>
-                      </div>
-                      {expandedPrices[group.groupKey] && (
-                        <div className="mt-2 pt-2 border-t border-orange-200/70 space-y-1 text-xs">
-                          {(() => {
-                            const p1 = activeCam.price1Day ?? activeCam.dailyRate;
-                            const p2_daily = Math.max(0, p1 - 30000);
-                            const p4_daily = Math.max(0, p1 - 40000);
-                            const p3_daily = p4_daily;
-                            const total2Days = Math.round((activeCam.price2Days ?? ((p1 + p2_daily) / 2)) * 2);
-                            const total3Days = Math.round((activeCam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3);
-                            const rateFrom4Days = activeCam.price4DaysPlus ?? p4_daily;
-
-                            return (
-                              <>
-                                <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
-                                  <span className="text-gray-600">1 ngày:</span>
-                                  <span className="font-mono font-bold text-gray-800">{p1.toLocaleString()}đ</span>
-                                </div>
-                                <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
-                                  <span className="text-gray-600">2 ngày:</span>
-                                  <span className="font-mono font-bold text-gray-800">{total2Days.toLocaleString()}đ</span>
-                                </div>
-                                <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
-                                  <span className="text-gray-600">3 ngày:</span>
-                                  <span className="font-mono font-bold text-gray-800">{total3Days.toLocaleString()}đ</span>
-                                </div>
-                                <div className="flex justify-between items-center bg-orange-100/80 px-2.5 py-1 rounded border border-orange-200 font-medium">
-                                  <span className="text-orange-950 font-bold">Từ 4 ngày:</span>
-                                  <span className="font-mono font-black text-orange-600">{rateFrom4Days.toLocaleString()}đ/ng</span>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
                       )}
+                    </div>
+
+                    {/* Touch Cue */}
+                    <div className="pt-1 mt-1 border-t border-gray-100 flex items-center justify-between text-[11px] font-bold text-orange-600 group-hover:text-orange-700">
+                      <span>Chi tiết & bảng giá</span>
+                      <ChevronRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
                     </div>
                   </div>
                 </div>
 
-                {/* Quick Status and Admin tools bar */}
-                <div className="px-2.5 sm:px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1.5">
-                  {currentUserRole === 'admin' ? (
-                    <>
-                      {/* Reorder Buttons */}
-                      <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1 shadow-3xs shrink-0" title="Đổi vị trí mẫu áo trong kho">
-                        <button
-                          type="button"
-                          onClick={() => handleMoveGroup(groupIndex, 'left')}
-                          disabled={isFirst}
-                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
-                          title="Di chuyển lên trước (←)"
-                        >
-                          <ArrowLeft className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="text-[10px] sm:text-xs font-mono font-bold text-gray-600 px-1 select-none" title={`Vị trí mẫu thứ ${groupIndex + 1}`}>
-                          #{groupIndex + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveGroup(groupIndex, 'right')}
-                          disabled={isLast}
-                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
-                          title="Di chuyển về sau (→)"
-                        >
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Quick Add Size to this model */}
+                {/* Footer Admin Bar: Reorder & Quick Tools */}
+                {currentUserRole === 'admin' ? (
+                  <div 
+                    onClick={e => e.stopPropagation()} 
+                    className="px-2 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1 text-xs"
+                  >
+                    <div className="flex items-center gap-0.5 bg-white border border-gray-250 rounded-lg p-0.5 shadow-3xs shrink-0">
                       <button
                         type="button"
-                        onClick={() => handleAddSizeToGroup(group)}
-                        className="text-[11px] sm:text-xs font-bold text-orange-700 hover:text-white bg-orange-50 hover:bg-orange-600 border border-orange-200 hover:border-orange-600 px-2 py-1.5 rounded-lg transition-colors cursor-pointer shadow-3xs flex items-center gap-1 shrink-0"
-                        title={`Thêm size mới cho mẫu "${group.cleanName}"`}
+                        onClick={() => handleMoveGroup(groupIndex, 'left')}
+                        disabled={isFirst}
+                        className="p-1 text-gray-500 hover:text-orange-600 disabled:opacity-20 cursor-pointer rounded"
+                        title="Đẩy lên trước"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Size</span>
+                        <ArrowLeft className="w-3 h-3" />
                       </button>
+                      <span className="text-[9.5px] font-mono font-bold text-gray-600 px-0.5">#{groupIndex + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveGroup(groupIndex, 'right')}
+                        disabled={isLast}
+                        className="p-1 text-gray-500 hover:text-orange-600 disabled:opacity-20 cursor-pointer rounded"
+                        title="Đẩy về sau"
+                      >
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
 
-                      <div className="flex items-center gap-1.5 ml-auto">
-                        <button
-                          onClick={() => handleOpenEditModal(activeCam)}
-                          className="text-gray-700 hover:text-orange-600 p-1.5 bg-white border border-gray-300 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
-                          title={`Sửa thông tin Size ${activeCam.size} (Admin)`}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            if (activeCam.cleaningStatus === 'Laundry' || activeCam.cleaningStatus === 'Mending') {
-                              onUpdateCamera({ ...activeCam, cleaningStatus: 'Clean' });
-                            } else if (activeCam.status === 'Maintenance') {
-                              onUpdateCamera({ ...activeCam, status: 'Available' });
-                            } else {
-                              onUpdateCamera({ ...activeCam, cleaningStatus: 'Laundry' });
-                            }
-                          }}
-                          className={`text-[10px] sm:text-xs px-2 py-1.5 font-bold rounded-lg transition-all cursor-pointer shadow-3xs whitespace-nowrap ${
-                            activeCam.cleaningStatus === 'Laundry'
-                              ? 'bg-blue-50 border border-blue-300 text-blue-800 hover:bg-blue-100'
-                              : activeCam.cleaningStatus === 'Mending'
-                              ? 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'
-                              : activeCam.status === 'Maintenance'
-                              ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
-                              : 'bg-gray-100 border border-gray-300 text-gray-700 hover:bg-blue-50 hover:text-blue-700'
-                          }`}
-                          title={
-                            activeCam.cleaningStatus === 'Laundry' ? 'Bấm để hoàn tất: Đã giặt sạch thơm' :
-                            activeCam.cleaningStatus === 'Mending' ? 'Bấm để hoàn tất: Đã sửa xong' :
-                            activeCam.status === 'Maintenance' ? 'Bấm để hoàn tất bảo trì' :
-                            `Gửi Size ${activeCam.size} đi giặt hấp`
-                          }
-                        >
-                          {activeCam.cleaningStatus === 'Laundry' ? '✨Giặt' :
-                           activeCam.cleaningStatus === 'Mending' ? '✨Sửa' :
-                           activeCam.status === 'Maintenance' ? '✓BT' :
-                           '🧺'}
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            if (activeCam.status === 'Rented') {
-                              setDeleteError(`Trang phục "${activeCam.name}" đang trong trạng thái ĐANG THUÊ. Vui lòng hoàn tất hợp đồng thu hồi trước khi xóa.`);
-                              setCameraToDelete(activeCam);
-                            } else {
-                              setDeleteError(null);
-                              setCameraToDelete(activeCam);
-                            }
-                          }}
-                          className="text-gray-500 hover:text-red-650 p-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer shadow-3xs"
-                          title={`Xóa Size ${activeCam.size} khỏi kho`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xs font-bold text-gray-600 bg-gray-200/60 px-2.5 py-1 rounded-md uppercase flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5 text-gray-500 shrink-0" /> Chế độ xem (Staff)
-                      </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(activeCam)}
+                        className="p-1 sm:p-1.5 bg-white border border-gray-300 hover:bg-orange-50 hover:text-orange-600 rounded-lg transition-colors cursor-pointer shadow-3xs"
+                        title="Sửa thông tin"
+                      >
+                        <Edit2 className="w-3 h-3 text-gray-700" />
+                      </button>
 
                       <button
-                        onClick={() => toggleMaintenance(activeCam)}
-                        className={`text-xs px-3 py-1.5 font-bold rounded-lg transition-all cursor-pointer ${
-                          activeCam.status === 'Maintenance'
-                            ? 'bg-emerald-55 border border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                            : 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100'
+                        type="button"
+                        onClick={() => {
+                          if (activeCam.cleaningStatus === 'Laundry' || activeCam.cleaningStatus === 'Mending') {
+                            onUpdateCamera({ ...activeCam, cleaningStatus: 'Clean' });
+                          } else {
+                            onUpdateCamera({ ...activeCam, cleaningStatus: 'Laundry' });
+                          }
+                        }}
+                        className={`text-[9.5px] sm:text-[10px] px-1.5 py-1 font-bold rounded-lg border transition-colors cursor-pointer shadow-3xs ${
+                          activeCam.cleaningStatus === 'Laundry' ? 'bg-blue-50 text-blue-800 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
                         }`}
-                        title={activeCam.status === 'Maintenance' ? 'Hoàn tất giặt hấp' : 'Báo cần giặt hấp / May sửa'}
+                        title={activeCam.cleaningStatus === 'Laundry' ? 'Đã giặt xong' : 'Gửi đi giặt'}
                       >
-                        {activeCam.status === 'Maintenance' ? 'Xong giặt/Sửa' : '🧺 Cần giặt/Sửa'}
+                        {activeCam.cleaningStatus === 'Laundry' ? '✨Xong' : '🧺Giặt'}
                       </button>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-2 py-1 bg-gray-50 border-t border-gray-200 text-right">
+                    <span className="text-[10px] text-gray-400 font-semibold">Chạm để xem chi tiết</span>
+                  </div>
+                )}
               </div>
             );
           })
@@ -1380,15 +1205,25 @@ export default function EquipmentTracker({
             const isDraggingThis = draggedCamId === cam.id;
             const isDragTarget = dragOverCamId === cam.id && !isDraggingThis;
 
+            const purchase = cam.purchasePrice || 0;
+            const revenue = cameraRevenueMap[cam.id] || 0;
+            const roiPercent = purchase > 0 ? Math.round((revenue / purchase) * 100) : null;
+            const isBreakeven = roiPercent !== null && roiPercent >= 100;
+
+            const rawSizes = (cam.availableSizes && cam.availableSizes.length > 0)
+              ? cam.availableSizes
+              : (cam.size ? cam.size.split(',').map(s => s.trim()).filter(Boolean) : []);
+
             return (
               <div 
                 key={cam.id}
                 onDragOver={(e) => handleDragOver(e, cam.id)}
                 onDrop={(e) => handleDrop(e, cam.id)}
-                className={`bg-white border rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative ${
+                onClick={() => setDetailCameraId(cam.id)}
+                className={`bg-white border rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative cursor-pointer group select-none ${
                   isDraggingThis ? 'opacity-35 border-dashed border-orange-500 scale-[0.98]' :
                   isDragTarget ? 'border-orange-500 ring-2 ring-orange-400/60 scale-[1.01] shadow-lg' :
-                  'border-gray-200/90 hover:border-orange-300'
+                  'border-gray-200/90 hover:border-orange-400'
                 }`}
               >
                 <div>
@@ -1484,204 +1319,51 @@ export default function EquipmentTracker({
                       </div>
                     </div>
 
-                    {/* Fashion attributes row: size + color + cleaning */}
-                    <div className="flex items-center flex-wrap gap-1.5">
-                      {(() => {
-                        const rawSizes = (cam.availableSizes && cam.availableSizes.length > 0)
-                          ? cam.availableSizes
-                          : (cam.size ? cam.size.split(',').map(s => s.trim()).filter(Boolean) : []);
-                        if (rawSizes.length === 0) return null;
-                        return (
-                          <div className="inline-flex items-center gap-1 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg">
-                            <span className="text-xs font-bold text-slate-500">Size</span>
-                            <div className="flex items-center gap-1">
-                              {rawSizes.map(sz => (
-                                <span
-                                  key={sz}
-                                  className="text-xs font-black bg-white text-slate-900 px-1.5 py-0.2 rounded shadow-2xs border border-slate-200"
-                                >
-                                  {sz}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {cam.color && (
-                        <span className="text-xs font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-lg border border-rose-200 truncate max-w-[130px]" title={cam.color}>
-                          🎨 {cam.color}
+                    {/* Price row - 1 dòng duy nhất, to rõ */}
+                    <div className="pt-0.5 flex items-baseline justify-between gap-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
+                          {cam.category === 'Printer'
+                            ? `${(cam.printPrice1To2 ?? 40000).toLocaleString()}đ`
+                            : `${(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ`}
                         </span>
-                      )}
-                      {cam.cleaningStatus && cam.cleaningStatus !== 'Clean' && (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${cam.cleaningStatus === 'Laundry' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                          {cam.cleaningStatus === 'Laundry' ? '🧺 Đang giặt' : '🪡 Đang sửa'}
+                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
+                          {cam.category === 'Printer' ? '/tấm' : '/ngày'}
+                        </span>
+                      </div>
+                      {roiPercent !== null && (
+                        <span className={`text-[9.5px] sm:text-[10px] font-bold px-1 py-0.2 rounded shrink-0 ${
+                          isBreakeven ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-50 text-amber-900 border border-amber-200'
+                        }`}>
+                          {isBreakeven ? '✓ Hòa vốn' : `${roiPercent}% vốn`}
                         </span>
                       )}
                     </div>
 
-                    <p className="text-gray-500 text-xs line-clamp-1 sm:line-clamp-2 hidden sm:block">
-                      {cam.description || 'Chưa cung cấp mô tả chi tiết cho trang phục.'}
-                    </p>
+                    {/* Quick Size & Color summary */}
+                    <div className="flex items-center gap-1 flex-wrap text-[10px] sm:text-[11px] pt-0.5">
+                      {rawSizes.length > 0 && (
+                        <span className="font-bold bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
+                          Size: {rawSizes.join(' · ')}
+                        </span>
+                      )}
+                      {cam.color && (
+                        <span className="text-gray-500 bg-gray-50 border border-gray-200/60 px-1.5 py-0.5 rounded truncate max-w-[90px]">
+                          🎨 {cam.color}
+                        </span>
+                      )}
+                    </div>
 
-                    {/* Vốn nhập & Tiến độ hoàn vốn (ROI & Break-even) */}
-                    {(() => {
-                      const purchase = cam.purchasePrice || 0;
-                      const revenue = cameraRevenueMap[cam.id] || 0;
-                      const roiPercent = purchase > 0 ? Math.round((revenue / purchase) * 100) : null;
-                      const isBreakeven = roiPercent !== null && roiPercent >= 100;
-                      const remaining = purchase > revenue ? purchase - revenue : 0;
-                      const estRentalsLeft = remaining > 0 && cam.dailyRate > 0 ? Math.ceil(remaining / cam.dailyRate) : 0;
-
-                      return (
-                        <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2 sm:p-2.5 space-y-1.5">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] sm:text-xs">
-                            <span className="text-gray-600 font-semibold flex items-center gap-1 truncate">
-                              <span>💎 Vốn:</span>
-                              <span className="font-mono font-bold text-gray-900 truncate">
-                                {purchase > 0 ? `${purchase.toLocaleString()}đ` : '—'}
-                              </span>
-                            </span>
-                            {roiPercent !== null && (
-                              <span className={`px-1.5 py-0.5 rounded-md font-black text-[10px] sm:text-[11px] self-start sm:self-auto shrink-0 ${
-                                isBreakeven
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : 'bg-amber-100 text-amber-900 border border-amber-200'
-                              }`}>
-                                {isBreakeven ? `✓ ${roiPercent}% Hoàn vốn` : `${roiPercent}% Hoàn vốn`}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Mini Progress Bar */}
-                          {purchase > 0 && (
-                            <div>
-                              <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    isBreakeven ? 'bg-emerald-500' : 'bg-orange-500'
-                                  }`}
-                                  style={{ width: `${Math.min(roiPercent || 0, 100)}%` }}
-                                />
-                              </div>
-                              <div className="flex justify-between items-center text-[10px] sm:text-[11px] text-gray-500 mt-1 font-medium">
-                                <span className="truncate">Thu: <b className="text-gray-800 font-mono">{revenue.toLocaleString()}đ</b></span>
-                                <span className="shrink-0">
-                                  {isBreakeven ? (
-                                    <span className="text-emerald-700 font-bold font-mono">+{(revenue - purchase).toLocaleString()}đ</span>
-                                  ) : (
-                                    <span>~<b className="text-orange-600 font-mono font-bold">{estRentalsLeft}</b> lượt nữa</span>
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Dynamic Tiered Rates info - Unified Responsive (No overlap on Mobile or Desktop) */}
-                    {cam.category === 'Printer' ? (
-                      <div className="bg-rose-50/60 border border-rose-200/90 rounded-xl p-2.5">
-                        <div className="flex items-baseline justify-between gap-1">
-                          <span className="text-[10px] sm:text-[11px] text-rose-800 font-bold uppercase tracking-wider">In ảnh:</span>
-                          <div className="text-right">
-                            <span className="text-sm sm:text-base font-black text-rose-600 font-mono">
-                              {(cam.printPrice1To2 ?? 40000).toLocaleString()}đ
-                            </span>
-                            <span className="text-[10px] sm:text-xs text-gray-500">/tấm</span>
-                          </div>
-                        </div>
-                        <div className="mt-1.5 pt-1.5 border-t border-rose-200/60 flex items-center justify-between text-[10.5px] sm:text-xs">
-                          <span className="text-rose-900 font-medium">10+ tấm: <b>{(cam.printPrice10Plus ?? 33000).toLocaleString()}đ</b></span>
-                          <button
-                            type="button"
-                            onClick={() => togglePricingExpanded(cam.id)}
-                            className="text-rose-700 hover:text-rose-900 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
-                          >
-                            <span>{expandedPrices[cam.id] ? 'Thu gọn ▲' : 'Bảng giá ▼'}</span>
-                          </button>
-                        </div>
-                        {expandedPrices[cam.id] && (
-                          <div className="mt-2 pt-2 border-t border-rose-200/70 space-y-1 text-xs">
-                            <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-rose-100">
-                              <span className="text-gray-600">1 - 2 tấm:</span>
-                              <span className="font-mono font-bold text-rose-700">{(cam.printPrice1To2 ?? 40000).toLocaleString()}đ</span>
-                            </div>
-                            <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-rose-100">
-                              <span className="text-gray-600">3 - 9 tấm:</span>
-                              <span className="font-mono font-bold text-rose-700">{(cam.printPrice3To9 ?? 35000).toLocaleString()}đ</span>
-                            </div>
-                            <div className="flex justify-between items-center bg-rose-100/80 px-2.5 py-1 rounded border border-rose-200 font-medium">
-                              <span className="text-rose-950 font-bold">Từ 10 tấm:</span>
-                              <span className="font-mono font-black text-rose-700">{(cam.printPrice10Plus ?? 33000).toLocaleString()}đ</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="bg-orange-50/60 border border-orange-200/90 rounded-xl p-2.5">
-                        <div className="flex items-baseline justify-between gap-1">
-                          <span className="text-[10px] sm:text-[11px] text-gray-600 font-bold uppercase tracking-wider">Giá thuê:</span>
-                          <div className="text-right">
-                            <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
-                              {(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ
-                            </span>
-                            <span className="text-[10px] sm:text-xs text-gray-500 font-medium">/ngày</span>
-                          </div>
-                        </div>
-                        <div className="mt-1.5 pt-1.5 border-t border-orange-200/60 flex items-center justify-between text-[10.5px] sm:text-xs">
-                          <span className="text-gray-700 font-medium truncate">
-                            Từ 4 ngày: <b className="font-mono font-bold text-orange-700">{(cam.price4DaysPlus ?? Math.max(0, (cam.price1Day ?? cam.dailyRate) - 40000)).toLocaleString()}đ</b>/ng
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => togglePricingExpanded(cam.id)}
-                            className="text-orange-600 hover:text-orange-700 font-bold hover:underline cursor-pointer flex items-center gap-0.5 shrink-0 ml-auto"
-                          >
-                            <span>{expandedPrices[cam.id] ? 'Thu gọn ▲' : 'Bảng giá ▼'}</span>
-                          </button>
-                        </div>
-                        {expandedPrices[cam.id] && (
-                          <div className="mt-2 pt-2 border-t border-orange-200/70 space-y-1 text-xs">
-                            {(() => {
-                              const p1 = cam.price1Day ?? cam.dailyRate;
-                              const p2_daily = Math.max(0, p1 - 30000);
-                              const p4_daily = Math.max(0, p1 - 40000);
-                              const p3_daily = p4_daily;
-                              const total2Days = Math.round((cam.price2Days ?? ((p1 + p2_daily) / 2)) * 2);
-                              const total3Days = Math.round((cam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3);
-                              const rateFrom4Days = cam.price4DaysPlus ?? p4_daily;
-
-                              return (
-                                <>
-                                  <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
-                                    <span className="text-gray-600">1 ngày:</span>
-                                    <span className="font-mono font-bold text-gray-800">{p1.toLocaleString()}đ</span>
-                                  </div>
-                                  <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
-                                    <span className="text-gray-600">2 ngày:</span>
-                                    <span className="font-mono font-bold text-gray-800">{total2Days.toLocaleString()}đ</span>
-                                  </div>
-                                  <div className="flex justify-between items-center bg-white px-2.5 py-1 rounded border border-orange-100">
-                                    <span className="text-gray-600">3 ngày:</span>
-                                    <span className="font-mono font-bold text-gray-800">{total3Days.toLocaleString()}đ</span>
-                                  </div>
-                                  <div className="flex justify-between items-center bg-orange-100/80 px-2.5 py-1 rounded border border-orange-200 font-medium">
-                                    <span className="text-orange-950 font-bold">Từ 4 ngày:</span>
-                                    <span className="font-mono font-black text-orange-600">{rateFrom4Days.toLocaleString()}đ/ng</span>
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {/* Touch Cue */}
+                    <div className="pt-1 mt-1 border-t border-gray-100 flex items-center justify-between text-[11px] font-bold text-orange-600 group-hover:text-orange-700">
+                      <span>Chi tiết & bảng giá</span>
+                      <ChevronRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </div>
                 </div>
 
                 {/* Quick Status and Admin tools bar */}
-                <div className="px-2.5 sm:px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1.5">
+                <div onClick={e => e.stopPropagation()} className="px-2.5 sm:px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1.5">
                   {currentUserRole === 'admin' ? (
                     <>
                       {/* Reorder Buttons: Left & Right */}
@@ -1868,6 +1550,383 @@ export default function EquipmentTracker({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Outfit Detail Bottom Sheet / Modal */}
+      {(detailGroup || detailCamera) && typeof document !== 'undefined' && createPortal(
+        (() => {
+          const isGroup = Boolean(detailGroup);
+          const group = detailGroup;
+          const activeCam: Camera | undefined = isGroup && group
+            ? (group.items.find(c => c.id === selectedGroupSizes[group.groupKey]) || group.items[0])
+            : (detailCamera || undefined);
+
+          if (!activeCam) return null;
+
+          const title = isGroup && group ? group.cleanName : activeCam.name;
+          const category = activeCam.category;
+          const gender = activeCam.gender || 'Nữ';
+          const purchase = isGroup && group ? group.totalPurchase : (activeCam.purchasePrice || 0);
+          const revenue = isGroup && group ? group.totalRevenue : (cameraRevenueMap[activeCam.id] || 0);
+          const roiPercent = isGroup && group
+            ? group.overallRoiPercent
+            : (purchase > 0 ? Math.round((revenue / purchase) * 100) : null);
+          const isBreakeven = roiPercent !== null && roiPercent >= 100;
+          const remaining = purchase > revenue ? purchase - revenue : 0;
+          const p1 = activeCam.price1Day ?? activeCam.dailyRate;
+          const estRentalsLeft = remaining > 0 && p1 > 0 ? Math.ceil(remaining / p1) : 0;
+
+          // Tiered pricing
+          const p2_daily = Math.max(0, p1 - 30000);
+          const p4_daily = Math.max(0, p1 - 40000);
+          const p3_daily = p4_daily;
+          const total2Days = Math.round((activeCam.price2Days ?? ((p1 + p2_daily) / 2)) * 2);
+          const total3Days = Math.round((activeCam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3);
+          const rateFrom4Days = activeCam.price4DaysPlus ?? p4_daily;
+
+          const closeDetail = () => {
+            setDetailGroupKey(null);
+            setDetailCameraId(null);
+          };
+
+          return (
+            <div 
+              className="fixed inset-0 z-[9990] flex items-end sm:items-center justify-center animate-fade-in"
+              onTouchMove={(e) => {
+                if (e.target === e.currentTarget) e.preventDefault();
+              }}
+            >
+              {/* Dark backdrop */}
+              <div 
+                className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+                onClick={closeDetail}
+              />
+
+              {/* Bottom Sheet / Modal Dialog */}
+              <div 
+                className="relative bg-white w-full sm:max-w-xl max-h-[88vh] sm:max-h-[90vh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-bottom duration-300"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Mobile drag handle */}
+                <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mt-3 mb-1 sm:hidden shrink-0" />
+
+                {/* Header */}
+                <div className="px-5 py-3 border-b border-gray-150 flex items-center justify-between gap-3 shrink-0 bg-white">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="bg-orange-50 text-orange-700 text-[10.5px] font-bold px-2 py-0.5 rounded-md border border-orange-200">
+                        {category}
+                      </span>
+                      {activeCam.shortName && (
+                        <span className="bg-gray-100 text-gray-700 text-[10.5px] font-bold px-2 py-0.5 rounded-md border border-gray-200">
+                          {activeCam.shortName}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${gender === 'Nữ' ? 'bg-pink-50 text-pink-700' : 'bg-blue-50 text-blue-700'}`}>
+                        {gender}
+                      </span>
+                    </div>
+                    <h2 className="text-base sm:text-lg font-black text-gray-900 truncate mt-1" title={title}>
+                      {title}
+                    </h2>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeDetail}
+                    className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0"
+                    title="Đóng"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="p-4 sm:p-5 overflow-y-auto space-y-4 overscroll-contain">
+                  {/* Top Product Card: Image + Key Information */}
+                  <div className="flex gap-3.5 bg-slate-50 border border-slate-200/90 rounded-2xl p-3">
+                    <div className="w-28 sm:w-32 aspect-[4/5] rounded-xl overflow-hidden bg-gray-200 shrink-0 shadow-xs border border-gray-200">
+                      <img 
+                        src={activeCam.image || (group ? group.image : '')} 
+                        alt={title}
+                        className="w-full h-full object-cover object-top"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5 space-y-1.5">
+                      <div>
+                        <div className="text-xs text-gray-500 font-mono">
+                          Mã tem: <b className="text-gray-900 font-bold">{activeCam.serialNumber}</b>
+                        </div>
+                        {activeCam.color && (
+                          <div className="text-xs text-gray-600 mt-0.5 flex items-center gap-1">
+                            <span>Màu sắc:</span>
+                            <span className="font-bold text-gray-800">🎨 {activeCam.color}</span>
+                          </div>
+                        )}
+                        <div className="mt-1">
+                          {(() => {
+                            if (activeCam.status === 'Rented') return <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">⏳ Đang thuê</span>;
+                            if (activeCam.cleaningStatus === 'Laundry') return <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">🧺 Đang gửi giặt</span>;
+                            if (activeCam.cleaningStatus === 'Mending') return <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">🪡 Đang sửa đồ</span>;
+                            if (activeCam.status === 'Maintenance') return <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">🛠️ Bảo trì</span>;
+                            return <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">✓ Sẵn sàng cho thuê</span>;
+                          })()}
+                        </div>
+                      </div>
+
+                      <div className="pt-1 border-t border-slate-200/80">
+                        <div className="text-[11px] text-gray-500 uppercase font-bold">Giá thuê ngày:</div>
+                        <div className="text-lg sm:text-xl font-black text-orange-600 font-mono">
+                          {category === 'Printer'
+                            ? `${(activeCam.printPrice1To2 ?? 40000).toLocaleString()}đ / tấm`
+                            : `${p1.toLocaleString()}đ / ngày`}
+                        </div>
+                        {activeCam.depositAmount !== undefined && activeCam.depositAmount > 0 && (
+                          <div className="text-[11px] text-gray-500 font-mono">
+                            Cọc: <b className="text-gray-700">{activeCam.depositAmount.toLocaleString()}đ</b>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Size selector if Group mode */}
+                  {isGroup && group && group.items.length > 1 && (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-3.5 space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between text-xs font-bold text-gray-700">
+                        <span>CHỌN SIZE ĐỂ XEM CHI TIẾT TỪNG TEM ({group.items.length} size):</span>
+                        <span className="text-orange-600 font-black">Size {activeCam.size || 'FS'}</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {group.items.map(item => {
+                          const isSel = item.id === activeCam.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setSelectedGroupSizes(prev => ({ ...prev, [group.groupKey]: item.id }))}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                                isSel
+                                  ? 'bg-orange-50 border-2 border-orange-500 ring-2 ring-orange-300/80 shadow-xs'
+                                  : 'bg-gray-50 hover:bg-gray-100 border-gray-250 text-gray-700'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-black text-sm text-gray-900">Size {item.size || 'FS'}</span>
+                                <span className={`w-2 h-2 rounded-full ${
+                                  item.status === 'Rented' ? 'bg-purple-500' :
+                                  item.cleaningStatus === 'Laundry' ? 'bg-blue-500' :
+                                  item.cleaningStatus === 'Mending' ? 'bg-amber-500' :
+                                  item.status === 'Maintenance' ? 'bg-rose-500' : 'bg-emerald-500'
+                                }`} />
+                              </div>
+                              <div className="text-[11px] font-mono text-gray-500 truncate mt-1">
+                                {item.serialNumber}
+                              </div>
+                              {item.color && (
+                                <div className="text-[10.5px] text-gray-600 truncate">
+                                  🎨 {item.color}
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tiered Pricing Table */}
+                  {category !== 'Printer' ? (
+                    <div className="bg-orange-50/50 border border-orange-200/90 rounded-2xl p-3.5 space-y-2">
+                      <div className="text-xs font-black uppercase tracking-wider text-orange-950 flex items-center justify-between">
+                        <span>BẢNG GIÁ THUÊ THEO SỐ NGÀY</span>
+                        <span className="text-[11px] text-orange-600 font-bold">Càng thuê lâu càng rẻ</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                        <div className="bg-white border border-orange-200 rounded-xl p-2 shadow-2xs">
+                          <div className="text-[11px] text-gray-500 font-bold">1 ngày</div>
+                          <div className="text-sm font-black text-gray-900 font-mono mt-0.5">{p1.toLocaleString()}đ</div>
+                          <div className="text-[10px] text-gray-400">gốc / ngày</div>
+                        </div>
+
+                        <div className="bg-white border border-orange-200 rounded-xl p-2 shadow-2xs">
+                          <div className="text-[11px] text-gray-500 font-bold">2 ngày</div>
+                          <div className="text-sm font-black text-gray-900 font-mono mt-0.5">{total2Days.toLocaleString()}đ</div>
+                          <div className="text-[10px] text-orange-600 font-semibold">~{Math.round(total2Days / 2).toLocaleString()}đ/ng</div>
+                        </div>
+
+                        <div className="bg-white border border-orange-200 rounded-xl p-2 shadow-2xs">
+                          <div className="text-[11px] text-gray-500 font-bold">3 ngày</div>
+                          <div className="text-sm font-black text-gray-900 font-mono mt-0.5">{total3Days.toLocaleString()}đ</div>
+                          <div className="text-[10px] text-orange-600 font-semibold">~{Math.round(total3Days / 3).toLocaleString()}đ/ng</div>
+                        </div>
+
+                        <div className="bg-orange-100/90 border border-orange-300 rounded-xl p-2 shadow-2xs">
+                          <div className="text-[11px] text-orange-950 font-bold">Từ 4 ngày</div>
+                          <div className="text-sm font-black text-orange-700 font-mono mt-0.5">{rateFrom4Days.toLocaleString()}đ</div>
+                          <div className="text-[10px] text-orange-800 font-bold">mỗi ngày tiếp</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-rose-50/50 border border-rose-200/90 rounded-2xl p-3.5 space-y-2">
+                      <div className="text-xs font-black uppercase tracking-wider text-rose-950">
+                        BẢNG GIÁ IN ẢNH
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-white border border-rose-200 rounded-xl p-2">
+                          <div className="text-[11px] text-gray-500 font-bold">1 - 2 tấm</div>
+                          <div className="text-sm font-black text-rose-700 font-mono mt-0.5">{(activeCam.printPrice1To2 ?? 40000).toLocaleString()}đ</div>
+                        </div>
+                        <div className="bg-white border border-rose-200 rounded-xl p-2">
+                          <div className="text-[11px] text-gray-500 font-bold">3 - 9 tấm</div>
+                          <div className="text-sm font-black text-rose-700 font-mono mt-0.5">{(activeCam.printPrice3To9 ?? 35000).toLocaleString()}đ</div>
+                        </div>
+                        <div className="bg-rose-100 border border-rose-300 rounded-xl p-2">
+                          <div className="text-[11px] text-rose-950 font-bold">Từ 10 tấm</div>
+                          <div className="text-sm font-black text-rose-800 font-mono mt-0.5">{(activeCam.printPrice10Plus ?? 33000).toLocaleString()}đ</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ROI / Break-even section */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-gray-700 flex items-center gap-1">
+                        <span>💎 Vốn nhập:</span>
+                        <b className="font-mono text-gray-900">{purchase > 0 ? `${purchase.toLocaleString()}đ` : '—'}</b>
+                        {isGroup && group && <span className="text-gray-400">({group.items.length} size)</span>}
+                      </span>
+                      {roiPercent !== null && (
+                        <span className={`px-2 py-0.5 rounded-md font-black text-xs ${
+                          isBreakeven ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-200'
+                        }`}>
+                          {isBreakeven ? `✓ Đã hòa vốn (${roiPercent}%)` : `Hoàn vốn: ${roiPercent}%`}
+                        </span>
+                      )}
+                    </div>
+
+                    {purchase > 0 && (
+                      <div className="space-y-1">
+                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${isBreakeven ? 'bg-emerald-500' : 'bg-orange-500'}`}
+                            style={{ width: `${Math.min(roiPercent || 0, 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-gray-500 pt-0.5">
+                          <span>Đã thu về: <b className="text-gray-900 font-mono font-bold">{revenue.toLocaleString()}đ</b></span>
+                          <span>
+                            {isBreakeven ? (
+                              <b className="text-emerald-700 font-mono font-bold">+{(revenue - purchase).toLocaleString()}đ lãi</b>
+                            ) : (
+                              <span>Cần thêm: ~<b className="text-orange-600 font-mono font-bold">{estRentalsLeft}</b> lượt thuê</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  {(activeCam.description || (group && group.description)) && (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-3.5 space-y-1 text-xs">
+                      <div className="font-bold text-gray-700">Mô tả & ghi chú phụ kiện:</div>
+                      <p className="text-gray-600 whitespace-pre-line leading-relaxed">
+                        {activeCam.description || (group ? group.description : '')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Action Bar */}
+                <div className="p-3.5 sm:p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2 shrink-0">
+                  {currentUserRole === 'admin' ? (
+                    <>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeDetail();
+                            handleOpenEditModal(activeCam);
+                          }}
+                          className="px-3 py-2 bg-white border border-gray-300 hover:bg-orange-50 hover:text-orange-600 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-3xs cursor-pointer transition-colors"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Sửa đồ</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeCam.cleaningStatus === 'Laundry' || activeCam.cleaningStatus === 'Mending') {
+                              onUpdateCamera({ ...activeCam, cleaningStatus: 'Clean' });
+                            } else {
+                              onUpdateCamera({ ...activeCam, cleaningStatus: 'Laundry' });
+                            }
+                          }}
+                          className={`px-3 py-2 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-3xs cursor-pointer transition-colors border ${
+                            activeCam.cleaningStatus === 'Laundry'
+                              ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:text-blue-700'
+                          }`}
+                        >
+                          {activeCam.cleaningStatus === 'Laundry' ? '✨ Xong giặt' : '🧺 Gửi giặt'}
+                        </button>
+
+                        {isGroup && group && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              closeDetail();
+                              handleAddSizeToGroup(group);
+                            }}
+                            className="px-3 py-2 bg-orange-50 border border-orange-200 text-orange-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow-3xs cursor-pointer hover:bg-orange-600 hover:text-white transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Thêm Size</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeDetail();
+                            setCameraToDelete(activeCam);
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-650 hover:bg-red-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-red-200"
+                          title="Xóa trang phục"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={closeDetail}
+                        className="px-4 py-2 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-xl cursor-pointer transition-colors shadow-2xs ml-auto"
+                      >
+                        Đóng
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={closeDetail}
+                      className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm rounded-xl cursor-pointer transition-colors shadow-xs"
+                    >
+                      Đã xem xong
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()
       )}
 
       {/* Camera Add/Edit Modal */}

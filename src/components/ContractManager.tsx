@@ -1196,11 +1196,18 @@ export default function ContractManager({
                   <div className="space-y-1">
                     <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">Trang Phục Thuê:</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {c.items.map((i, idx) => (
-                        <span key={idx} className="bg-orange-50/70 text-orange-700 border border-orange-100 text-[10px] sm:text-xs px-2 py-0.5 rounded-lg font-bold inline-flex items-center gap-1">
-                          <Briefcase className="w-3 h-3 text-orange-400" /> {i.cameraName}
-                        </span>
-                      ))}
+                      {c.items.map((i, idx) => {
+                        const matchedCam = cameras.find(cam => cam.id === i.cameraId || cam.name.toLowerCase() === i.cameraName.toLowerCase());
+                        const displayColor = i.color || matchedCam?.color;
+                        const displaySize = i.size || matchedCam?.size;
+                        return (
+                          <span key={idx} className="bg-orange-50/70 text-orange-700 border border-orange-100 text-[10px] sm:text-xs px-2 py-0.5 rounded-lg font-bold inline-flex items-center gap-1">
+                            <Briefcase className="w-3 h-3 text-orange-400" /> {i.cameraName}
+                            {displaySize && <span className="text-gray-600 font-semibold text-[9px] bg-white/80 px-1 py-0.2 rounded border border-gray-200">Size {displaySize}</span>}
+                            {displayColor && <span className="text-rose-600 font-bold text-[9px] bg-rose-50 px-1 py-0.2 rounded border border-rose-200">🎨 {displayColor}</span>}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1520,11 +1527,16 @@ export default function ContractManager({
                       </td>
                       <td className="px-6 py-4">
                         <div className="max-w-[220px] truncate" title={c.items.map(i => i.cameraName).join(', ')}>
-                          {c.items.map((i, idx) => (
-                            <span key={idx} className="inline-block bg-orange-50 text-orange-700 border border-orange-100 text-xs px-2 py-0.5 rounded-md font-medium mr-1 mb-1">
-                              {i.cameraName}
-                            </span>
-                          ))}
+                          {c.items.map((i, idx) => {
+                            const matchedCam = cameras.find(cam => cam.id === i.cameraId || cam.name.toLowerCase() === i.cameraName.toLowerCase());
+                            const displayColor = i.color || matchedCam?.color;
+                            return (
+                              <span key={idx} className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-100 text-xs px-2 py-0.5 rounded-md font-medium mr-1 mb-1">
+                                <span>{i.cameraName}</span>
+                                {displayColor && <span className="text-rose-600 font-bold text-[10px]">🎨 {displayColor}</span>}
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -1934,6 +1946,8 @@ export default function ContractManager({
                   <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-white">
                     {selectedContract.items.map((i, idx) => {
                       const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
+                      const displaySize = i.size || matchedCam?.size;
+                      const displayColor = i.color || matchedCam?.color;
                       return (
                         <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
                           <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
@@ -1943,6 +1957,16 @@ export default function ContractManager({
                               <span className="text-orange-500 text-sm shrink-0">👗</span>
                             )}
                             <span className="truncate">{i.cameraName}</span>
+                            {displaySize && (
+                              <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
+                                Size {displaySize}
+                              </span>
+                            )}
+                            {displayColor && (
+                              <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 border border-rose-200">
+                                🎨 {displayColor}
+                              </span>
+                            )}
                             {i.quantity > 1 && (
                               <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} chiếc)</span>
                             )}

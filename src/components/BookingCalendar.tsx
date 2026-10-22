@@ -564,7 +564,7 @@ export default function BookingCalendar({
             cameraShort: shortName,
             cameraName: item.cameraName,
             cleanName,
-            color: cam?.color || '',
+            color: item.color || cam?.color || '',
             category: cam?.category || 'Áo dài',
             size: item.size || cam?.size || 'M',
             timeString,
@@ -796,7 +796,9 @@ export default function BookingCalendar({
         cameraName: isPrinter ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)` : (cam?.name || 'Trang phục'),
         dailyRate: rate,
         quantity: 1,
-        printCount: prints
+        printCount: prints,
+        size: cam?.size,
+        color: cam?.color
       };
     });
 
@@ -1341,134 +1343,145 @@ export default function BookingCalendar({
         </div>
 
         {/* Mobile Day Detail Bottom Sheet */}
-        {mobileDetailDate !== null && (() => {
-          const sheetBookings = dayBookingsMap[mobileDetailDate] || [];
-          const sheetDayOfWeek = (() => {
-            try {
-              const daysOfWeek = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-              const d = new Date(mobileDetailDate);
-              const parts = mobileDetailDate.split('-');
-              const dayNum = parseInt(parts[2] || '1');
-              const monthNum = parseInt(parts[1] || '1');
-              return `${daysOfWeek[d.getDay()]}, ${dayNum < 10 ? '0' + dayNum : dayNum}/${String(monthNum).padStart(2, '0')}`;
-            } catch (e) {
-              return mobileDetailDate;
-            }
-          })();
-          return (
-            <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setMobileDetailDate(null)}>
-              {/* Backdrop */}
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
-              {/* Sheet */}
-              <div
-                className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden animate-slide-up"
-                onClick={e => e.stopPropagation()}
-                style={{ animation: 'slideUpSheet 0.25s ease-out' }}
+        {mobileDetailDate !== null && typeof document !== 'undefined' && createPortal(
+          (() => {
+            const sheetBookings = dayBookingsMap[mobileDetailDate] || [];
+            const sheetDayOfWeek = (() => {
+              try {
+                const daysOfWeek = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+                const d = new Date(mobileDetailDate);
+                const parts = mobileDetailDate.split('-');
+                const dayNum = parseInt(parts[2] || '1');
+                const monthNum = parseInt(parts[1] || '1');
+                return `${daysOfWeek[d.getDay()]}, ${dayNum < 10 ? '0' + dayNum : dayNum}/${String(monthNum).padStart(2, '0')}`;
+              } catch (e) {
+                return mobileDetailDate;
+              }
+            })();
+            return (
+              <div 
+                className="md:hidden fixed inset-0 z-[9990] flex flex-col justify-end p-2.5 pb-[max(14px,calc(env(safe-area-inset-bottom,0px)+10px))]"
+                onClick={() => setMobileDetailDate(null)}
               >
-                {/* Drag handle */}
-                <div className="flex justify-center pt-2.5 pb-1 select-none">
-                  <div className="w-10 h-1 rounded-full bg-gray-300" />
-                </div>
-
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100">
-                  <div>
-                    <h3 className="font-black text-gray-900 text-sm">{sheetDayOfWeek}</h3>
-                    <p className="text-[11px] text-gray-500 font-medium">
-                      {sheetBookings.length > 0
-                        ? `${sheetBookings.length} bộ trang phục có lịch thuê`
-                        : 'Chưa có lịch thuê hôm này'}
-                    </p>
+                {/* Backdrop */}
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />
+                {/* Sheet */}
+                <div
+                  className="relative bg-white rounded-2xl shadow-2xl flex flex-col max-h-[82vh] overflow-hidden animate-slide-up w-full max-w-lg mx-auto border border-gray-150"
+                  onClick={e => e.stopPropagation()}
+                  style={{ animation: 'slideUpSheet 0.25s ease-out' }}
+                >
+                  {/* Drag handle */}
+                  <div className="flex justify-center pt-2.5 pb-1 select-none">
+                    <div className="w-10 h-1 rounded-full bg-gray-300" />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setMobileDetailDate(null)}
-                    className="p-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors text-gray-500"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </button>
-                </div>
 
-                {/* Booking list */}
-                <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2.5 scrollbar-none">
-                  {sheetBookings.length > 0 ? (
-                    sheetBookings.map((b, bIdx) => {
-                      const colors = getCameraColorProps(b.cameraShort);
-                      const statusLabel = b.contract.status === 'Active' ? 'Đang thuê' :
-                        b.contract.status === 'Completed' ? 'Đã trả' :
-                        b.contract.status === 'Cancelled' ? 'Đã hủy' : 'Đã đặt';
-                      const statusColor = b.contract.status === 'Active'
-                        ? 'bg-green-50 text-green-700 border-green-200'
-                        : b.contract.status === 'Completed'
-                        ? 'bg-gray-100 text-gray-600 border-gray-200'
-                        : b.contract.status === 'Cancelled'
-                        ? 'bg-red-50 text-red-600 border-red-200'
-                        : 'bg-orange-50 text-orange-700 border-orange-200';
-                      return (
-                        <div
-                          key={bIdx}
-                          className={`p-3 rounded-xl border-0 border-l-4 ${colors.bgClass} ${colors.border} shadow-sm`}
-                        >
-                          {/* Row 1: Code + Name + Status */}
-                          <div className="flex items-start justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                              <span className="font-mono text-[11px] font-black text-gray-800 shrink-0">{b.cameraShort}</span>
-                              <span className="text-xs font-bold text-gray-900 truncate">{b.cameraName}</span>
-                              <span className="bg-white/90 text-[9px] font-black px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
-                                {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100">
+                    <div>
+                      <h3 className="font-black text-gray-900 text-sm">{sheetDayOfWeek}</h3>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        {sheetBookings.length > 0
+                          ? `${sheetBookings.length} bộ trang phục có lịch thuê`
+                          : 'Chưa có lịch thuê hôm này'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMobileDetailDate(null)}
+                      className="p-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors text-gray-500 cursor-pointer"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+
+                  {/* Booking list */}
+                  <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2.5 scrollbar-none">
+                    {sheetBookings.length > 0 ? (
+                      sheetBookings.map((b, bIdx) => {
+                        const colors = getCameraColorProps(b.cameraShort);
+                        const statusLabel = b.contract.status === 'Active' ? 'Đang thuê' :
+                          b.contract.status === 'Completed' ? 'Đã trả' :
+                          b.contract.status === 'Cancelled' ? 'Đã hủy' : 'Đã đặt';
+                        const statusColor = b.contract.status === 'Active'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : b.contract.status === 'Completed'
+                          ? 'bg-gray-100 text-gray-600 border-gray-200'
+                          : b.contract.status === 'Cancelled'
+                          ? 'bg-red-50 text-red-600 border-red-200'
+                          : 'bg-orange-50 text-orange-700 border-orange-200';
+                        return (
+                          <div
+                            key={bIdx}
+                            className={`p-3 rounded-xl border-0 border-l-4 ${colors.bgClass} ${colors.border} shadow-sm`}
+                          >
+                            {/* Row 1: Code + Name + Size + Color + Status */}
+                            <div className="flex items-start justify-between gap-2 mb-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                <span className="font-mono text-[11px] font-black text-gray-800 shrink-0">{b.cameraShort}</span>
+                                <span className="text-xs font-bold text-gray-900 truncate">{b.cameraName}</span>
+                                <span className="bg-white/90 text-[9.5px] font-black px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
+                                  {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
+                                </span>
+                                {b.color && (
+                                  <span className="bg-rose-50 text-rose-700 text-[9.5px] font-black px-1.5 py-0.5 rounded border border-rose-200 shrink-0 inline-flex items-center gap-1">
+                                    🎨 {b.color}
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 ${statusColor}`}>
+                                {statusLabel}
                               </span>
                             </div>
-                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 ${statusColor}`}>
-                              {statusLabel}
-                            </span>
-                          </div>
-                          {/* Row 2: Customer info */}
-                          <div className="text-[10px] text-gray-600 font-medium flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                            <span>👤 {b.contract.customerName}</span>
-                            {b.contract.customerPhone && (
-                              <a
-                                href={`tel:${b.contract.customerPhone}`}
-                                className="font-mono text-blue-600 underline-offset-2 underline"
-                                onClick={e => e.stopPropagation()}
-                              >
-                                📞 {b.contract.customerPhone}
-                              </a>
+                            {/* Row 2: Customer info */}
+                            <div className="text-[10px] text-gray-600 font-medium flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                              <span>👤 {b.contract.customerName}</span>
+                              {b.contract.customerPhone && (
+                                <a
+                                  href={`tel:${b.contract.customerPhone}`}
+                                  className="font-mono text-blue-600 underline-offset-2 underline"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  📞 {b.contract.customerPhone}
+                                </a>
+                              )}
+                            </div>
+                            {/* Row 3: Date range */}
+                            {(b.contract.startDate || b.contract.endDate) && (
+                              <div className="text-[9.5px] text-gray-500 mt-1 font-mono">
+                                📅 {b.contract.startDate} → {b.contract.endDate}
+                              </div>
                             )}
                           </div>
-                          {/* Row 3: Date range */}
-                          {(b.contract.startDate || b.contract.endDate) && (
-                            <div className="text-[9.5px] text-gray-500 mt-1 font-mono">
-                              📅 {b.contract.startDate} → {b.contract.endDate}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="py-8 text-center text-gray-400 text-xs italic">
-                      Ngày này chưa có lịch thuê
-                    </div>
-                  )}
-                </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-8 text-center text-gray-400 text-xs italic">
+                        Ngày này chưa có lịch thuê
+                      </div>
+                    )}
+                  </div>
 
-                {/* Footer action button */}
-                <div className="px-4 pb-6 pt-3 border-t border-gray-100">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, startDate: mobileDetailDate!, endDate: mobileDetailDate! }));
-                      setShowAddQuickModal(true);
-                      setMobileDetailDate(null);
-                    }}
-                    className="w-full py-3 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-sm rounded-xl transition-colors shadow-sm"
-                  >
-                    + Đặt lịch ngày này
-                  </button>
+                  {/* Footer action button */}
+                  <div className="px-4 py-3 border-t border-gray-100 bg-white">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, startDate: mobileDetailDate!, endDate: mobileDetailDate! }));
+                        setShowAddQuickModal(true);
+                        setMobileDetailDate(null);
+                      }}
+                      className="w-full py-3 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-sm rounded-xl transition-colors shadow-sm cursor-pointer"
+                    >
+                      + Đặt lịch ngày này
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })()}
+            );
+          })(),
+          document.body
+        )}
 
         {/* Mobile-Only Interactive Daily Agenda List */}
         {(() => {
@@ -1540,6 +1553,11 @@ export default function BookingCalendar({
                                     <span className="bg-white/90 text-[9px] font-black px-1.5 py-0.2 rounded border border-gray-200">
                                       Size {b.size || 'FS'}
                                     </span>
+                                    {b.color && (
+                                      <span className="bg-rose-50 text-rose-700 text-[9px] font-black px-1.5 py-0.2 rounded border border-rose-200 inline-flex items-center gap-1">
+                                        🎨 {b.color}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-[10px] text-gray-600 font-medium flex items-center gap-2 mt-0.5">
                                     <span>👤 {b.contract.customerName}</span>
@@ -1642,6 +1660,14 @@ export default function BookingCalendar({
                           )}
                         </span>
                       </div>
+                      {b.color && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">Màu sắc:</span>
+                          <span className="bg-rose-50 text-rose-700 font-bold text-xs px-2 py-0.5 rounded border border-rose-200 inline-flex items-center gap-1">
+                            🎨 {b.color}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center">
                         <span className="text-gray-500">Thời gian thuê:</span>
                         <span className="font-semibold text-gray-800">
@@ -2875,27 +2901,36 @@ export default function BookingCalendar({
                 <div className="space-y-1.5">
                   <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DANH SÁCH TRANG PHỤC & PHỤ KIỆN</h4>
                   <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-white">
-                    {quickReceiptContract.items.map((i, idx) => (
-                      <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
-                        <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
-                          <span className="text-orange-500 text-xs">👗</span>
-                          <span className="truncate">{i.cameraName}</span>
-                          {i.size && (
-                            <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.2 rounded shrink-0">
-                              Size {i.size}
-                            </span>
-                          )}
-                          {i.color && (
-                            <span className="bg-rose-50 text-rose-700 text-[10px] font-semibold px-1.5 py-0.2 rounded shrink-0">
-                              {i.color}
-                            </span>
-                          )}
-                          {i.quantity > 1 && (
-                            <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} món)</span>
-                          )}
+                    {quickReceiptContract.items.map((i, idx) => {
+                      const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
+                      const displaySize = i.size || matchedCam?.size;
+                      const displayColor = i.color || matchedCam?.color;
+                      return (
+                        <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
+                          <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
+                            {matchedCam?.image ? (
+                              <img src={matchedCam.image} alt="" className="w-6 h-7 rounded object-cover border border-gray-200 shrink-0" />
+                            ) : (
+                              <span className="text-orange-500 text-xs shrink-0">👗</span>
+                            )}
+                            <span className="truncate">{i.cameraName}</span>
+                            {displaySize && (
+                              <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
+                                Size {displaySize}
+                              </span>
+                            )}
+                            {displayColor && (
+                              <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 border border-rose-200">
+                                🎨 {displayColor}
+                              </span>
+                            )}
+                            {i.quantity > 1 && (
+                              <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} món)</span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
