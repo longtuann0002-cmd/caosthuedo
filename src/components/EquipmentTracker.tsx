@@ -1929,7 +1929,8 @@ export default function EquipmentTracker({
               </div>
             </div>
           );
-        })()
+        })(),
+        document.body
       )}
 
       {/* Camera Add/Edit Modal */}
