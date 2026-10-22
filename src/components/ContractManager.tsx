@@ -385,10 +385,15 @@ export default function ContractManager({
         const newTab = window.open();
         if (newTab) {
           newTab.document.write(
-            `<html><head><title>${filename}</title></head><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;">` +
-            `<img src="${dataUrl}" style="max-width:100%;height:auto;" />` +
-            `<p style="position:fixed;top:10px;left:0;right:0;text-align:center;color:#fff;font-family:sans-serif;font-size:14px;background:rgba(0,0,0,.5);padding:8px;">` +
-            `Nhấn giữ ảnh → Lưu vào Ảnh để tải về</p>` +
+            `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title></head>` +
+            `<body style="margin:0;background:#111;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding-bottom:80px;">` +
+            `<div style="position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">` +
+            `<span style="color:#fff;font-family:sans-serif;font-size:13px;flex:1;">📥 Nhấn giữ ảnh bên dưới → <b>Lưu vào Ảnh</b></span>` +
+            `<button onclick="window.close()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:14px;font-weight:bold;cursor:pointer;font-family:sans-serif;white-space:nowrap;">✕ Đóng</button>` +
+            `</div>` +
+            `<div style="margin-top:56px;width:100%;display:flex;justify-content:center;padding:16px;box-sizing:border-box;">` +
+            `<img src="${dataUrl}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 4px 32px rgba(0,0,0,.5);" />` +
+            `</div>` +
             `</body></html>`
           );
           newTab.document.close();
