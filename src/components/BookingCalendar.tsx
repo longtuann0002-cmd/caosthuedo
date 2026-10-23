@@ -1337,6 +1337,9 @@ export default function BookingCalendar({
                         // TÊN VIẾT TẮT TRANG PHỤC: Ưu tiên mã tag/serialNumber hoặc tên viết tắt, tuyệt đối ẩn tên đầy đủ để không bị trùng lặp
                         const outfitShortCode = (matchedCam?.serialNumber || b.cameraShort || matchedCam?.shortName || b.cleanName || b.cameraName || 'Đồ thuê').trim();
                         
+                        // TÊN ĐẦY ĐỦ TRANG PHỤC
+                        const outfitName = (matchedCam?.name || b.cleanName || b.cameraName || '').trim();
+
                         // TÊN KHÁCH HÀNG: Chỉ lấy tên chính ngắn gọn (ví dụ: Thu Hà -> Hà)
                         const rawCustName = (b.contract.customerName || '').trim();
                         const shortCustName = rawCustName ? rawCustName.split(/\s+/).slice(-1)[0] : '';
@@ -1358,7 +1361,7 @@ export default function BookingCalendar({
                               </span>
                             </div>
 
-                            {/* Desktop: Dòng 1 Tên khách, Dòng 2 Mã viết tắt + Size. Nếu không có tên khách thì không lặp lại mã để tránh trùng */}
+                            {/* Desktop: Dòng 1 Tên khách (hoặc Tên đồ nếu không có khách), Dòng 2 Mã viết tắt + Tên sản phẩm + Size */}
                             <div className="hidden sm:flex flex-col gap-0.5">
                               {shortCustName ? (
                                 <div className="leading-tight">
@@ -1366,12 +1369,23 @@ export default function BookingCalendar({
                                     {shortCustName}
                                   </span>
                                 </div>
+                              ) : outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() ? (
+                                <div className="leading-tight">
+                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900 block" title={outfitName}>
+                                    {outfitName}
+                                  </span>
+                                </div>
                               ) : null}
 
-                              <div className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-none">
-                                <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={b.cameraName}>
+                              <div className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-none min-w-0">
+                                <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={outfitShortCode}>
                                   {outfitShortCode}
                                 </span>
+                                {shortCustName && outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() && (
+                                  <span className="text-[10px] font-bold text-gray-900 truncate" title={outfitName}>
+                                    {outfitName}
+                                  </span>
+                                )}
                                 <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
                                   {sizeLabel}
                                 </span>
@@ -1404,6 +1418,11 @@ export default function BookingCalendar({
                                   <div className="font-mono font-black text-[10px] text-gray-900 truncate">
                                     {outfitShortCode}
                                   </div>
+                                  {outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() && (
+                                    <div className="font-bold text-[9px] text-gray-800 truncate" title={outfitName}>
+                                      {outfitName}
+                                    </div>
+                                  )}
                                   <div className="text-[8.5px] font-medium text-gray-500 truncate">
                                     {sizeLabel} {matchedCam?.color ? `• ${matchedCam.color}` : ''}
                                   </div>
@@ -1537,7 +1556,7 @@ export default function BookingCalendar({
                             <div className="flex items-start justify-between gap-2 mb-1.5">
                               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                                 <span className="font-mono text-[11px] font-black text-gray-700 shrink-0 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200">{b.cameraShort}</span>
-                                <span className="text-xs font-bold text-gray-900 truncate">{b.cameraName}</span>
+                                <span className="text-sm font-black text-gray-900 truncate">{b.cameraName}</span>
                                 <span className="bg-white/90 text-[9.5px] font-black px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
                                   {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
                                 </span>
