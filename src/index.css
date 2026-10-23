@@ -70,15 +70,25 @@ html, body {
   letter-spacing: -0.01em;
 }
 
-/* Nâng nhẹ độ đậm nét các đoạn chữ mảnh (font-weight 400 Regular -> 500 Medium) giúp hiển thị đầm tay, sắc nét trên màn hình Mobile mà không làm nhảy độ dài hay vỡ dòng */
+/* ── Toàn app: nâng tất cả chữ 400 Regular lên 500 Medium ── */
+/* Áp dụng cho mọi element nội dung: p, span, div, td, li, label, input, button... */
+p, span, div, li, td, th, label, small, a, blockquote,
+input, textarea, select, option,
+.text-xs, .text-sm, .text-base, .text-lg {
+  font-weight: inherit;
+}
+
+/* font-normal (400) → nâng lên 500 */
 .font-normal {
   font-weight: 500 !important;
 }
 
-/* Tăng tương phản và độ đầm nét cho màn hình di động */
+/* Tăng độ đậm nét toàn app: mọi chữ không có class font-* sẽ inherit 500 từ body */
+/* Tương phản rõ hơn trên mobile */
 @media (max-width: 768px) {
   body {
     font-weight: 500;
+    -webkit-text-stroke: 0.01em transparent; /* crisp rendering iOS */
   }
 }
 

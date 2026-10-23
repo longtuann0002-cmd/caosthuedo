@@ -302,26 +302,47 @@ export default function BookingCalendar({
   };
   
   // For quick booking form
-  const [formData, setFormData] = useState({
-    customerId: '',
-    customerName: '',
-    customerPhone: '',
-    customerDocType: 'CCCD' as const,
-    customerDocNote: '',
-    selectedCameraIds: [] as string[],
-    printCounts: {} as Record<string, number>,
-    startDate: '',
-    endDate: '',
-    depositAmount: 0,
-    paidAmount: 0,
-    discountPercent: 0, // Tỷ lệ tự giảm giá (%)
-    customFinalPrice: null as number | null,
-    note: '',
+  const DRAFT_KEY_BOOKING = 'thuedo_booking_form_draft';
+  const [formData, setFormData] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(DRAFT_KEY_BOOKING);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.customerName || parsed.selectedCameraIds?.length)) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return {
+      customerId: '',
+      customerName: '',
+      customerPhone: '',
+      customerDocType: 'CCCD' as const,
+      customerDocNote: '',
+      selectedCameraIds: [] as string[],
+      printCounts: {} as Record<string, number>,
+      startDate: '',
+      endDate: '',
+      depositAmount: 0,
+      paidAmount: 0,
+      discountPercent: 0, // Tỷ lệ tự giảm giá (%)
+      customFinalPrice: null as number | null,
+      note: '',
+    };
   });
 
   const [prevCalculatedTotal, setPrevCalculatedTotal] = useState(0);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
   const quickDocNoteInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
+  useEffect(() => {
+    if (!showAddQuickModal) return;
+    const hasData = formData.customerName || formData.customerPhone || formData.selectedCameraIds.length > 0 || formData.note;
+    if (hasData) {
+      try { sessionStorage.setItem(DRAFT_KEY_BOOKING, JSON.stringify(formData)); } catch {}
+    }
+  }, [formData, showAddQuickModal]);
 
   const calculatedDays = useMemo(() => {
     if (!formData.startDate || !formData.endDate) return 0;
@@ -867,7 +888,8 @@ export default function BookingCalendar({
       setQuickReceiptContract(newContract);
     }
 
-    // Reset form
+    // Reset form and clear draft
+    try { sessionStorage.removeItem(DRAFT_KEY_BOOKING); } catch {}
     setFormData({
       customerId: '',
       customerName: '',

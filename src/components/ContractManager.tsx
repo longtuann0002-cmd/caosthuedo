@@ -560,25 +560,46 @@ export default function ContractManager({
   const [contractAvailabilityFilter, setContractAvailabilityFilter] = useState<'ALL' | 'READY' | 'BUSY'>('ALL');
 
   // New Contract form state
-  const [newContractForm, setNewContractForm] = useState({
-    customerName: '',
-    customerPhone: '',
-    customerDocType: 'CCCD' as const,
-    customerDocNote: '',
-    selectedCameraIds: [] as string[],
-    printCounts: {} as Record<string, number>,
-    startDate: systemDate,
-    endDate: systemDate,
-    depositAmount: 0,
-    paidAmount: 0,
-    discountPercent: 0, // Tỷ lệ tự giảm giá (%)
-    customFinalPrice: null as number | null,
-    fittingNotes: '', // Số đo khách & Ghi chú fitting/sửa gấu/bóp eo
-    note: ''
+  const DRAFT_KEY_CONTRACT = 'thuedo_contract_form_draft';
+  const [newContractForm, setNewContractForm] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('thuedo_contract_form_draft');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.customerName || parsed.selectedCameraIds?.length)) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return {
+      customerName: '',
+      customerPhone: '',
+      customerDocType: 'CCCD' as const,
+      customerDocNote: '',
+      selectedCameraIds: [] as string[],
+      printCounts: {} as Record<string, number>,
+      startDate: systemDate,
+      endDate: systemDate,
+      depositAmount: 0,
+      paidAmount: 0,
+      discountPercent: 0, // Tỷ lệ tự giảm giá (%)
+      customFinalPrice: null as number | null,
+      fittingNotes: '', // Số đo khách & Ghi chú fitting/sửa gấu/bóp eo
+      note: ''
+    };
   });
 
   const [prevCalculatedTotal, setPrevCalculatedTotal] = useState(0);
   const contractDocNoteInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
+  useEffect(() => {
+    if (!showAddModal) return;
+    const hasData = newContractForm.customerName || newContractForm.customerPhone || newContractForm.selectedCameraIds.length > 0 || newContractForm.note;
+    if (hasData) {
+      try { sessionStorage.setItem('thuedo_contract_form_draft', JSON.stringify(newContractForm)); } catch {}
+    }
+  }, [newContractForm, showAddModal]);
 
   // Predefined Contract/Rental Form templates (Mẫu đơn thuê thời trang sẵn có)
   const DEFAULT_TEMPLATES: ContractTemplate[] = useMemo(() => [
@@ -953,7 +974,8 @@ export default function ContractManager({
       setSelectedContract(contract);
     }
 
-    // Reset form
+    // Reset form and clear draft
+    try { sessionStorage.removeItem('thuedo_contract_form_draft'); } catch {}
     setNewContractForm({
       customerName: '',
       customerPhone: '',
