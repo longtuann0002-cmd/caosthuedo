@@ -3816,7 +3816,7 @@ export default function App() {
                                 : 'border-gray-200 bg-gray-50/50 opacity-85'
                             }`}
                           >
-                            <div className="flex flex-row gap-2.5 sm:gap-3 items-stretch">
+                            <div className="flex flex-row gap-2.5 sm:gap-3 items-stretch relative group/imgrow">
                               {/* Left: Prominent 4:5 Portrait Image */}
                               <div className="w-20 sm:w-28 aspect-[4/5] rounded-xl overflow-hidden shrink-0 border border-gray-200 bg-gray-100 shadow-xs relative group">
                                 {(targetCam?.image || group.image) ? (
@@ -3827,17 +3827,6 @@ export default function App() {
                                       className="w-full h-full object-cover object-top"
                                       referrerPolicy="no-referrer"
                                     />
-                                    {/* Hover image preview popup */}
-                                    <div className="absolute left-full top-0 ml-2 z-[200] hidden group-hover:flex pointer-events-none">
-                                      <div className="w-48 h-64 rounded-2xl overflow-hidden border-2 border-orange-300 shadow-2xl bg-white">
-                                        <img
-                                          src={targetCam?.image || group.image}
-                                          alt={cleanName}
-                                          className="w-full h-full object-cover object-top"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                      </div>
-                                    </div>
                                   </>
                                 ) : (
                                   <div className="w-full h-full bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xl">
@@ -3862,6 +3851,20 @@ export default function App() {
                                     : 'Kín lịch'}
                                 </span>
                               </div>
+
+                              {/* Hover image popup - outside overflow-hidden, sibling of image */}
+                              {(targetCam?.image || group.image) && (
+                                <div className="absolute left-[5.5rem] sm:left-32 top-0 z-[999] hidden group-hover/imgrow:flex pointer-events-none">
+                                  <div className="w-44 h-60 rounded-2xl overflow-hidden border-2 border-orange-400 shadow-2xl bg-white">
+                                    <img
+                                      src={targetCam?.image || group.image}
+                                      alt={cleanName}
+                                      className="w-full h-full object-cover object-top"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Right: Info + Sizes */}
                               <div className="flex-1 min-w-0 flex flex-col justify-between gap-1.5">
