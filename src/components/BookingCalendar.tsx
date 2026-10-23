@@ -1300,7 +1300,7 @@ export default function BookingCalendar({
                     }}
                     className={`border rounded-xl p-1 sm:p-2 cursor-pointer transition-all flex flex-col justify-start gap-1 sm:gap-1.5 ${statusStyle} ${monthStyle} ${
                       isSelected ? 'ring-2 ring-orange-500 border-orange-500 bg-orange-50/30 shadow-xs' : 'hover:shadow-3xs'
-                    } ${viewMode === 'week' ? 'min-h-[110px] sm:min-h-[160px]' : 'min-h-[80px] sm:min-h-[106px]'}`}
+                    } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
                     {/* Cell Header: Day number + count badge */}
@@ -1337,26 +1337,16 @@ export default function BookingCalendar({
                                                 return (
                           <div
                             key={idx}
-                            className={`group/bookcard flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2.5px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-md shadow-3xs transition-all hover:scale-[1.01] relative ${
+                            className={`group/bookcard flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded shadow-3xs transition-all hover:scale-[1.01] relative ${
                               isExcessOnMobile ? 'hidden sm:flex' : 'flex'
                             }`}
                             title={`Khách: ${b.contract.customerName} | ${b.contract.customerPhone || ''}\n${b.cameraName} (${sizeLabel}${colorLabel})`}
                           >
-                            {/* Mobile: compact - Ten khach + ma mau, SĐT */}
-                            <div className="flex sm:hidden flex-col leading-none min-w-0 gap-0.5">
-                              <div className="flex items-center gap-0.5 min-w-0">
-                                <span className="font-black text-[9px] truncate flex-1 text-gray-900 leading-tight">
-                                  {shortCustomerName || displayName}
-                                </span>
-                                <span className="font-mono text-[7px] font-bold text-gray-500 shrink-0 ml-0.5">
-                                  {displayName}
-                                </span>
-                              </div>
-                              {b.contract.customerPhone && (
-                                <span className="font-mono text-[7px] font-bold text-gray-400 truncate leading-none">
-                                  📞 {b.contract.customerPhone}
-                                </span>
-                              )}
+                            {/* Mobile: siêu gọn - chỉ mã đồ */}
+                            <div className="flex sm:hidden items-center gap-0.5 leading-none min-w-0">
+                              <span className="font-mono font-black text-[8.5px] truncate text-gray-900 leading-tight">
+                                {displayName}
+                              </span>
                             </div>
 
                             {/* Desktop: 2 dong day du */}
