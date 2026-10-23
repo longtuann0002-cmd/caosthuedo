@@ -1327,57 +1327,101 @@ export default function BookingCalendar({
                         const sizeLabel = b.isPrinter
                           ? `🖨️ ${b.printCount ?? '?'}t`
                           : (b.size === 'Freesize' || b.size === 'FS' ? 'FS' : `Size ${b.size || 'M'}`);
-                        const colorLabel = (b as any).color ? ` • ${(b as any).color}` : '';
-                        const displayName = b.cameraShort || (b as any).cleanName || b.cameraName;
-                        const shortCustomerName = b.contract.customerName
-                          ? b.contract.customerName.trim().split(/\s+/).slice(-1)[0]
-                          : '';
-                        const camImage = cameras.find(c => c.id === b.cameraId)?.image || '';
+                        
+                        // Tìm trang phục tương ứng trong danh sách cameras (hỗ trợ fallback đa tiêu chí)
+                        const matchedCam = cameras.find(c => c.id === b.cameraId)
+                          || cameras.find(c => c.serialNumber && b.cameraShort && c.serialNumber.toLowerCase() === b.cameraShort.toLowerCase())
+                          || cameras.find(c => c.shortName && b.cameraShort && c.shortName.toLowerCase() === b.cameraShort.toLowerCase())
+                          || cameras.find(c => c.name && b.cameraName && c.name.toLowerCase() === b.cameraName.toLowerCase());
+                        
+                        // TÊN VIẾT TẮT TRANG PHỤC: Ưu tiên mã tag/serialNumber hoặc tên viết tắt, tuyệt đối ẩn tên đầy đủ để không bị trùng lặp
+                        const outfitShortCode = (matchedCam?.serialNumber || b.cameraShort || matchedCam?.shortName || b.cleanName || b.cameraName || 'Đồ thuê').trim();
+                        
+                        // TÊN KHÁCH HÀNG: Chỉ lấy tên chính ngắn gọn (ví dụ: Thu Hà -> Hà)
+                        const rawCustName = (b.contract.customerName || '').trim();
+                        const shortCustName = rawCustName ? rawCustName.split(/\s+/).slice(-1)[0] : '';
+                        
+                        const camImage = matchedCam?.image || '';
 
-                                                return (
+                        return (
                           <div
                             key={idx}
-                            className={`group/bookcard flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded shadow-3xs transition-all hover:scale-[1.01] relative ${
+                            className={`group flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative ${
                               isExcessOnMobile ? 'hidden sm:flex' : 'flex'
                             }`}
-                            title={`Khách: ${b.contract.customerName} | ${b.contract.customerPhone || ''}\n${b.cameraName} (${sizeLabel}${colorLabel})`}
+                            title={`Khách: ${b.contract.customerName || 'Chưa có tên'} | ${b.contract.customerPhone || 'Chưa có SĐT'}\n${b.cameraName} (${sizeLabel})`}
                           >
-                            {/* Mobile: siêu gọn - chỉ mã đồ */}
-                            <div className="flex sm:hidden items-center gap-0.5 leading-none min-w-0">
-                              <span className="font-mono font-black text-[8.5px] truncate text-gray-900 leading-tight">
-                                {displayName}
+                            {/* Mobile: Chỉ hiển thị tên viết tắt (mã tag), ẩn bỏ tên đầy đủ tránh trùng lặp */}
+                            <div className="flex sm:hidden items-center justify-between gap-1 leading-none min-w-0">
+                              <span className="font-mono font-black text-[8px] truncate text-gray-900 leading-tight">
+                                {outfitShortCode}
                               </span>
+                              {shortCustName && (
+                                <span className="text-[7.5px] font-bold text-gray-500 truncate max-w-[45px]">
+                                  {shortCustName}
+                                </span>
+                              )}
                             </div>
 
-                            {/* Desktop: 2 dong day du */}
+                            {/* Desktop: Dòng 1 Tên khách, Dòng 2 Mã viết tắt + Size. Nếu không có tên khách thì không lặp lại mã để tránh trùng */}
                             <div className="hidden sm:flex flex-col gap-0.5">
-                              <div className="leading-tight">
-                                <span className="font-black text-[11px] truncate tracking-tight text-gray-900">
-                                  {shortCustomerName || displayName}
-                                </span>
-                              </div>
+                              {shortCustName ? (
+                                <div className="leading-tight">
+                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900 block" title={b.contract.customerName}>
+                                    {shortCustName}
+                                  </span>
+                                </div>
+                              ) : null}
+
                               <div className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-none">
-                                <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0 font-mono">
-                                  {displayName}
+                                <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={b.cameraName}>
+                                  {outfitShortCode}
                                 </span>
-                                <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
+                                <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
                                   {sizeLabel}
                                 </span>
                               </div>
+
                               {b.contract.customerPhone && (
-                                <div className="text-[8.5px] font-bold text-gray-500 leading-none mt-0.5 truncate">
+                                <div className="text-[8.5px] font-bold text-gray-500 leading-none mt-0.5 truncate font-mono">
                                   📞 {b.contract.customerPhone}
                                 </div>
                               )}
                             </div>
-                            {/* Hover image popup */}
-                            {camImage && (
-                              <div className="absolute bottom-full left-0 mb-1 z-[999] hidden group-hover/bookcard:block pointer-events-none">
-                                <div className="w-28 h-36 rounded-xl overflow-hidden border-2 border-orange-400 shadow-2xl bg-white">
-                                  <img src={camImage} alt={displayName} className="w-full h-full object-cover object-top" referrerPolicy="no-referrer" />
+
+                            {/* HOVER PREVIEW POPUP: Rê chuột vào hiển thị hình ảnh sản phẩm to rõ nét */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-[9999] hidden group-hover:flex flex-col items-center pointer-events-none drop-shadow-2xl">
+                              <div className="w-32 bg-white rounded-xl overflow-hidden border-2 border-orange-500 shadow-2xl p-1 text-center">
+                                {camImage ? (
+                                  <img 
+                                    src={camImage} 
+                                    alt={outfitShortCode} 
+                                    className="w-full h-36 object-cover object-top rounded-lg" 
+                                    referrerPolicy="no-referrer" 
+                                  />
+                                ) : (
+                                  <div className="w-full h-24 bg-orange-50 rounded-lg flex flex-col items-center justify-center text-orange-600">
+                                    <span className="text-2xl">👗</span>
+                                    <span className="text-[8.5px] font-bold text-gray-400 mt-0.5">Chưa có ảnh</span>
+                                  </div>
+                                )}
+                                <div className="mt-1 px-0.5">
+                                  <div className="font-mono font-black text-[10px] text-gray-900 truncate">
+                                    {outfitShortCode}
+                                  </div>
+                                  <div className="text-[8.5px] font-medium text-gray-500 truncate">
+                                    {sizeLabel} {matchedCam?.color ? `• ${matchedCam.color}` : ''}
+                                  </div>
+                                  {b.contract.customerName && (
+                                    <div className="text-[8px] font-bold text-orange-700 bg-orange-50 rounded py-0.5 mt-0.5 truncate">
+                                      👤 {b.contract.customerName}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                            )}
+                              {/* Mũi tên chỉ xuống card */}
+                              <div className="w-2.5 h-2.5 bg-orange-500 rotate-45 -mt-1.5 shadow-xs"></div>
+                            </div>
                           </div>
                         );
                       })}
