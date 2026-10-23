@@ -1,4 +1,4 @@
-﻿import React, { Component, useState, useEffect, useRef, useMemo } from 'react';
+import React, { Component, useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RentalContract, Customer, Expense, ContractStatus } from './types';
 import {
@@ -1646,11 +1646,6 @@ export default function App() {
           return true;
         })
       );
-      addToast(
-        'Đã xóa hợp đồng và thông tin khách hàng',
-        'info',
-        `Đã xóa hợp đồng ${contractToDelete.contractCode} và tự động xóa hồ sơ khách hàng "${contractToDelete.customerName}" do không còn đơn thuê nào.`
-      );
     } else {
       // Customer still has other contracts -> update their rentalCount and totalSpent
       const newTotalSpent = remainingContractsForCust.reduce((sum, c) => sum + (c.paidAmount || 0), 0);
@@ -1665,11 +1660,6 @@ export default function App() {
           }
           return cust;
         })
-      );
-      addToast(
-        'Đã xóa hợp đồng thành công',
-        'info',
-        `Đã xóa hợp đồng ${contractToDelete.contractCode} và cập nhật lại thông tin khách hàng "${contractToDelete.customerName}".`
       );
     }
   };

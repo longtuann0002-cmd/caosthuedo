@@ -111,7 +111,7 @@ export function ToastContainer({ toasts, onClose }: ToastContainerProps) {
       className="fixed top-5 right-5 z-[9999] flex flex-col gap-3 w-full max-w-xs md:max-w-sm pointer-events-none"
     >
       <AnimatePresence mode="popLayout">
-        {toasts.map((toast) => (
+        {toasts.slice(-3).map((toast) => (
           <ToastItem key={toast.id} toast={toast} onClose={onClose} />
         ))}
       </AnimatePresence>

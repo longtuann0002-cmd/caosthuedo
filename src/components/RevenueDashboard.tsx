@@ -292,9 +292,21 @@ export default function RevenueDashboard({
       }, 0);
 
     const activeRentalsCount = filteredContracts.filter(c => c.status === 'Active' || c.status === 'Overdue').length;
-    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-    const netProfit = totalRevenue - totalExpenses;
+    
+    // Chi phí vận hành (bảo dưỡng, giặt là, mặt bằng, điện nước...)
+    const operationalExpenses = filteredExpenses
+      .filter(e => !e.id?.startsWith('exp-outfit-'))
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    // Tổng vốn nhập toàn bộ kho đồ
     const totalInventoryCapital = cameras.reduce((sum, c) => sum + (c.purchasePrice || 0), 0);
+
+    // Gộp luôn Tổng vốn kho đồ vào Tổng chi phí kho
+    const totalExpenses = totalInventoryCapital + operationalExpenses;
+
+    // Lợi nhuận thuần = Doanh thu - Tổng chi phí (đã gồm vốn kho đồ)
+    const netProfit = totalRevenue - totalExpenses;
+
     const totalSurcharges = filteredContracts
       .filter(c => c.status !== 'Cancelled')
       .reduce((sum, c) => sum + (c.surchargeAmount || 0), 0);
@@ -304,6 +316,7 @@ export default function RevenueDashboard({
       totalReceivables,
       activeRentalsCount,
       totalExpenses,
+      operationalExpenses,
       netProfit,
       totalInventoryCapital,
       totalSurcharges
@@ -836,8 +849,8 @@ export default function RevenueDashboard({
         )}
       </div>
 
-      {/* Financial KPIs Cards Grid - Highly optimized for Mobile */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3.5">
+      {/* Financial KPIs Cards Grid - Highly optimized for Mobile & Desktop (4 Cards) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
         {/* Card 1: Total Revenue */}
         <div className="bg-white border border-gray-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md transition-all">
           <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-orange-50 text-orange-600 shrink-0">
@@ -874,40 +887,32 @@ export default function RevenueDashboard({
           </div>
         </div>
 
-        {/* Card 3: Total Expenses */}
+        {/* Card 3: Combined Total Expenses (Inventory Capital + Operational Expenses) */}
         <div className="bg-white border border-gray-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md transition-all">
           <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-rose-50 text-rose-600 shrink-0">
             <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <span className="text-gray-500 text-[9px] sm:text-xs font-bold block uppercase tracking-wider truncate">Tổng Chi Phí Kho</span>
-            <span className="font-mono text-xs sm:text-lg font-black text-gray-900 block truncate mt-0.5">{financials.totalExpenses.toLocaleString()} đ</span>
-            <span className="text-[9px] sm:text-[10px] text-rose-600 block font-bold mt-0.5 truncate">Bảo dưỡng & giặt</span>
+            <span className="font-mono text-xs sm:text-lg font-black text-rose-700 block truncate mt-0.5">{financials.totalExpenses.toLocaleString()} đ</span>
+            <span className="text-[9px] sm:text-[10px] text-gray-500 block font-medium mt-0.5 truncate" title={`Vốn đồ: ${financials.totalInventoryCapital.toLocaleString()}đ • Vận hành: ${financials.operationalExpenses.toLocaleString()}đ`}>
+              Vốn đồ: <b>{financials.totalInventoryCapital.toLocaleString()}đ</b>
+            </span>
           </div>
         </div>
 
-        {/* Card 4: Net Profits */}
+        {/* Card 4: Net Profits (Revenue - Total Expenses including inventory capital) */}
         <div className="bg-white border border-gray-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md transition-all">
           <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl shrink-0 ${financials.netProfit >= 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'}`}>
             <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <span className="text-gray-500 text-[9px] sm:text-xs font-bold block uppercase tracking-wider truncate font-sans">Lợi Nhuận Thuần</span>
-            <span className="font-mono text-xs sm:text-lg font-black text-gray-900 block truncate mt-0.5">{(financials.netProfit).toLocaleString()} đ</span>
-            <span className="text-[9px] sm:text-[10px] text-indigo-600 font-bold block mt-0.5 truncate">Tạm tính ròng</span>
-          </div>
-        </div>
-
-        {/* Card 5: Total Inventory Capital */}
-        <div className="bg-white border border-emerald-200/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md transition-all col-span-2 sm:col-span-1 bg-emerald-50/20">
-          <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-emerald-100 text-emerald-700 shrink-0">
-            <span className="text-base sm:text-lg">💎</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-gray-500 text-[9px] sm:text-xs font-bold block uppercase tracking-wider truncate">Tổng Vốn Kho Đồ</span>
-            <span className="font-mono text-xs sm:text-lg font-black text-emerald-800 block truncate mt-0.5">{(financials.totalInventoryCapital).toLocaleString()} đ</span>
-            <span className="text-[9px] sm:text-[10px] text-emerald-600 font-bold block mt-0.5 truncate">
-              {cameras.length} sản phẩm
+            <span className={`font-mono text-xs sm:text-lg font-black block truncate mt-0.5 ${financials.netProfit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+              {(financials.netProfit).toLocaleString()} đ
+            </span>
+            <span className="text-[9px] sm:text-[10px] font-bold block mt-0.5 truncate text-gray-500">
+              {financials.netProfit >= 0 ? '🎉 Đã hoàn vốn & có lãi' : '⏳ Đang hoàn vốn'}
             </span>
           </div>
         </div>
