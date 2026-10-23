@@ -1351,16 +1351,11 @@ export default function BookingCalendar({
                             }`}
                             title={`Khách: ${b.contract.customerName || 'Chưa có tên'} | ${b.contract.customerPhone || 'Chưa có SĐT'}\n${b.cameraName} (${sizeLabel})`}
                           >
-                            {/* Mobile: Chỉ hiển thị tên viết tắt (mã tag), ẩn bỏ tên đầy đủ tránh trùng lặp */}
-                            <div className="flex sm:hidden items-center justify-between gap-1 leading-none min-w-0">
-                              <span className="font-mono font-black text-[8px] truncate text-gray-900 leading-tight">
+                            {/* Mobile: Chỉ hiện pill mã viết tắt, gọn tối đa */}
+                            <div className="flex sm:hidden items-center leading-none min-w-0">
+                              <span className={`font-mono font-black text-[8px] truncate leading-tight px-1 py-0.5 rounded ${colors.tagColor}`}>
                                 {outfitShortCode}
                               </span>
-                              {shortCustName && (
-                                <span className="text-[7.5px] font-bold text-gray-500 truncate max-w-[45px]">
-                                  {shortCustName}
-                                </span>
-                              )}
                             </div>
 
                             {/* Desktop: Dòng 1 Tên khách, Dòng 2 Mã viết tắt + Size. Nếu không có tên khách thì không lặp lại mã để tránh trùng */}
