@@ -355,6 +355,9 @@ export default function App() {
   const [logoText, setLogoText] = useState<string>(() =>
     loadStoredData('logoText', 'TIỆM NHÀ CAO')
   );
+  const [logoTextCase, setLogoTextCase] = useState<'lowercase' | 'uppercase' | 'normal'>(() =>
+    loadStoredData('logoTextCase', 'normal')
+  );
   const [logoFontSize, setLogoFontSize] = useState<number>(() =>
     loadStoredData('logoFontSize', 15.5)
   );
@@ -826,6 +829,7 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     saveStoredData('logoText', logoText);
+    saveStoredData('logoTextCase', logoTextCase);
     saveStoredData('logoFontSize', logoFontSize);
     saveStoredData('logoSubtitle', logoSubtitle);
     saveStoredData('logoSubtitleCase', logoSubtitleCase);
@@ -837,6 +841,7 @@ export default function App() {
 
     const brandData = {
       logoText,
+      logoTextCase,
       logoFontSize,
       logoSubtitle,
       logoSubtitleCase,
@@ -864,6 +869,7 @@ export default function App() {
   }, [
     loaded,
     logoText,
+    logoTextCase,
     logoFontSize,
     logoSubtitle,
     logoSubtitleCase,
@@ -987,6 +993,7 @@ export default function App() {
         const cloudBrand = await fetchFromSupabase('brand_settings');
         if (cloudBrand) {
           if (cloudBrand.logoText !== undefined) { setLogoText(cloudBrand.logoText); saveStoredData('logoText', cloudBrand.logoText); }
+          if (cloudBrand.logoTextCase !== undefined) { setLogoTextCase(cloudBrand.logoTextCase); saveStoredData('logoTextCase', cloudBrand.logoTextCase); }
           if (cloudBrand.logoFontSize !== undefined) { setLogoFontSize(cloudBrand.logoFontSize); saveStoredData('logoFontSize', cloudBrand.logoFontSize); }
           if (cloudBrand.logoSubtitle !== undefined) { setLogoSubtitle(cloudBrand.logoSubtitle); saveStoredData('logoSubtitle', cloudBrand.logoSubtitle); }
           if (cloudBrand.logoSubtitleCase !== undefined) { setLogoSubtitleCase(cloudBrand.logoSubtitleCase); saveStoredData('logoSubtitleCase', cloudBrand.logoSubtitleCase); }
@@ -2898,7 +2905,9 @@ export default function App() {
             {!sidebarCollapsed && (
               <div className="leading-tight min-w-0">
                 <span 
-                  className="font-display font-black text-slate-900 tracking-tight block uppercase truncate"
+                  className={`font-display font-black text-slate-900 tracking-tight block truncate ${
+                    logoTextCase === 'uppercase' ? 'uppercase' : logoTextCase === 'lowercase' ? 'lowercase' : ''
+                  }`}
                   style={{ fontSize: `${Math.min(logoFontSize || 15.5, 14)}px` }}
                 >
                   {logoText || 'TIỆM NHÀ CAO'}
@@ -4188,7 +4197,9 @@ export default function App() {
                   )}
                   <div className="leading-tight text-left min-w-0">
                     <span 
-                      className="font-display font-black text-gray-950 tracking-tight block uppercase leading-snug break-words"
+                      className={`font-display font-black text-gray-950 tracking-tight block leading-snug break-words ${
+                        logoTextCase === 'uppercase' ? 'uppercase' : logoTextCase === 'lowercase' ? 'lowercase' : ''
+                      }`}
                       style={{ fontSize: `${logoFontSize || 15.5}px` }}
                     >
                       {logoText || 'TIỆM ẢNH NHÀ CAOS'}
@@ -4216,9 +4227,56 @@ export default function App() {
                     maxLength={25}
                     value={logoText}
                     onChange={(e) => setLogoText(e.target.value)}
-                    placeholder="ví dụ: TIỆM ẢNH NHÀ CAOS"
-                    className="w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-semibold"
+                    placeholder="ví dụ: Tiệm Nhà Cao"
+                    className={`w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-semibold ${
+                      logoTextCase === 'uppercase' ? 'uppercase' : logoTextCase === 'lowercase' ? 'lowercase' : ''
+                    }`}
                   />
+
+                  {/* Kiểu hiển thị chữ hoa / thường cho thương hiệu chính */}
+                  <div className="bg-gray-50/90 p-2.5 rounded-xl border border-gray-200/90 space-y-1.5">
+                    <span className="block font-bold text-gray-700 uppercase tracking-wider text-[10.5px]">
+                      Kiểu viết hoa / thường tên thương hiệu
+                    </span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setLogoTextCase('lowercase')}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                          logoTextCase === 'lowercase'
+                            ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                            : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
+                        }`}
+                      >
+                        <span className="font-mono">abc</span>
+                        <span className="text-[10px] font-normal opacity-90">(Viết thường)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogoTextCase('uppercase')}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                          logoTextCase === 'uppercase'
+                            ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                            : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
+                        }`}
+                      >
+                        <span className="font-mono font-black">ABC</span>
+                        <span className="text-[10px] font-normal opacity-90">(Viết hoa)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogoTextCase('normal')}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                          logoTextCase === 'normal'
+                            ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                            : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
+                        }`}
+                      >
+                        <span className="font-mono font-bold">Aa</span>
+                        <span className="text-[10px] font-normal opacity-90">(Theo ý gõ)</span>
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Font Size Adjustment Slider & Presets */}
                   <div className="bg-gray-50/90 p-3 rounded-xl border border-gray-200/90 space-y-2.5">
@@ -4617,6 +4675,7 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setLogoText('TIỆM ẢNH NHÀ CAOS');
+                  setLogoTextCase('normal');
                   setLogoFontSize(15.5);
                   setLogoSubtitle('cho thuê trang phục cao cấp');
                   setLogoSubtitleCase('lowercase');

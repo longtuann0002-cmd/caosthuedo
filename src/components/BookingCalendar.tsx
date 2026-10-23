@@ -1362,7 +1362,7 @@ export default function BookingCalendar({
         )}
 
         {/* Legend Panel at Bottom */}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mt-4 text-[11px] sm:text-xs text-gray-600 border-t border-gray-100 pt-3 select-none">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mt-4 text-[11px] sm:text-xs text-gray-700 font-semibold border-t border-gray-100 pt-3 select-none">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md border border-gray-300 bg-white inline-block"></span>

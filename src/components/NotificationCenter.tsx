@@ -636,16 +636,20 @@ export default function NotificationCenter({
                             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
                               Trang phục yêu cầu:
                             </div>
-                            {c.items.map((it, idx) => (
-                              <div key={idx} className="flex justify-between items-center text-xs">
-                                <span className="font-medium text-gray-700 truncate max-w-[280px]">
-                                  ✨ {it.cameraName}
-                                </span>
-                                <span className="font-mono text-gray-500 text-[10px]">
-                                  ({it.quantity} chiếc) • {Math.round(it.dailyRate).toLocaleString()}đ/ngày
-                                </span>
-                              </div>
-                            ))}
+                            {c.items.map((it, idx) => {
+                              const isPrinter = it.cameraName?.toLowerCase().includes('in ảnh') || it.cameraName?.toLowerCase().includes('máy in');
+                              return (
+                                <div key={idx} className="flex justify-between items-center text-xs">
+                                  <span className="font-medium text-gray-700 truncate max-w-[280px] flex items-center gap-1.5">
+                                    <span className="shrink-0">{isPrinter ? '🖨️' : '👗'}</span>
+                                    <span className="truncate">{it.cameraName}</span>
+                                  </span>
+                                  <span className="font-mono text-gray-500 text-[10px] shrink-0 ml-2">
+                                    ({it.quantity} chiếc) • {Math.round(it.dailyRate).toLocaleString()}đ/ngày
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {/* Customer / Deposit meta details */}

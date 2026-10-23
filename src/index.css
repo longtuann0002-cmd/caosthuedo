@@ -66,6 +66,20 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Nâng nhẹ độ đậm nét các đoạn chữ mảnh (font-weight 400 Regular -> 500 Medium) giúp hiển thị đầm tay, sắc nét trên màn hình Mobile mà không làm nhảy độ dài hay vỡ dòng */
+.font-normal {
+  font-weight: 500 !important;
+}
+
+/* Tăng tương phản và độ đầm nét cho màn hình di động */
+@media (max-width: 768px) {
+  body {
+    font-weight: 500;
+  }
 }
 
 /* iOS Performance and Touch Highlight Customizations */
