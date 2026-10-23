@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RentalContract, BankConfig, Customer } from '../types';
 import MoneyInput from './MoneyInput';
@@ -472,7 +472,7 @@ export default function BookingCalendar({
 
   // Map each calendar day to contracts
   const dayBookingsMap = useMemo(() => {
-    const map: Record<string, { contract: RentalContract; cameraId: string; cameraShort: string; cameraName: string; size?: string; timeString: string; printCount?: number; isPrinter?: boolean }[]> = {};
+    const map: Record<string, { contract: RentalContract; cameraId: string; cameraShort: string; cameraName: string; cleanName?: string; color?: string; category?: string; size?: string; timeString: string; printCount?: number; isPrinter?: boolean }[]> = {};
 
     contracts.forEach(contract => {
       if (contract.status === 'Cancelled') return;
@@ -1303,7 +1303,7 @@ export default function BookingCalendar({
                       )}
                     </div>
 
-                    {/* Booking item text blocks (Hiển thị 2 dòng rõ ràng: Tên mẫu & Size + Màu sắc) */}
+                    {/* Booking item text blocks (Dong 1: Ten nguoi dat lich, Dong 2: Ma mau + Size) */}
                     <div className="space-y-1 mt-0.5 flex-grow select-none w-full">
                       {bookings.map((b, idx) => {
                         const colors = getCameraColorProps(b.cameraShort);
@@ -1313,6 +1313,9 @@ export default function BookingCalendar({
                           : (b.size === 'Freesize' || b.size === 'FS' ? 'FS' : `Size ${b.size || 'M'}`);
                         const colorLabel = (b as any).color ? ` • ${(b as any).color}` : '';
                         const displayName = b.cameraShort || (b as any).cleanName || b.cameraName;
+                        const shortCustomerName = b.contract.customerName
+                          ? b.contract.customerName.trim().split(/\s+/).slice(-1)[0]
+                          : '';
 
                         return (
                           <div
@@ -1320,25 +1323,23 @@ export default function BookingCalendar({
                             className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-md shadow-3xs transition-all hover:scale-[1.01] ${
                               isExcessOnMobile ? 'hidden sm:flex' : 'flex'
                             }`}
-                            title={`${b.cameraName} (${sizeLabel}${colorLabel}) - Khách: ${b.contract.customerName}`}
+                            title={`Khách: ${b.contract.customerName} | ${b.contract.customerPhone || ''}\n${b.cameraName} (${sizeLabel}${colorLabel})`}
                           >
-                            {/* Dòng 1: Tên mẫu rõ ràng */}
+                            {/* Dong 1: Ten nguoi dat lich */}
                             <div className="flex items-center justify-between gap-1 leading-tight">
                               <span className="font-black text-[9.5px] sm:text-[11px] truncate tracking-tight text-gray-900">
-                                {displayName}
+                                {shortCustomerName || displayName}
                               </span>
                             </div>
 
-                            {/* Dòng 2: Size & Chi tiết màu/in ảnh */}
+                            {/* Dong 2: Ma mau do + Size */}
                             <div className="flex items-center gap-1 mt-0.5 text-[8px] sm:text-[9px] font-semibold text-gray-700 leading-none">
+                              <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0 font-mono">
+                                {displayName}
+                              </span>
                               <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
                                 {sizeLabel}
                               </span>
-                              {(b as any).color && (
-                                <span className="truncate opacity-80 font-medium text-[8px]">
-                                  {(b as any).color}
-                                </span>
-                              )}
                             </div>
                           </div>
                         );
