@@ -3629,7 +3629,7 @@ export default function App() {
             </div>
 
             {/* Category Tabs (Always Visible) */}
-            <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+            <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-1.5 overflow-x-auto scrollbar-none sticky top-0 z-10">
               <button
                 type="button"
                 onClick={() => setSearchFilterTab('all')}
@@ -3820,12 +3820,25 @@ export default function App() {
                               {/* Left: Prominent 4:5 Portrait Image */}
                               <div className="w-20 sm:w-28 aspect-[4/5] rounded-xl overflow-hidden shrink-0 border border-gray-200 bg-gray-100 shadow-xs relative group">
                                 {(targetCam?.image || group.image) ? (
-                                  <img
-                                    src={targetCam?.image || group.image}
-                                    alt={cleanName}
-                                    className="w-full h-full object-cover object-top"
-                                    referrerPolicy="no-referrer"
-                                  />
+                                  <>
+                                    <img
+                                      src={targetCam?.image || group.image}
+                                      alt={cleanName}
+                                      className="w-full h-full object-cover object-top"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                    {/* Hover image preview popup */}
+                                    <div className="absolute left-full top-0 ml-2 z-[200] hidden group-hover:flex pointer-events-none">
+                                      <div className="w-48 h-64 rounded-2xl overflow-hidden border-2 border-orange-300 shadow-2xl bg-white">
+                                        <img
+                                          src={targetCam?.image || group.image}
+                                          alt={cleanName}
+                                          className="w-full h-full object-cover object-top"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      </div>
+                                    </div>
+                                  </>
                                 ) : (
                                   <div className="w-full h-full bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xl">
                                     👗
@@ -3875,6 +3888,17 @@ export default function App() {
                                     {cleanName}
                                   </h4>
 
+                                  {/* Renter phone when outfit is busy */}
+                                  {!group.hasAvailable && group.items.some((i: any) => i.bookedContracts?.[0]?.customerPhone) && (
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 truncate">
+                                        {(() => {
+                                          const bc = group.items.find((i: any) => i.bookedContracts?.[0]?.customerPhone)?.bookedContracts[0];
+                                          return bc ? ('\uD83D\uDCDE ' + bc.customerPhone + (bc.customerName ? ' · ' + bc.customerName : '')) : null;
+                                        })()}
+                                      </span>
+                                    </div>
+                                  )}
                                   {/* Color & Price Row */}
                                   <div className="flex items-center gap-2 text-[11px] text-gray-600 mt-0.5 flex-wrap">
                                     {targetCam?.color ? (
@@ -3907,8 +3931,9 @@ export default function App() {
                                   <div className="flex flex-wrap gap-1.5">
                                     {group.items.map((item: any, idx: number) => {
                                       const isSelected = activeItem?.cam.id === item.cam.id;
-                                      const bookedInfo = !item.isAvailable && item.bookedContracts[0]
-                                        ? item.bookedContracts[0].customerName
+                                      const bookedContract2 = !item.isAvailable && item.bookedContracts[0] ? item.bookedContracts[0] : null;
+                                      const bookedInfo = bookedContract2
+                                        ? bookedContract2.customerName + (bookedContract2.customerPhone ? ' (' + bookedContract2.customerPhone + ')' : '')
                                         : '';
                                       const badgeTitle = item.isAvailable 
                                         ? `Size ${item.size} - Màu: ${item.cam?.color || 'Chưa đặt'} (Còn trống ngày này)`
