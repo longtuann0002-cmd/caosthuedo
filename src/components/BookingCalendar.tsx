@@ -1332,11 +1332,12 @@ export default function BookingCalendar({
                         const shortCustomerName = b.contract.customerName
                           ? b.contract.customerName.trim().split(/\s+/).slice(-1)[0]
                           : '';
+                        const camImage = cameras.find(c => c.id === b.cameraId)?.image || '';
 
                                                 return (
                           <div
                             key={idx}
-                            className={`group flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2.5px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-md shadow-3xs transition-all hover:scale-[1.01] ${
+                            className={`group/bookcard flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2.5px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-md shadow-3xs transition-all hover:scale-[1.01] relative ${
                               isExcessOnMobile ? 'hidden sm:flex' : 'flex'
                             }`}
                             title={`Khách: ${b.contract.customerName} | ${b.contract.customerPhone || ''}\n${b.cameraName} (${sizeLabel}${colorLabel})`}
@@ -1366,7 +1367,20 @@ export default function BookingCalendar({
                                   {sizeLabel}
                                 </span>
                               </div>
+                              {b.contract.customerPhone && (
+                                <div className="text-[8.5px] font-bold text-gray-500 leading-none mt-0.5 truncate">
+                                  📞 {b.contract.customerPhone}
+                                </div>
+                              )}
                             </div>
+                            {/* Hover image popup */}
+                            {camImage && (
+                              <div className="absolute bottom-full left-0 mb-1 z-[999] hidden group-hover/bookcard:block pointer-events-none">
+                                <div className="w-28 h-36 rounded-xl overflow-hidden border-2 border-orange-400 shadow-2xl bg-white">
+                                  <img src={camImage} alt={displayName} className="w-full h-full object-cover object-top" referrerPolicy="no-referrer" />
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
