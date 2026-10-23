@@ -1284,7 +1284,7 @@ export default function BookingCalendar({
                     }}
                     className={`border rounded-xl p-1 sm:p-2 cursor-pointer transition-all flex flex-col justify-start gap-1 sm:gap-1.5 ${statusStyle} ${monthStyle} ${
                       isSelected ? 'ring-2 ring-orange-500 border-orange-500 bg-orange-50/30 shadow-xs' : 'hover:shadow-3xs'
-                    } ${viewMode === 'week' ? 'min-h-[85px] sm:min-h-[160px]' : 'min-h-[64px] sm:min-h-[96px]'}`}
+                    } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
                     {/* Cell Header: Day number + count badge */}
@@ -1307,7 +1307,7 @@ export default function BookingCalendar({
                     <div className="space-y-1 mt-0.5 flex-grow select-none w-full">
                       {bookings.map((b, idx) => {
                         const colors = getCameraColorProps(b.cameraShort);
-                        const isExcessOnMobile = idx >= 2;
+                        const isExcessOnMobile = idx >= 1;
                         const sizeLabel = b.isPrinter
                           ? `🖨️ ${b.printCount ?? '?'}t`
                           : (b.size === 'Freesize' || b.size === 'FS' ? 'FS' : `Size ${b.size || 'M'}`);
@@ -1317,36 +1317,46 @@ export default function BookingCalendar({
                           ? b.contract.customerName.trim().split(/\s+/).slice(-1)[0]
                           : '';
 
-                        return (
+                                                return (
                           <div
                             key={idx}
-                            className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-md shadow-3xs transition-all hover:scale-[1.01] ${
+                            className={`group flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2.5px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-md shadow-3xs transition-all hover:scale-[1.01] ${
                               isExcessOnMobile ? 'hidden sm:flex' : 'flex'
                             }`}
                             title={`Khách: ${b.contract.customerName} | ${b.contract.customerPhone || ''}\n${b.cameraName} (${sizeLabel}${colorLabel})`}
                           >
-                            {/* Dong 1: Ten nguoi dat lich */}
-                            <div className="flex items-center justify-between gap-1 leading-tight">
-                              <span className="font-black text-[9.5px] sm:text-[11px] truncate tracking-tight text-gray-900">
+                            {/* Mobile: 1 dong gon - Ten khach + ma mau inline */}
+                            <div className="flex sm:hidden items-center gap-0.5 leading-none min-w-0">
+                              <span className="font-black text-[9px] truncate flex-1 text-gray-900 leading-tight">
                                 {shortCustomerName || displayName}
+                              </span>
+                              <span className="font-mono text-[7px] font-bold text-gray-500 shrink-0 ml-0.5">
+                                {displayName}
                               </span>
                             </div>
 
-                            {/* Dong 2: Ma mau do + Size */}
-                            <div className="flex items-center gap-1 mt-0.5 text-[8px] sm:text-[9px] font-semibold text-gray-700 leading-none">
-                              <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0 font-mono">
-                                {displayName}
-                              </span>
-                              <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
-                                {sizeLabel}
-                              </span>
+                            {/* Desktop: 2 dong day du */}
+                            <div className="hidden sm:flex flex-col gap-0.5">
+                              <div className="leading-tight">
+                                <span className="font-black text-[11px] truncate tracking-tight text-gray-900">
+                                  {shortCustomerName || displayName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-none">
+                                <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0 font-mono">
+                                  {displayName}
+                                </span>
+                                <span className="bg-white/90 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
+                                  {sizeLabel}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         );
                       })}
-                      {bookings.length > 2 && (
+                      {bookings.length > 1 && (
                         <div className="sm:hidden text-[8px] font-black text-orange-700 bg-orange-100/70 py-0.5 rounded text-center leading-none">
-                          +{bookings.length - 2} đơn nữa
+                          +{bookings.length - 1} đơn
                         </div>
                       )}
                     </div>
