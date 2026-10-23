@@ -2692,7 +2692,7 @@ export default function EquipmentTracker({
                     <span>💎 Giá gốc / Vốn nhập đồ (VNĐ)</span>
                   </label>
                   <span className="text-[10px] text-emerald-800 font-semibold bg-emerald-100/70 px-2 py-0.5 rounded-full">
-                    Dùng tính hoàn vốn & đền bù hỏng/mất
+                    Tự động chuyển vào Khoản chi & Doanh thu
                   </span>
                 </div>
                 <MoneyInput
@@ -2703,7 +2703,7 @@ export default function EquipmentTracker({
                   suffixColor="emerald"
                 />
                 <p className="text-[10.5px] text-emerald-700/90 leading-tight">
-                  💡 Nhập chi phí mua hoặc may mẫu này. Hệ thống sẽ tự động đo lường tiến độ hoàn vốn (ROI) qua các lần cho thuê.
+                  💡 Chi phí mua/may mẫu này sẽ tự động được ghi nhận vào mục <b>Khoản chi</b> và tính vào chi phí ở mục <b>Doanh thu</b> của tiệm.
                 </p>
               </div>
 

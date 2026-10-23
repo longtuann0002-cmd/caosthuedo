@@ -1677,9 +1677,47 @@ export default function App() {
   // Operations: CAMERAS
   const handleAddCamera = (newCam: Camera) => {
     setCameras(prev => [...prev, newCam]);
+
+    // Tự động chuyển giá gốc / vốn nhập đồ vào mục Khoản chi & Doanh thu
+    if (newCam.purchasePrice && newCam.purchasePrice > 0) {
+      const today = systemDate || new Date().toISOString().split('T')[0];
+      const newExpense: Expense = {
+        id: `exp-outfit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        description: `Vốn nhập trang phục: ${newCam.name}${newCam.serialNumber ? ` (#${newCam.serialNumber})` : ''}`,
+        amount: newCam.purchasePrice,
+        date: today,
+        category: 'Equipment',
+        operator: currentUser?.fullName || currentUser?.username || 'Quản trị viên'
+      };
+      setExpenses(prev => [newExpense, ...prev]);
+      addToast(
+        'Đã ghi nhận khoản chi!',
+        'success',
+        `Tự động chuyển ${newCam.purchasePrice.toLocaleString()}đ (vốn nhập ${newCam.name}) vào mục Khoản chi & Doanh thu.`
+      );
+    }
   };
 
   const handleUpdateCamera = (updatedCam: Camera) => {
+    // Nếu trước đó chưa có giá vốn (hoặc = 0) và bây giờ mới nhập giá vốn > 0 -> tự động tạo khoản chi
+    const oldCam = cameras.find(c => c.id === updatedCam.id);
+    if ((!oldCam?.purchasePrice || oldCam.purchasePrice === 0) && updatedCam.purchasePrice && updatedCam.purchasePrice > 0) {
+      const today = systemDate || new Date().toISOString().split('T')[0];
+      const newExpense: Expense = {
+        id: `exp-outfit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        description: `Vốn nhập trang phục: ${updatedCam.name}${updatedCam.serialNumber ? ` (#${updatedCam.serialNumber})` : ''}`,
+        amount: updatedCam.purchasePrice,
+        date: today,
+        category: 'Equipment',
+        operator: currentUser?.fullName || currentUser?.username || 'Quản trị viên'
+      };
+      setExpenses(prev => [newExpense, ...prev]);
+      addToast(
+        'Đã ghi nhận khoản chi!',
+        'success',
+        `Tự động chuyển ${updatedCam.purchasePrice.toLocaleString()}đ (vốn nhập ${updatedCam.name}) vào mục Khoản chi & Doanh thu.`
+      );
+    }
     setCameras(prev => prev.map(c => (c.id === updatedCam.id ? updatedCam : c)));
   };
 
