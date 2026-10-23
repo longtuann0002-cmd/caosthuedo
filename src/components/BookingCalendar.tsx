@@ -1541,7 +1541,9 @@ export default function BookingCalendar({
                             {/* Row 1: Code + Name + Size + Color + Status */}
                             <div className="flex items-start justify-between gap-2 mb-1.5">
                               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                <span className="font-mono text-[11px] font-black text-gray-800 shrink-0">{b.cameraShort}</span>
+                                {b.cameraShort && b.cameraShort !== b.cameraName && (
+                                  <span className="font-mono text-[11px] font-black text-gray-700 shrink-0 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200">{b.cameraShort}</span>
+                                )}
                                 <span className="text-xs font-bold text-gray-900 truncate">{b.cameraName}</span>
                                 <span className="bg-white/90 text-[9.5px] font-black px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
                                   {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
