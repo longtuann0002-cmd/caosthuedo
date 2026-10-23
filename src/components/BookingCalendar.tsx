@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RentalContract, BankConfig, Customer } from '../types';
 import MoneyInput from './MoneyInput';
@@ -306,13 +306,13 @@ export default function BookingCalendar({
     customerId: '',
     customerName: '',
     customerPhone: '',
-    customerDocType: 'CCCD_And_1M' as const,
+    customerDocType: 'CCCD' as const,
     customerDocNote: '',
     selectedCameraIds: [] as string[],
     printCounts: {} as Record<string, number>,
     startDate: '',
     endDate: '',
-    depositAmount: 1000000,
+    depositAmount: 0,
     paidAmount: 0,
     discountPercent: 0, // Tỷ lệ tự giảm giá (%)
     customFinalPrice: null as number | null,
@@ -386,19 +386,12 @@ export default function BookingCalendar({
     }
   }, [calculatedRecommendedDeposit, prevRecommendedDeposit, formData.depositAmount, formData.customerDocType]);
 
-  // Synchronize dynamic reservation deposit value, defaulting to exactly 50% of calculated total price
+  // Synchronize dynamic reservation deposit tracking
   useEffect(() => {
     if (calculatedTotal !== prevCalculatedTotal) {
-      const prevHalfPrice = Math.round(prevCalculatedTotal * 0.5);
-      if (prevCalculatedTotal === 0 || formData.paidAmount === prevHalfPrice) {
-        setFormData(prev => ({
-          ...prev,
-          paidAmount: Math.round(calculatedTotal * 0.5)
-        }));
-      }
       setPrevCalculatedTotal(calculatedTotal);
     }
-  }, [calculatedTotal, prevCalculatedTotal, formData.paidAmount]);
+  }, [calculatedTotal, prevCalculatedTotal]);
 
   // Calculate grid info for the rendered month OR week (T2 đầu tuần, CN cuối tuần)
   const calendarDays = useMemo(() => {
@@ -879,12 +872,13 @@ export default function BookingCalendar({
       customerId: '',
       customerName: '',
       customerPhone: '',
-      customerDocType: 'CCCD_And_1M',
+      customerDocType: 'CCCD',
       customerDocNote: '',
       selectedCameraIds: [],
+      printCounts: {},
       startDate: '',
       endDate: '',
-      depositAmount: 1000000,
+      depositAmount: 0,
       paidAmount: 0,
       discountPercent: 0,
       customFinalPrice: null,

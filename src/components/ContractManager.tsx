@@ -563,13 +563,13 @@ export default function ContractManager({
   const [newContractForm, setNewContractForm] = useState({
     customerName: '',
     customerPhone: '',
-    customerDocType: 'CCCD_And_1M' as const,
+    customerDocType: 'CCCD' as const,
     customerDocNote: '',
     selectedCameraIds: [] as string[],
     printCounts: {} as Record<string, number>,
     startDate: systemDate,
     endDate: systemDate,
-    depositAmount: 1000000,
+    depositAmount: 0,
     paidAmount: 0,
     discountPercent: 0, // Tỷ lệ tự giảm giá (%)
     customFinalPrice: null as number | null,
@@ -872,19 +872,12 @@ export default function ContractManager({
     }
   }, [calculatedRecommendedDeposit, prevRecommendedDeposit, newContractForm.depositAmount, newContractForm.customerDocType]);
 
-  // Synchronize dynamic reservation deposit value, defaulting to exactly 50% of calculated total price
+  // Synchronize dynamic reservation deposit tracking
   useEffect(() => {
     if (calculatedTotal !== prevCalculatedTotal) {
-      const prevHalfPrice = Math.round(prevCalculatedTotal * 0.5);
-      if (prevCalculatedTotal === 0 || newContractForm.paidAmount === prevHalfPrice) {
-        setNewContractForm(prev => ({
-          ...prev,
-          paidAmount: Math.round(calculatedTotal * 0.5)
-        }));
-      }
       setPrevCalculatedTotal(calculatedTotal);
     }
-  }, [calculatedTotal, prevCalculatedTotal, newContractForm.paidAmount]);
+  }, [calculatedTotal, prevCalculatedTotal]);
 
   const handleCreateContract = (e?: React.FormEvent, exportReceiptAfterSave = false) => {
     if (e) e.preventDefault();
@@ -964,13 +957,13 @@ export default function ContractManager({
     setNewContractForm({
       customerName: '',
       customerPhone: '',
-      customerDocType: 'CCCD_And_1M',
+      customerDocType: 'CCCD',
       customerDocNote: '',
       selectedCameraIds: [],
       printCounts: {},
       startDate: systemDate,
       endDate: systemDate,
-      depositAmount: 1000000,
+      depositAmount: 0,
       paidAmount: 0,
       discountPercent: 0,
       customFinalPrice: null,
