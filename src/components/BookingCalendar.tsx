@@ -1300,7 +1300,7 @@ export default function BookingCalendar({
                     }}
                     className={`border rounded-xl p-1 sm:p-2 cursor-pointer transition-all flex flex-col justify-start gap-1 sm:gap-1.5 ${statusStyle} ${monthStyle} ${
                       isSelected ? 'ring-2 ring-orange-500 border-orange-500 bg-orange-50/30 shadow-xs' : 'hover:shadow-3xs'
-                    } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
+                    } ${viewMode === 'week' ? 'min-h-[110px] sm:min-h-[160px]' : 'min-h-[80px] sm:min-h-[106px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
                     {/* Cell Header: Day number + count badge */}
@@ -1342,14 +1342,21 @@ export default function BookingCalendar({
                             }`}
                             title={`Khách: ${b.contract.customerName} | ${b.contract.customerPhone || ''}\n${b.cameraName} (${sizeLabel}${colorLabel})`}
                           >
-                            {/* Mobile: 1 dong gon - Ten khach + ma mau inline */}
-                            <div className="flex sm:hidden items-center gap-0.5 leading-none min-w-0">
-                              <span className="font-black text-[9px] truncate flex-1 text-gray-900 leading-tight">
-                                {shortCustomerName || displayName}
-                              </span>
-                              <span className="font-mono text-[7px] font-bold text-gray-500 shrink-0 ml-0.5">
-                                {displayName}
-                              </span>
+                            {/* Mobile: compact - Ten khach + ma mau, SĐT */}
+                            <div className="flex sm:hidden flex-col leading-none min-w-0 gap-0.5">
+                              <div className="flex items-center gap-0.5 min-w-0">
+                                <span className="font-black text-[9px] truncate flex-1 text-gray-900 leading-tight">
+                                  {shortCustomerName || displayName}
+                                </span>
+                                <span className="font-mono text-[7px] font-bold text-gray-500 shrink-0 ml-0.5">
+                                  {displayName}
+                                </span>
+                              </div>
+                              {b.contract.customerPhone && (
+                                <span className="font-mono text-[7px] font-bold text-gray-400 truncate leading-none">
+                                  📞 {b.contract.customerPhone}
+                                </span>
+                              )}
                             </div>
 
                             {/* Desktop: 2 dong day du */}
