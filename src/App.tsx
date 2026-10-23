@@ -3618,6 +3618,14 @@ export default function App() {
               <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded-md hidden sm:inline-block">
                 ESC
               </span>
+              <button
+                type="button"
+                onClick={() => setIsSearchModalOpen(false)}
+                className="ml-1 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
+                title="Đóng"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Category Tabs (Always Visible) */}
