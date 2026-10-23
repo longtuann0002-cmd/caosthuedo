@@ -70,25 +70,30 @@ html, body {
   letter-spacing: -0.01em;
 }
 
-/* ── Toàn app: nâng tất cả chữ 400 Regular lên 500 Medium ── */
-/* Áp dụng cho mọi element nội dung: p, span, div, td, li, label, input, button... */
-p, span, div, li, td, th, label, small, a, blockquote,
-input, textarea, select, option,
-.text-xs, .text-sm, .text-base, .text-lg {
-  font-weight: inherit;
-}
-
-/* font-normal (400) → nâng lên 500 */
-.font-normal {
+/* ── Toàn app: ép tất cả chữ lên 500 Medium, không để 400 Regular ── */
+/* Dùng !important để ghi đè Tailwind reset và utility classes */
+*, *::before, *::after {
   font-weight: 500 !important;
 }
 
-/* Tăng độ đậm nét toàn app: mọi chữ không có class font-* sẽ inherit 500 từ body */
+/* Giữ nguyên headings đậm hơn */
+h1, h2, h3, h4, h5, h6,
+.font-semibold, .font-bold, .font-extrabold, .font-black,
+[class*="font-semibold"], [class*="font-bold"] {
+  font-weight: revert !important;
+}
+.font-semibold { font-weight: 600 !important; }
+.font-bold     { font-weight: 700 !important; }
+.font-extrabold{ font-weight: 800 !important; }
+.font-black    { font-weight: 900 !important; }
+.font-medium   { font-weight: 500 !important; }
+.font-normal   { font-weight: 500 !important; }
+.font-light    { font-weight: 500 !important; }
+
 /* Tương phản rõ hơn trên mobile */
 @media (max-width: 768px) {
   body {
     font-weight: 500;
-    -webkit-text-stroke: 0.01em transparent; /* crisp rendering iOS */
   }
 }
 
