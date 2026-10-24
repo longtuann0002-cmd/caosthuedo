@@ -3377,8 +3377,8 @@ export default function ContractManager({
                     </div>
                   </div>
 
-                  {/* 6 nút chọn nhanh trải đều 100% bằng grid grid-cols-6, không bị tràn hay scrollbar */}
-                  <div className="grid grid-cols-6 gap-1 mt-2">
+                  {/* 6 nút chọn nhanh: 3 cột trên mobile, 6 cột trên PC để không bị tràn viền */}
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 mt-2">
                     {[0, 5, 10, 15, 20, 50].map((pct) => (
                       <button
                         key={pct}
