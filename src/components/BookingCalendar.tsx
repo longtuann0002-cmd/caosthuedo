@@ -1320,10 +1320,9 @@ export default function BookingCalendar({
                     </div>
 
                     {/* Booking item text blocks (Dong 1: Ten nguoi dat lich, Dong 2: Ma mau + Size) */}
-                    <div className="space-y-1 mt-0.5 flex-grow select-none w-full">
+                    <div className="space-y-0.5 sm:space-y-1 mt-0.5 flex-grow select-none w-full">
                       {bookings.map((b, idx) => {
                         const colors = getCameraColorProps(b.cameraShort);
-                        const isExcessOnMobile = idx >= 1;
                         const sizeLabel = b.isPrinter
                           ? `🖨️ ${b.printCount ?? '?'}t`
                           : (b.size === 'Freesize' || b.size === 'FS' ? 'FS' : `Size ${b.size || 'M'}`);
@@ -1349,9 +1348,7 @@ export default function BookingCalendar({
                         return (
                           <div
                             key={idx}
-                            className={`group flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative ${
-                              isExcessOnMobile ? 'hidden sm:flex' : 'flex'
-                            }`}
+                            className={`group flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative flex`}
                             title={`Khách: ${b.contract.customerName || 'Chưa có tên'} | ${b.contract.customerPhone || 'Chưa có SĐT'}\n${b.cameraName} (${sizeLabel})`}
                           >
                             {/* Mobile: Chỉ hiện pill mã viết tắt, gọn tối đa */}
@@ -1439,11 +1436,6 @@ export default function BookingCalendar({
                           </div>
                         );
                       })}
-                      {bookings.length > 1 && (
-                        <div className="sm:hidden text-[8px] font-black text-orange-700 bg-orange-100/70 py-0.5 rounded text-center leading-none">
-                          +{bookings.length - 1} đơn
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
