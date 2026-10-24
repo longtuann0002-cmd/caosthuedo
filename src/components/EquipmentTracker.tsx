@@ -1943,7 +1943,7 @@ export default function EquipmentTracker({
             if (e.target === e.currentTarget) e.preventDefault();
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden self-center border border-gray-100 animate-scale-up flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden self-center border border-gray-100 animate-scale-up flex flex-col max-h-[90vh]">
             <div className="bg-orange-600 text-white px-6 py-4 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg flex items-center gap-2">
                 <DressIcon className="w-5 h-5" /> {editingCamera ? 'Cập Nhật Trang Phục' : 'Thêm Trang Phục Mới Vào Tủ Đồ'}
@@ -1984,7 +1984,7 @@ export default function EquipmentTracker({
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
                   Phân loại trang phục *
                 </label>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {[
                     { id: 'Váy', label: 'Váy', icon: '👗' },
                     { id: 'Áo dài', label: 'Áo dài', icon: '🌸' },
@@ -2007,14 +2007,14 @@ export default function EquipmentTracker({
                           dailyRate: cat.id === 'Printer' && prev.dailyRate === 290000 ? 40000 : prev.dailyRate,
                           price1Day: cat.id === 'Printer' && prev.price1Day === 290000 ? 40000 : prev.price1Day,
                         }))}
-                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                        className={`p-2 sm:p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 min-w-0 ${
                           isSelected
                             ? 'bg-orange-50 border-orange-500 text-orange-700 font-black ring-2 ring-orange-200 shadow-3xs'
                             : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 font-bold'
                         }`}
                       >
                         <span className="text-xl sm:text-2xl">{cat.icon}</span>
-                        <span className="text-xs sm:text-sm leading-tight font-black">{cat.label}</span>
+                        <span className="text-xs sm:text-sm font-black whitespace-nowrap truncate w-full px-1">{cat.label}</span>
                       </button>
                     );
                   })}
@@ -2048,7 +2048,7 @@ export default function EquipmentTracker({
                         key={g.id}
                         type="button"
                         onClick={() => setFormState({ ...formState, gender: g.id as any })}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border text-center ${
+                        className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-bold transition cursor-pointer border text-center whitespace-nowrap ${
                           formState.gender === g.id
                             ? 'bg-orange-600 text-white border-orange-600 shadow-xs'
                             : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
