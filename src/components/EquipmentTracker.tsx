@@ -507,7 +507,7 @@ export default function EquipmentTracker({
 
     setFormState({
       name: cam.name,
-      shortName: cam.shortName,
+      shortName: cam.serialNumber || cam.shortName || '',
       category: cam.category,
       isPrinter: cam.category === 'Printer' || Boolean(cam.isPrinter),
       purchasePrice: cam.purchasePrice ?? (cam.depositAmount ? cam.depositAmount : cam.dailyRate * 5),
@@ -558,7 +558,8 @@ export default function EquipmentTracker({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formState.name || !formState.shortName || !formState.serialNumber) {
+    const effectiveShortName = (formState.serialNumber || formState.shortName || '').trim();
+    if (!formState.name || !formState.serialNumber) {
       setValidationError('Vui lòng điền đầy đủ các trường thông tin bắt buộc (*)!');
       return;
     }
@@ -580,6 +581,7 @@ export default function EquipmentTracker({
     // Chia 2 cho giá ngày thứ 2, chia 3 cho ngày thứ 3 để có đơn giá/ngày đúng
     const savedFormState = {
       ...formState,
+      shortName: effectiveShortName,
       size: sizeString,
       availableSizes: sizesToSave,
       isPrinter: formState.category === 'Printer',
@@ -2019,30 +2021,17 @@ export default function EquipmentTracker({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Tên viết tắt (Shorthand) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formState.shortName}
-                    onChange={e => setFormState({ ...formState, shortName: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: Váy VC01, Đầm D01, Áo AD02..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Mã Tag / Số hiệu (S/N) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formState.serialNumber}
-                    onChange={e => setFormState({ ...formState, serialNumber: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: VC-01, AD-05, DH-02..."
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Mã Tag / Số hiệu (S/N) *</label>
+                <input
+                  type="text"
+                  required
+                  value={formState.serialNumber}
+                  onChange={e => setFormState({ ...formState, serialNumber: e.target.value, shortName: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono font-bold"
+                  placeholder="VD: ĐL K01, VC-01, AD-05, DH-02..."
+                />
+                <p className="text-[11px] text-gray-400 mt-1">Mã ngắn gắn trên tem mác / móc áo để nhận diện và hiển thị nhanh trên lịch</p>
               </div>
 
               {/* Gender & Cleaning Status row */}
