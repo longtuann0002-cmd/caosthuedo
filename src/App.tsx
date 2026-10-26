@@ -302,6 +302,7 @@ export default function App() {
   // Modern Spotlight Search State
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
   const [searchFilterTab, setSearchFilterTab] = useState<'all' | 'outfits' | 'contracts' | 'customers'>('all');
   const [contractManagerSearch, setContractManagerSearch] = useState('');
   const [equipmentTrackerSearch, setEquipmentTrackerSearch] = useState('');
@@ -3818,15 +3819,28 @@ export default function App() {
                           >
                             <div className="flex flex-row gap-2.5 sm:gap-3 items-stretch relative">
                               {/* Left: Prominent 4:5 Portrait Image */}
-                              <div className="w-20 sm:w-28 aspect-[4/5] rounded-xl overflow-hidden shrink-0 border border-gray-200 bg-gray-100 shadow-xs relative group">
+                              <div
+                                onClick={() => {
+                                  const imgUrl = targetCam?.image || group.image;
+                                  if (imgUrl) setPreviewImage({ url: imgUrl, title: cleanName });
+                                }}
+                                className={`w-20 sm:w-28 aspect-[4/5] rounded-xl overflow-hidden shrink-0 border border-gray-200 bg-gray-100 shadow-xs relative group ${
+                                  (targetCam?.image || group.image) ? 'cursor-zoom-in' : ''
+                                }`}
+                                title={(targetCam?.image || group.image) ? 'Bấm để phóng to ảnh' : undefined}
+                              >
                                 {(targetCam?.image || group.image) ? (
                                   <>
                                     <img
                                       src={targetCam?.image || group.image}
                                       alt={cleanName}
-                                      className="w-full h-full object-cover object-top"
+                                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-200"
                                       referrerPolicy="no-referrer"
                                     />
+                                    {/* Zoom Hint Icon on hover */}
+                                    <div className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm pointer-events-none">
+                                      <Search className="w-3.5 h-3.5" />
+                                    </div>
                                   </>
                                 ) : (
                                   <div className="w-full h-full bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xl">
@@ -4168,6 +4182,43 @@ export default function App() {
               <span>Bấm <kbd className="font-mono bg-white border border-slate-200 px-1 rounded text-[9.5px]">ESC</kbd> để đóng</span>
             </div>
 
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Image Zoom Lightbox Modal */}
+      {previewImage && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div 
+            className="relative max-w-lg w-full bg-white rounded-2xl overflow-hidden shadow-2xl animate-scale-up border border-gray-150 flex flex-col max-h-[92vh]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/80">
+              <h4 className="text-sm font-extrabold text-gray-900 truncate pr-2 flex items-center gap-1.5">
+                <span>👗</span>
+                <span className="truncate">{previewImage.title}</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="w-7 h-7 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition flex items-center justify-center cursor-pointer text-base"
+                title="Đóng (ESC)"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3 overflow-auto flex items-center justify-center bg-slate-900/5">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[78vh] w-auto max-w-full rounded-xl object-contain shadow-sm"
+                referrerPolicy="no-referrer"
+              />
+            </div>
           </div>
         </div>,
         document.body
