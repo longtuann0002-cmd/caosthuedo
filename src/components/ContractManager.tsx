@@ -934,7 +934,7 @@ export default function ContractManager({
 
       return {
         cameraId: id,
-        cameraName: isPrinter ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)` : (cam?.name || 'Trang phục'),
+        cameraName: isPrinter ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)` : ((cam?.name || 'Trang phục').replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()),
         dailyRate: rate,
         quantity: 1,
         printCount: prints,
@@ -1257,7 +1257,7 @@ export default function ContractManager({
                         const displaySize = i.size || matchedCam?.size;
                         return (
                           <span key={idx} className="bg-orange-50/70 text-orange-700 border border-orange-100 text-[10px] sm:text-xs px-2 py-0.5 rounded-lg font-bold inline-flex items-center gap-1">
-                            <Briefcase className="w-3 h-3 text-orange-400" /> {i.cameraName}
+                            <Briefcase className="w-3 h-3 text-orange-400" /> {i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
                             {displaySize && <span className="text-gray-600 font-semibold text-[9px] bg-white/80 px-1 py-0.2 rounded border border-gray-200">Size {displaySize}</span>}
                             {displayColor && <span className="text-rose-600 font-bold text-[9px] bg-rose-50 px-1 py-0.2 rounded border border-rose-200">🎨 {displayColor}</span>}
                           </span>
@@ -1581,13 +1581,13 @@ export default function ContractManager({
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="max-w-[220px] truncate" title={c.items.map(i => i.cameraName).join(', ')}>
+                        <div className="max-w-[220px] truncate" title={c.items.map(i => i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()).join(', ')}>
                           {c.items.map((i, idx) => {
                             const matchedCam = cameras.find(cam => cam.id === i.cameraId || cam.name.toLowerCase() === i.cameraName.toLowerCase());
                             const displayColor = i.color || matchedCam?.color;
                             return (
                               <span key={idx} className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-100 text-xs px-2 py-0.5 rounded-md font-medium mr-1 mb-1">
-                                <span>{i.cameraName}</span>
+                                <span>{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
                                 {displayColor && <span className="text-rose-600 font-bold text-[10px]">🎨 {displayColor}</span>}
                               </span>
                             );
@@ -2011,7 +2011,7 @@ export default function ContractManager({
                             ) : (
                               <span className="text-orange-500 text-sm shrink-0">👗</span>
                             )}
-                            <span className="truncate">{i.cameraName}</span>
+                            <span className="truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
                             {displaySize && (
                               <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
                                 Size {displaySize}

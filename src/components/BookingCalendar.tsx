@@ -848,7 +848,9 @@ export default function BookingCalendar({
 
       return {
         cameraId: id,
-        cameraName: isPrinter ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)` : (cam?.name || 'Trang phục'),
+        cameraName: isPrinter
+          ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)`
+          : (cam?.name?.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || 'Trang phục'),
         dailyRate: rate,
         quantity: 1,
         printCount: prints,
@@ -1336,8 +1338,9 @@ export default function BookingCalendar({
                         // TÊN VIẾT TẮT TRANG PHỤC: Ưu tiên mã tag/serialNumber hoặc tên viết tắt, tuyệt đối ẩn tên đầy đủ để không bị trùng lặp
                         const outfitShortCode = (matchedCam?.serialNumber || b.cameraShort || matchedCam?.shortName || b.cleanName || b.cameraName || 'Đồ thuê').trim();
                         
-                        // TÊN ĐẦY ĐỦ TRANG PHỤC
-                        const outfitName = (matchedCam?.name || b.cleanName || b.cameraName || '').trim();
+                        // TÊN ĐẦY ĐỦ TRANG PHỤC (Lược bỏ hậu tố Size trong tên để không bị hiển thị 2 lần)
+                        const rawOutfitName = (b.cleanName || matchedCam?.name || b.cameraName || '').trim();
+                        const outfitName = rawOutfitName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
 
                         // TÊN KHÁCH HÀNG: Chỉ lấy tên chính ngắn gọn (ví dụ: Thu Hà -> Hà)
                         const rawCustName = (b.contract.customerName || '').trim();
@@ -1548,7 +1551,9 @@ export default function BookingCalendar({
                             <div className="flex items-start justify-between gap-2 mb-1.5">
                               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                                 <span className="font-mono text-[11px] font-black text-gray-700 shrink-0 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200">{b.cameraShort}</span>
-                                <span className="text-sm font-black text-gray-900 truncate">{b.cameraName}</span>
+                                <span className="text-sm font-black text-gray-900 truncate">
+                                  {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
+                                </span>
                                 <span className="bg-white/90 text-[9.5px] font-black px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
                                   {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
                                 </span>
@@ -1677,7 +1682,7 @@ export default function BookingCalendar({
                                       {b.cameraShort}
                                     </span>
                                     <span className="text-xs font-bold text-gray-900 truncate">
-                                      {b.cameraName}
+                                      {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
                                     </span>
                                     <span className="bg-white/90 text-[9px] font-black px-1.5 py-0.2 rounded border border-gray-200">
                                       Size {b.size || 'FS'}
@@ -1764,7 +1769,9 @@ export default function BookingCalendar({
                         <span className={`${colors.tagColor} text-xs font-black px-2 py-0.5 rounded-lg font-mono shrink-0`}>
                           {b.cameraShort}
                         </span>
-                        <h4 className="font-extrabold text-gray-900 text-sm truncate">{b.cameraName}</h4>
+                        <h4 className="font-extrabold text-gray-900 text-sm truncate">
+                          {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
+                        </h4>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border ${
                         b.contract.status === 'Active' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
@@ -3080,7 +3087,7 @@ export default function BookingCalendar({
                             ) : (
                               <span className="text-orange-500 text-xs shrink-0">👗</span>
                             )}
-                            <span className="truncate">{i.cameraName}</span>
+                            <span className="truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
                             {displaySize && (
                               <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
                                 Size {displaySize}
