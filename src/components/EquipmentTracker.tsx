@@ -214,6 +214,7 @@ export default function EquipmentTracker({
     sizeColorMap: {} as Record<string, string>, // màu riêng cho từng size khi tách
     sizeImageMap: {} as Record<string, string>, // ảnh riêng cho từng size khi tách
     sizeQtyMap: {} as Record<string, number>, // số lượng chiếc cho từng size
+    sizeColorVariants: {} as Record<string, string[]>, // màu riêng cho từng chiếc trong cùng size
     color: '',
     gender: 'Nữ' as 'Nữ' | 'Nam' | 'Unisex',
     cleaningStatus: 'Clean' as 'Clean' | 'Laundry' | 'Mending',
@@ -445,6 +446,7 @@ export default function EquipmentTracker({
       sizeColorMap: { [nextSize]: rep.color || '' },
       sizeImageMap: {},
       sizeQtyMap: {},
+      sizeColorVariants: {},
       color: rep.color || '',
       gender: (rep.gender as any) || 'Nữ',
       cleaningStatus: 'Clean',
@@ -483,6 +485,7 @@ export default function EquipmentTracker({
       sizeColorMap: {},
       sizeImageMap: {},
       sizeQtyMap: {},
+      sizeColorVariants: {},
       color: '',
       gender: 'Nữ',
       cleaningStatus: 'Clean',
@@ -530,6 +533,7 @@ export default function EquipmentTracker({
       sizeColorMap: (rawSizes.length > 0 ? rawSizes : ['M']).reduce((acc, s) => ({ ...acc, [s]: cam.color || '' }), {}),
       sizeImageMap: {},
       sizeQtyMap: {},
+      sizeColorVariants: {},
       color: cam.color || '',
       gender: (cam.gender as any) || 'Nữ',
       cleaningStatus: (cam.cleaningStatus as any) || 'Clean',
@@ -657,10 +661,11 @@ export default function EquipmentTracker({
         let globalIdx = 0;
         sizesToSave.forEach((sz) => {
           const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-          const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || '';
           const sizeSpecificImg = (formState.sizeImageMap[sz] && formState.sizeImageMap[sz].trim()) || imageRef;
           const qty = formState.sizeQtyMap[sz] || 1;
+          const colorVariants = formState.sizeColorVariants[sz] || [(formState.sizeColorMap[sz] || savedFormState.color || '')];
           for (let q = 0; q < qty; q++) {
+            const pieceColor = (colorVariants[q] !== undefined ? colorVariants[q] : colorVariants[0]) || savedFormState.color || '';
             const suffix = qty > 1 ? `${baseSerial}-${sizeCode}-${q + 1}` : `${baseSerial}-${sizeCode}`;
             const newCam: Camera = {
               ...savedFormState,
@@ -669,7 +674,7 @@ export default function EquipmentTracker({
               serialNumber: suffix,
               size: sz,
               availableSizes: [sz],
-              color: sizeColor,
+              color: pieceColor,
               image: sizeSpecificImg
             };
             onAddCamera(newCam);
@@ -683,8 +688,9 @@ export default function EquipmentTracker({
         const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || '';
         const sizeSpecificImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
         const singleQty = formState.sizeQtyMap[singleSize] || 1;
-        const singleSizeCode = singleSize === 'Freesize' ? 'FS' : singleSize;
+        const singleColorVariants = formState.sizeColorVariants[singleSize] || [sizeColor];
         for (let q = 0; q < singleQty; q++) {
+          const pieceColor = (singleColorVariants[q] !== undefined ? singleColorVariants[q] : singleColorVariants[0]) || sizeColor;
           const suffix = singleQty > 1 ? `${rawSerial}-${q + 1}` : rawSerial;
           const newCam: Camera = {
             id: `outfit-${Date.now()}-${q}`,
@@ -692,7 +698,7 @@ export default function EquipmentTracker({
             serialNumber: suffix,
             size: singleSize,
             availableSizes: [singleSize],
-            color: sizeColor,
+            color: pieceColor,
             image: sizeSpecificImg
           };
           onAddCamera(newCam);
@@ -2250,99 +2256,119 @@ export default function EquipmentTracker({
                             {/* Current color badge pill */}
                             <div className="inline-flex items-center gap-1.5 bg-white border border-orange-200/90 px-2.5 py-1 rounded-full text-[11px] font-bold text-orange-950 shadow-2xs self-start sm:self-auto">
                               <span className={`w-2.5 h-2.5 rounded-full ${currentColor ? 'bg-orange-500 ring-1 ring-orange-300' : 'bg-gray-300'} shrink-0`}></span>
-                              {currentColor ? (
-                                <span>Màu: <strong className="text-orange-700 font-black">{currentColor}</strong></span>
-                              ) : (
-                                <span className="text-gray-400 font-medium italic">Chưa nhập màu</span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Color picker section: Wide input + Quick color tags */}
-                          <div className="space-y-1.5 bg-gray-50/80 border border-gray-200/80 rounded-lg p-2.5">
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                              <label className="text-[11px] font-bold text-gray-700 shrink-0 flex items-center gap-1">
-                                <span>🎨 Màu sắc riêng cho Size {sz}:</span>
-                              </label>
-                              <input
-                                type="text"
-                                value={formState.sizeColorMap[sz] ?? ''}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  setFormState(prev => ({
-                                    ...prev,
-                                    sizeColorMap: {
-                                      ...prev.sizeColorMap,
-                                      [sz]: val
-                                    }
-                                  }));
-                                }}
-                                placeholder="Gõ màu tùy ý (VD: Đỏ đô, Be sữa, Trắng ngà, Xanh pastel...)"
-                                className="flex-1 bg-white border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-850 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
-                              />
-                            </div>
-
-                            {/* Mini quick color tags */}
-                            <div className="flex items-center gap-1 flex-wrap pl-0.5">
-                              <span className="text-[10px] text-gray-400 font-medium shrink-0">Chọn nhanh:</span>
-                              {[
-                                { name: '⚪ Trắng', full: 'Trắng tinh khôi' },
-                                { name: '🔴 Đỏ', full: 'Đỏ đô' },
-                                { name: '⚫ Đen', full: 'Đen tuyền' },
-                                { name: '🌾 Be', full: 'Be sữa' },
-                                { name: '🌸 Hồng', full: 'Hồng phấn' },
-                                { name: '🔵 Xanh', full: 'Xanh pastel' },
-                                { name: '🟡 Vàng', full: 'Vàng đồng' },
-                                { name: '🟣 Tím', full: 'Tím mộng mơ' },
-                                { name: '🟤 Nâu', full: 'Nâu tây' }
-                              ].map(col => {
-                                const isColActive = currentColor === col.full || (formState.sizeColorMap[sz] === col.name);
-                                return (
-                                  <button
-                                    key={col.name}
-                                    type="button"
-                                    onClick={() => {
-                                      setFormState(prev => ({
-                                        ...prev,
-                                        sizeColorMap: {
-                                          ...prev.sizeColorMap,
-                                          [sz]: col.full
-                                        }
-                                      }));
-                                    }}
-                                    className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer font-bold border ${
-                                      isColActive
-                                        ? 'bg-orange-600 text-white border-orange-600 shadow-2xs ring-1 ring-orange-300'
-                                        : 'bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-800 border-gray-200'
-                                    }`}
-                                    title={`Chọn màu ${col.full}`}
-                                  >
-                                    {col.name}
-                                  </button>
-                                );
-                              })}
+                              {(() => {
+                                const qty2 = formState.sizeQtyMap[sz] || 1;
+                                const allColors = (formState.sizeColorVariants[sz] || [currentColor]).filter(Boolean);
+                                if (allColors.length > 1) {
+                                  return <span className="text-[10px]">{allColors.map((col, i) => <span key={i} className="font-black text-orange-700">{i > 0 ? ' · ' : ''}{col || '?'}</span>)}</span>;
+                                }
+                                return currentColor
+                                  ? <span>Màu: <strong className="text-orange-700 font-black">{currentColor}</strong></span>
+                                  : <span className="text-gray-400 font-medium italic">Chưa nhập màu</span>;
+                              })()}
                             </div>
                           </div>
 
 
-                          {/* Số lượng chiếc cho size này */}
-                          <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-200/70 rounded-lg px-2.5 py-1.5">
-                            <span className="text-[11px] font-bold text-blue-700 shrink-0">📦 Số lượng Size {sz}:</span>
-                            <div className="flex items-center gap-1.5 ml-auto">
-                              <button
-                                type="button"
-                                onClick={() => setFormState(prev => ({ ...prev, sizeQtyMap: { ...prev.sizeQtyMap, [sz]: Math.max(1, (prev.sizeQtyMap[sz] || 1) - 1) } }))}
-                                className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
-                              >−</button>
-                              <span className="text-sm font-black text-blue-800 min-w-[20px] text-center">{formState.sizeQtyMap[sz] || 1}</span>
-                              <button
-                                type="button"
-                                onClick={() => setFormState(prev => ({ ...prev, sizeQtyMap: { ...prev.sizeQtyMap, [sz]: (prev.sizeQtyMap[sz] || 1) + 1 } }))}
-                                className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
-                              >+</button>
-                            </div>
-                            <span className="text-[10px] text-blue-600/80 font-medium">chiếc</span>
-                          </div>
+                          {/* Số lượng + Màu riêng từng chiếc */}
+                          {(() => {
+                            const qty = formState.sizeQtyMap[sz] || 1;
+                            const variants = formState.sizeColorVariants[sz] || [formState.sizeColorMap[sz] || ''];
+                            const COLORS = [
+                              { name: '⚪ Trắng', full: 'Trắng tinh khôi' }, { name: '🔴 Đỏ', full: 'Đỏ đô' },
+                              { name: '⚫ Đen', full: 'Đen tuyền' }, { name: '🌾 Be', full: 'Be sữa' },
+                              { name: '🌸 Hồng', full: 'Hồng phấn' }, { name: '🔵 Xanh', full: 'Xanh pastel' },
+                              { name: '🟡 Vàng', full: 'Vàng đồng' }, { name: '🟣 Tím', full: 'Tím mộng mơ' },
+                              { name: '🟤 Nâu', full: 'Nâu tây' }
+                            ];
+                            return (
+                              <div className="space-y-2">
+                                {/* Header: Số lượng điều chỉnh */}
+                                <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-200/70 rounded-lg px-2.5 py-1.5">
+                                  <span className="text-[11px] font-bold text-blue-700 shrink-0">📦 Số lượng Size {sz}:</span>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <button type="button"
+                                      onClick={() => {
+                                        const newQty = Math.max(1, qty - 1);
+                                        const newVariants = variants.slice(0, newQty);
+                                        setFormState(prev => ({
+                                          ...prev,
+                                          sizeQtyMap: { ...prev.sizeQtyMap, [sz]: newQty },
+                                          sizeColorVariants: { ...prev.sizeColorVariants, [sz]: newVariants }
+                                        }));
+                                      }}
+                                      className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
+                                    >−</button>
+                                    <span className="text-sm font-black text-blue-800 min-w-[20px] text-center">{qty}</span>
+                                    <button type="button"
+                                      onClick={() => {
+                                        const newQty = qty + 1;
+                                        const newVariants = [...variants, variants[0] || ''];
+                                        setFormState(prev => ({
+                                          ...prev,
+                                          sizeQtyMap: { ...prev.sizeQtyMap, [sz]: newQty },
+                                          sizeColorVariants: { ...prev.sizeColorVariants, [sz]: newVariants }
+                                        }));
+                                      }}
+                                      className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
+                                    >+</button>
+                                  </div>
+                                  <span className="text-[10px] text-blue-600/80 font-medium">chiếc</span>
+                                </div>
+                                {/* Từng chiếc: màu riêng */}
+                                {Array.from({ length: qty }).map((_, qIdx) => {
+                                  const pieceColor = variants[qIdx] ?? (formState.sizeColorMap[sz] || '');
+                                  return (
+                                    <div key={qIdx} className="space-y-1.5 bg-gray-50/80 border border-gray-200/80 rounded-lg p-2.5">
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                        <label className="text-[11px] font-bold text-gray-700 shrink-0 flex items-center gap-1">
+                                          <span>🎨 {qty > 1 ? `Chiếc ${qIdx + 1} – Màu:` : `Màu sắc Size ${sz}:`}</span>
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={pieceColor}
+                                          onChange={e => {
+                                            const val = e.target.value;
+                                            const updated = [...(formState.sizeColorVariants[sz] || Array(qty).fill(''))];
+                                            updated[qIdx] = val;
+                                            setFormState(prev => ({
+                                              ...prev,
+                                              sizeColorVariants: { ...prev.sizeColorVariants, [sz]: updated },
+                                              sizeColorMap: { ...prev.sizeColorMap, [sz]: qIdx === 0 ? val : (prev.sizeColorMap[sz] || '') }
+                                            }));
+                                          }}
+                                          placeholder="Gõ màu tùy ý (VD: Đỏ đô, Be sữa...)"
+                                          className="flex-1 bg-white border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-850 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-1 flex-wrap pl-0.5">
+                                        <span className="text-[10px] text-gray-400 font-medium shrink-0">Chọn nhanh:</span>
+                                        {COLORS.map(col => {
+                                          const isActive = pieceColor === col.full;
+                                          return (
+                                            <button key={col.name} type="button"
+                                              onClick={() => {
+                                                const updated = [...(formState.sizeColorVariants[sz] || Array(qty).fill(''))];
+                                                updated[qIdx] = col.full;
+                                                setFormState(prev => ({
+                                                  ...prev,
+                                                  sizeColorVariants: { ...prev.sizeColorVariants, [sz]: updated },
+                                                  sizeColorMap: { ...prev.sizeColorMap, [sz]: qIdx === 0 ? col.full : (prev.sizeColorMap[sz] || '') }
+                                                }));
+                                              }}
+                                              className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer font-bold border ${isActive ? 'bg-orange-600 text-white border-orange-600 shadow-2xs ring-1 ring-orange-300' : 'bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-800 border-gray-200'}`}
+                                              title={`Chọn màu ${col.full}`}
+                                            >{col.name}</button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+
                           {/* Image row for this specific size / color */}
                           <div className="flex items-center gap-2 pt-1 border-t border-dashed border-gray-150 text-xs">
                             <div className="w-9 h-9 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center">
