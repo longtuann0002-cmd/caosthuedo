@@ -3596,7 +3596,7 @@ export default function App() {
           <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden z-50 animate-fade-in divide-y divide-slate-100 flex flex-col max-h-[88vh]">
             
             {/* Search Input Bar */}
-            <div className="p-3.5 sm:p-4 flex items-center gap-3">
+            <div className="p-3.5 sm:p-4 flex items-center gap-3 shrink-0 bg-white border-b border-slate-150">
               <Search className="w-5 h-5 text-slate-400 shrink-0" />
               <input
                 ref={searchInputRef}
@@ -3629,7 +3629,7 @@ export default function App() {
             </div>
 
             {/* Category Tabs (Always Visible) */}
-            <div className="px-3 sm:px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-1.5 overflow-x-auto scrollbar-none sticky top-0 z-10">
+            <div className="px-3 sm:px-4 py-2.5 bg-slate-50 border-b border-slate-200/80 flex items-center gap-2 overflow-x-auto scrollbar-none shrink-0 min-h-[50px]">
               <button
                 type="button"
                 onClick={() => setSearchFilterTab('all')}
