@@ -59,6 +59,8 @@ interface EquipmentTrackerProps {
   contracts?: RentalContract[];
   initialSearchQuery?: string;
   systemDate?: string;
+  onRestoreFromExpenses?: () => void;
+  outfitExpensesCount?: number;
 }
 
 export default function EquipmentTracker({
@@ -70,7 +72,9 @@ export default function EquipmentTracker({
   currentUserRole,
   contracts = [],
   initialSearchQuery,
-  systemDate = '2026-06-17'
+  systemDate = '2026-06-17',
+  onRestoreFromExpenses,
+  outfitExpensesCount = 0
 }: EquipmentTrackerProps) {
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
 
@@ -896,6 +900,16 @@ export default function EquipmentTracker({
               </button>
             </div>
 
+            {onRestoreFromExpenses && outfitExpensesCount > 0 && (
+              <button
+                type="button"
+                onClick={onRestoreFromExpenses}
+                className="bg-amber-50 border border-amber-300 text-amber-900 font-bold px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-amber-100 transition-all cursor-pointer shadow-3xs"
+                title="Khôi phục các sản phẩm bị thiếu từ danh sách Khoản chi"
+              >
+                <span>🔄 Khôi phục đồ từ Khoản chi</span>
+              </button>
+            )}
             <button
               onClick={handleExportCSV}
               className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"

@@ -10,12 +10,14 @@ interface ExpenseTrackerProps {
   expenses: Expense[];
   onAddExpense: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
+  onRestoreToInventory?: () => void;
 }
 
 export default function ExpenseTracker({
   expenses,
   onAddExpense,
-  onDeleteExpense
+  onDeleteExpense,
+  onRestoreToInventory
 }: ExpenseTrackerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
@@ -172,6 +174,16 @@ export default function ExpenseTracker({
             </p>
           </div>
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
+            {onRestoreToInventory && (
+              <button
+                type="button"
+                onClick={onRestoreToInventory}
+                className="bg-emerald-50 border border-emerald-300 text-emerald-900 font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-emerald-100 transition-all cursor-pointer shadow-3xs"
+                title="Tự động đồng bộ các khoản chi mua đồ thành sản phẩm trong Kho"
+              >
+                <span>👗 Khôi phục đồ vào Kho</span>
+              </button>
+            )}
             <button
               onClick={handleExportCSV}
               className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"

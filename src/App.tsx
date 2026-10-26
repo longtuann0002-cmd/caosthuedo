@@ -1688,7 +1688,108 @@ export default function App() {
     }
   };
 
-  // Operations: CAMERAS
+
+  // Khôi phục trang phục bị mất trực tiếp từ các khoản chi đã ghi nhận
+  const handleRestoreFromExpenses = () => {
+    const outfitExpenses = expenses.filter(e => e.description && e.description.includes('Vốn nhập trang phục:'));
+    if (outfitExpenses.length === 0) {
+      addToast('Không có dữ liệu', 'warning', 'Trong mục Khoản chi chưa có khoản vốn nhập trang phục nào.');
+      return;
+    }
+
+    const currentSerials = new Set(cameras.map(c => (c.serialNumber || '').trim().toUpperCase()));
+    const addedSerials = new Set(currentSerials);
+    const restoredCams: Camera[] = [];
+
+    const defaultImages: Record<string, string> = {
+      'Áo dài': 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=600',
+      'Váy': 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=600',
+      'Dạ hội': 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&fit=crop&q=80&w=600',
+      'Phụ kiện': 'https://images.unsplash.com/photo-1535295972055-1c762f4483e5?auto=format&fit=crop&q=80&w=600',
+      'Khác': 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=600'
+    };
+
+    outfitExpenses.forEach((e, idx) => {
+      const match = e.description.match(/Vốn nhập trang phục:\s*(.*?)(?:\s*\(#([^)]+)\))?$/);
+      if (!match) return;
+      const fullName = match[1].trim();
+      const serial = match[2] ? match[2].trim() : `SP-${idx + 1}`;
+      const serialUpper = serial.toUpperCase();
+
+      if (addedSerials.has(serialUpper)) return; // Bỏ qua nếu đã có trong kho
+      addedSerials.add(serialUpper);
+
+      // Nhận diện danh mục
+      const n = (fullName + ' ' + serial).toLowerCase();
+      let category: Camera['category'] = 'Khác';
+      if (n.includes('áo dài') || n.startsWith('ad ') || n.startsWith('ad-')) category = 'Áo dài';
+      else if (n.includes('quạt') || n.includes('guốc') || n.includes('túi') || n.includes('phụ kiện') || n.startsWith('qg') || n.startsWith('qtq') || n.startsWith('gbn') || n.startsWith('tx') || n.startsWith('gm')) category = 'Phụ kiện';
+      else if (n.includes('đầm') || n.includes('dạ hội')) category = 'Dạ hội';
+      else if (n.includes('váy') || n.includes('yếm') || n.includes('set')) category = 'Váy';
+
+      // Nhận diện kích cỡ
+      let size = 'Freesize';
+      const sizeMatch = (fullName + ' ' + serial).match(/\(Size\s+([A-Z0-9]+)\)/i) || (fullName + ' ' + serial).match(/-([XS|S|M|L|XL|XXL|FS]+)(?:-\d+)?$/i);
+      if (sizeMatch) {
+        size = sizeMatch[1].toUpperCase();
+      } else if (category === 'Phụ kiện') {
+        size = 'Freesize';
+      }
+
+      const purchasePrice = e.amount || 0;
+      let dailyRate = 0;
+      if (purchasePrice > 0) {
+        if (category === 'Phụ kiện') {
+          dailyRate = Math.max(30000, Math.round((purchasePrice * 0.25) / 5000) * 5000);
+        } else {
+          dailyRate = Math.max(70000, Math.round((purchasePrice * 0.28) / 10000) * 10000);
+        }
+      }
+
+      const p1 = dailyRate;
+      const p2 = Math.max(0, p1 - 20000);
+      const p3 = Math.max(0, p1 - 30000);
+
+      const newCam: Camera = {
+        id: `outfit-rec-${Date.now()}-${idx}`,
+        name: fullName,
+        shortName: serial,
+        serialNumber: serial,
+        category,
+        size,
+        availableSizes: [size],
+        color: '',
+        gender: 'Nữ',
+        status: 'Available',
+        cleaningStatus: 'Clean',
+        purchasePrice,
+        dailyRate,
+        price1Day: p1,
+        price2Days: p2,
+        price3Days: p3,
+        price4DaysPlus: Math.max(0, p1 - 40000),
+        depositAmount: Math.round((purchasePrice * 1.5) / 50000) * 50000 || 500000,
+        image: defaultImages[category] || defaultImages['Khác'],
+        description: `Trang phục ${fullName} (Mã tag ${serial})`
+      };
+
+      restoredCams.push(newCam);
+    });
+
+    if (restoredCams.length === 0) {
+      addToast('Kho đồ đã đồng bộ đầy đủ', 'info', 'Tất cả các món trang phục trong mục Khoản chi đã có mặt trong Kho đồ, không có món nào bị thiếu.');
+      return;
+    }
+
+    setCameras(prev => [...prev, ...restoredCams]);
+    addToast(
+      'Khôi phục thành công!',
+      'success',
+      `Đã khôi phục thành công ${restoredCams.length} trang phục & phụ kiện từ mục Khoản chi vào Kho đồ!`
+    );
+  };
+
+    // Operations: CAMERAS
   const handleAddCamera = (newCam: Camera) => {
     setCameras(prev => [...prev, newCam]);
 
@@ -3549,6 +3650,8 @@ export default function App() {
                   contracts={contracts}
                   initialSearchQuery={equipmentTrackerSearch}
                   systemDate={systemDate}
+                  onRestoreFromExpenses={handleRestoreFromExpenses}
+                  outfitExpensesCount={expenses.filter(e => e.description && e.description.includes('Vốn nhập trang phục:')).length}
                 />
               </TabErrorBoundary>
             )}
@@ -3591,6 +3694,7 @@ export default function App() {
                     expenses={expenses}
                     onAddExpense={handleAddExpense}
                     onDeleteExpense={handleDeleteExpense}
+                    onRestoreToInventory={handleRestoreFromExpenses}
                   />
                 ) : (
                   <div className="bg-white rounded-2xl p-8 text-center border border-gray-150 shadow-xs">
