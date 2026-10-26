@@ -213,6 +213,7 @@ export default function EquipmentTracker({
     splitBySize: false,
     sizeColorMap: {} as Record<string, string>, // màu riêng cho từng size khi tách
     sizeImageMap: {} as Record<string, string>, // ảnh riêng cho từng size khi tách
+    sizeQtyMap: {} as Record<string, number>, // số lượng chiếc cho từng size
     color: '',
     gender: 'Nữ' as 'Nữ' | 'Nam' | 'Unisex',
     cleaningStatus: 'Clean' as 'Clean' | 'Laundry' | 'Mending',
@@ -650,21 +651,27 @@ export default function EquipmentTracker({
       if (sizesToSave.length > 1) {
         const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
         const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || rawSerial;
-        sizesToSave.forEach((sz, idx) => {
+        let globalIdx = 0;
+        sizesToSave.forEach((sz) => {
           const sizeCode = sz === 'Freesize' ? 'FS' : sz;
           const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || '';
           const sizeSpecificImg = (formState.sizeImageMap[sz] && formState.sizeImageMap[sz].trim()) || imageRef;
-          const newCam: Camera = {
-            ...savedFormState,
-            id: `outfit-${Date.now()}-${idx}`,
-            name: `${savedFormState.name} (${sz === 'Freesize' ? 'Freesize' : `Size ${sz}`})`,
-            serialNumber: `${baseSerial}-${sizeCode}`,
-            size: sz,
-            availableSizes: [sz],
-            color: sizeColor,
-            image: sizeSpecificImg
-          };
-          onAddCamera(newCam);
+          const qty = formState.sizeQtyMap[sz] || 1;
+          for (let q = 0; q < qty; q++) {
+            const suffix = qty > 1 ? `${baseSerial}-${sizeCode}-${q + 1}` : `${baseSerial}-${sizeCode}`;
+            const newCam: Camera = {
+              ...savedFormState,
+              id: `outfit-${Date.now()}-${globalIdx}`,
+              name: `${savedFormState.name} (${sz === 'Freesize' ? 'Freesize' : `Size ${sz}`})`,
+              serialNumber: suffix,
+              size: sz,
+              availableSizes: [sz],
+              color: sizeColor,
+              image: sizeSpecificImg
+            };
+            onAddCamera(newCam);
+            globalIdx++;
+          }
         });
       } else {
         // Chỉ chọn 1 size duy nhất (VD: Freesize hoặc Size M)
@@ -672,16 +679,21 @@ export default function EquipmentTracker({
         const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
         const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || '';
         const sizeSpecificImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
-        const newCam: Camera = {
-          id: `outfit-${Date.now()}`,
-          ...savedFormState,
-          serialNumber: rawSerial,
-          size: singleSize,
-          availableSizes: [singleSize],
-          color: sizeColor,
-          image: sizeSpecificImg
-        };
-        onAddCamera(newCam);
+        const singleQty = formState.sizeQtyMap[singleSize] || 1;
+        const singleSizeCode = singleSize === 'Freesize' ? 'FS' : singleSize;
+        for (let q = 0; q < singleQty; q++) {
+          const suffix = singleQty > 1 ? `${rawSerial}-${q + 1}` : rawSerial;
+          const newCam: Camera = {
+            id: `outfit-${Date.now()}-${q}`,
+            ...savedFormState,
+            serialNumber: suffix,
+            size: singleSize,
+            availableSizes: [singleSize],
+            color: sizeColor,
+            image: sizeSpecificImg
+          };
+          onAddCamera(newCam);
+        }
       }
     }
     setShowAddModal(false);
@@ -2098,7 +2110,8 @@ export default function EquipmentTracker({
                             ...prev,
                             selectedSizes: newSizes,
                             size: newSizes.join(', '),
-                            sizeColorMap: nextColorMap
+                            sizeColorMap: nextColorMap,
+                            sizeQtyMap: {}
                           }));
                         }}
                         className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
@@ -2118,7 +2131,8 @@ export default function EquipmentTracker({
                             ...prev,
                             selectedSizes: newSizes,
                             size: newSizes.join(', '),
-                            sizeColorMap: nextColorMap
+                            sizeColorMap: nextColorMap,
+                            sizeQtyMap: {}
                           }));
                         }}
                         className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
@@ -2192,7 +2206,7 @@ export default function EquipmentTracker({
                 <div className="bg-white rounded-xl border border-orange-200/90 shadow-2xs overflow-hidden">
                   <div className="bg-orange-100/60 px-3 py-2 border-b border-orange-200/80 flex items-center justify-between flex-wrap gap-1">
                     <span className="text-xs font-black text-orange-950 flex items-center gap-1.5">
-                      <span>⚡ Danh sách sản phẩm sẽ tự động tạo ({formState.selectedSizes.length} chiếc):</span>
+                      <span>⚡ Danh sách sản phẩm sẽ tự động tạo ({formState.selectedSizes.reduce((acc, sz) => acc + (formState.sizeQtyMap[sz] || 1), 0)} chiếc):</span>
                     </span>
                     <span className="text-[10.5px] text-orange-800/80 font-medium italic">
                       Mỗi size được cấp mã tag riêng & chọn màu độc lập
@@ -2307,6 +2321,25 @@ export default function EquipmentTracker({
                             </div>
                           </div>
 
+
+                          {/* Số lượng chiếc cho size này */}
+                          <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-200/70 rounded-lg px-2.5 py-1.5">
+                            <span className="text-[11px] font-bold text-blue-700 shrink-0">📦 Số lượng Size {sz}:</span>
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              <button
+                                type="button"
+                                onClick={() => setFormState(prev => ({ ...prev, sizeQtyMap: { ...prev.sizeQtyMap, [sz]: Math.max(1, (prev.sizeQtyMap[sz] || 1) - 1) } }))}
+                                className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
+                              >−</button>
+                              <span className="text-sm font-black text-blue-800 min-w-[20px] text-center">{formState.sizeQtyMap[sz] || 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => setFormState(prev => ({ ...prev, sizeQtyMap: { ...prev.sizeQtyMap, [sz]: (prev.sizeQtyMap[sz] || 1) + 1 } }))}
+                                className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
+                              >+</button>
+                            </div>
+                            <span className="text-[10px] text-blue-600/80 font-medium">chiếc</span>
+                          </div>
                           {/* Image row for this specific size / color */}
                           <div className="flex items-center gap-2 pt-1 border-t border-dashed border-gray-150 text-xs">
                             <div className="w-9 h-9 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center">
