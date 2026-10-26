@@ -259,6 +259,55 @@ export default function EquipmentTracker({
   }, [cameras, searchQuery, categoryFilter, statusFilter, sizeFilter, cleaningFilter]);
 
   // Calculate dynamic device count for each category
+  // Gợi ý những giá trị đã từng nhập trước đó cho 4 trường chi tiết
+  const detailSuggestions = useMemo(() => {
+    const measurementsSet = new Set<string>();
+    const accessoriesSet = new Set<string>();
+    const typeSet = new Set<string>();
+    const brandSet = new Set<string>();
+
+    // 1. Trích xuất từ toàn bộ danh sách trang phục hiện có trong kho
+    cameras.forEach(cam => {
+      if (cam.measurements?.trim()) measurementsSet.add(cam.measurements.trim());
+      if (cam.includedAccessories?.trim()) {
+        accessoriesSet.add(cam.includedAccessories.trim());
+        cam.includedAccessories.split(/[,+]/).forEach(item => {
+          const t = item.trim();
+          if (t.length > 1) accessoriesSet.add(t);
+        });
+      }
+      if (cam.type?.trim()) {
+        typeSet.add(cam.type.trim());
+        cam.type.split(/[,+]/).forEach(item => {
+          const t = item.trim();
+          if (t.length > 1) typeSet.add(t);
+        });
+      }
+      if (cam.brand?.trim()) brandSet.add(cam.brand.trim());
+    });
+
+    // 2. Lấy thêm từ lịch sử localStorage
+    try {
+      const getLocal = (key: string): string[] => {
+        const val = localStorage.getItem(key);
+        return val ? JSON.parse(val) : [];
+      };
+      getLocal('caos_history_measurements').forEach(x => { if (x?.trim()) measurementsSet.add(x.trim()); });
+      getLocal('caos_history_accessories').forEach(x => { if (x?.trim()) accessoriesSet.add(x.trim()); });
+      getLocal('caos_history_types').forEach(x => { if (x?.trim()) typeSet.add(x.trim()); });
+      getLocal('caos_history_brands').forEach(x => { if (x?.trim()) brandSet.add(x.trim()); });
+    } catch {
+      // ignore
+    }
+
+    return {
+      measurements: Array.from(measurementsSet).filter(Boolean),
+      includedAccessories: Array.from(accessoriesSet).filter(Boolean),
+      type: Array.from(typeSet).filter(Boolean),
+      brand: Array.from(brandSet).filter(Boolean),
+    };
+  }, [cameras]);
+
   const categoryCounts = useMemo(() => {
     return {
       ALL: cameras.length,
@@ -581,6 +630,22 @@ export default function EquipmentTracker({
       'Phụ kiện': 'https://images.unsplash.com/photo-1535295972055-1c762f4483e5?auto=format&fit=crop&q=80&w=600',
       'Khác': 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&q=80&w=600',
     };
+    // Lưu lịch sử các giá trị đã nhập để gợi ý lần sau
+    try {
+      const saveHistory = (key: string, val?: string) => {
+        if (!val || !val.trim()) return;
+        const current: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+        const updated = [val.trim(), ...current.filter(item => item !== val.trim())].slice(0, 30);
+        localStorage.setItem(key, JSON.stringify(updated));
+      };
+      saveHistory('caos_history_measurements', formState.measurements);
+      saveHistory('caos_history_accessories', formState.includedAccessories);
+      saveHistory('caos_history_types', formState.type);
+      saveHistory('caos_history_brands', formState.brand);
+    } catch {
+      // ignore
+    }
+
     const imageRef = formState.image || categoryDefaultImages[formState.category] || 'https://images.unsplash.com/photo-1562157873-818bc0726f68?auto=format&fit=crop&q=80&w=600';
     
     const sizesToSave = formState.selectedSizes.length > 0 ? formState.selectedSizes : ['M'];
@@ -2461,51 +2526,201 @@ export default function EquipmentTracker({
 
               {/* Measurements & Accessories */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Số đo chuẩn tham khảo */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Số đo chuẩn tham khảo</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700">Số đo chuẩn tham khảo</label>
+                    {detailSuggestions.measurements.length > 0 && (
+                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
+                        ⚡ Có gợi ý
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="suggest-measurements"
                     value={formState.measurements}
                     onChange={e => setFormState({ ...formState, measurements: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     placeholder="VD: Ngực 86 - Eo 66 - Mông 92, dài 140cm"
                   />
+                  <datalist id="suggest-measurements">
+                    {detailSuggestions.measurements.map((m, idx) => (
+                      <option key={idx} value={m} />
+                    ))}
+                  </datalist>
+                  {detailSuggestions.measurements.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
+                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
+                      {detailSuggestions.measurements.slice(0, 5).map((m, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setFormState(prev => ({ ...prev, measurements: m }))}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[170px] ${
+                            formState.measurements === m
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
+                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
+                          }`}
+                          title={m}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
+                {/* Phụ kiện đi kèm mặc định */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Phụ kiện đi kèm mặc định</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700">Phụ kiện đi kèm mặc định</label>
+                    {detailSuggestions.includedAccessories.length > 0 && (
+                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
+                        ⚡ Có gợi ý
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="suggest-accessories"
                     value={formState.includedAccessories}
                     onChange={e => setFormState({ ...formState, includedAccessories: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     placeholder="VD: Voan dài 3m, vương miện, nơ cổ chú rể..."
                   />
+                  <datalist id="suggest-accessories">
+                    {detailSuggestions.includedAccessories.map((acc, idx) => (
+                      <option key={idx} value={acc} />
+                    ))}
+                  </datalist>
+                  {detailSuggestions.includedAccessories.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
+                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
+                      {detailSuggestions.includedAccessories.slice(0, 6).map((acc, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setFormState(prev => {
+                              const current = prev.includedAccessories?.trim() || '';
+                              if (!current) return { ...prev, includedAccessories: acc };
+                              if (current.includes(acc)) return prev;
+                              return { ...prev, includedAccessories: `${current}, ${acc}` };
+                            });
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[150px] ${
+                            formState.includedAccessories?.includes(acc)
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
+                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
+                          }`}
+                          title={`Bấm để thêm: ${acc}`}
+                        >
+                          + {acc}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Fabric & Brand */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Chất liệu vải / Kiểu dáng */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Chất liệu vải / Kiểu dáng</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700">Chất liệu vải / Kiểu dáng</label>
+                    {detailSuggestions.type.length > 0 && (
+                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
+                        ⚡ Có gợi ý
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="suggest-types"
                     value={formState.type}
                     onChange={e => setFormState({ ...formState, type: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     placeholder="VD: Lụa satin, Ren thêu hoa chìm, Gấm..."
                   />
+                  <datalist id="suggest-types">
+                    {detailSuggestions.type.map((tp, idx) => (
+                      <option key={idx} value={tp} />
+                    ))}
+                  </datalist>
+                  {detailSuggestions.type.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
+                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
+                      {detailSuggestions.type.slice(0, 6).map((tp, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setFormState(prev => {
+                              const current = prev.type?.trim() || '';
+                              if (!current) return { ...prev, type: tp };
+                              if (current.includes(tp)) return prev;
+                              return { ...prev, type: `${current}, ${tp}` };
+                            });
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[150px] ${
+                            formState.type?.includes(tp)
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
+                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
+                          }`}
+                          title={`Bấm để thêm: ${tp}`}
+                        >
+                          {tp}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
+                {/* Thương hiệu / Xưởng thiết kế */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Thương hiệu / Xưởng thiết kế</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700">Thương hiệu / Xưởng thiết kế</label>
+                    {detailSuggestions.brand.length > 0 && (
+                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
+                        ⚡ Có gợi ý
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
+                    list="suggest-brands"
                     value={formState.brand}
                     onChange={e => setFormState({ ...formState, brand: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
                     placeholder="VD: Caos Atelier, Hàng may đo cao cấp..."
                   />
+                  <datalist id="suggest-brands">
+                    {detailSuggestions.brand.map((b, idx) => (
+                      <option key={idx} value={b} />
+                    ))}
+                  </datalist>
+                  {detailSuggestions.brand.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
+                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
+                      {detailSuggestions.brand.slice(0, 5).map((b, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setFormState(prev => ({ ...prev, brand: b }))}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[150px] ${
+                            formState.brand === b
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
+                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
+                          }`}
+                          title={b}
+                        >
+                          {b}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
