@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RentalContract } from '../types';
+import { compressImageFile } from '../utils/imageUtils';
 import MoneyInput from './MoneyInput';
 import { DressIcon } from './DressIcon';
 import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List, X } from 'lucide-react';
@@ -2477,14 +2478,15 @@ export default function EquipmentTracker({
                                     reader.onload = (ev) => {
                                       const img = new Image();
                                       img.onload = () => {
-                                        const maxW = 600;
+                                        const maxW = 480;
                                         const scale = img.width > maxW ? maxW / img.width : 1;
                                         const canvas = document.createElement('canvas');
                                         canvas.width = Math.round(img.width * scale);
                                         canvas.height = Math.round(img.height * scale);
                                         const ctx = canvas.getContext('2d')!;
                                         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                        const compImg = canvas.toDataURL('image/jpeg', 0.7);
+                                        // Nén ảnh size gọn nhẹ (dưới 35KB)
+                                        const compImg = canvas.toDataURL('image/jpeg', 0.65);
                                         setFormState(prev => ({
                                           ...prev,
                                           sizeImageMap: {
@@ -2786,14 +2788,15 @@ export default function EquipmentTracker({
                               reader.onload = (ev) => {
                                 const img = new Image();
                                 img.onload = () => {
-                                  const maxW = 600;
+                                  const maxW = 480;
                                   const scale = img.width > maxW ? maxW / img.width : 1;
                                   const canvas = document.createElement('canvas');
                                   canvas.width = Math.round(img.width * scale);
                                   canvas.height = Math.round(img.height * scale);
                                   const ctx = canvas.getContext('2d')!;
                                   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                  setFormState(prev => ({ ...prev, image: canvas.toDataURL('image/jpeg', 0.7) }));
+                                  // Nén ảnh gọn nhẹ (dưới 35KB) để đồng bộ Cloud không bị lỗi quá tải
+                                  setFormState(prev => ({ ...prev, image: canvas.toDataURL('image/jpeg', 0.65) }));
                                 };
                                 img.src = ev.target?.result as string;
                               };

@@ -45,11 +45,21 @@ export async function syncToSupabase(key: string, data: any): Promise<boolean> {
     
     if (error) {
       console.warn(`[Supabase] Sync failed for "${key}":`, error.message);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('supabase-sync-error', { 
+          detail: { key, message: error.message } 
+        }));
+      }
       return false;
     }
     return true;
-  } catch (err) {
+  } catch (err: any) {
     console.error(`[Supabase] Exception syncing "${key}":`, err);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('supabase-sync-error', { 
+        detail: { key, message: err?.message || 'Lỗi mạng hoặc dữ liệu vượt hạn mức' } 
+      }));
+    }
     return false;
   }
 }

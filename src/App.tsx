@@ -681,6 +681,22 @@ export default function App() {
     }
   }, [loaded, pendingOrOverdueContractsCount]);
 
+  // Cảnh báo nếu đồng bộ dữ liệu lên Cloud Supabase gặp sự cố quá tải
+  useEffect(() => {
+    const handleSyncError = (e: any) => {
+      const { key, message } = e.detail || {};
+      if (key === 'cameras') {
+        addToast(
+          'Chưa thể đồng bộ kho đồ lên Cloud!',
+          'error',
+          `Máy chủ Cloud từ chối nhận dữ liệu (${message || 'dung lượng ảnh quá lớn'}). Hãy vào Cài đặt -> Tải tệp sao lưu (.json) để lưu dữ liệu an toàn.`
+        );
+      }
+    };
+    window.addEventListener('supabase-sync-error', handleSyncError);
+    return () => window.removeEventListener('supabase-sync-error', handleSyncError);
+  }, []);
+
   // Sync data states to local storage and Supabase
   useEffect(() => {
     if (!loaded) return;
