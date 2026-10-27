@@ -3073,7 +3073,7 @@ export default function EquipmentTracker({
                   suffixColor="emerald"
                 />
                 <p className="text-[10.5px] text-emerald-700/90 leading-tight">
-                  💡 Chi phí mua/may mẫu này sẽ tự động được ghi nhận vào mục <b>Khoản chi</b> và tính vào chi phí ở mục <b>Doanh thu</b> của tiệm.
+                  💡 Chi phí mua/may mẫu này sẽ tự động ghi nhận vào mục <b>Khoản chi & Doanh thu</b>. Nếu sửa hoặc xóa giá về 0, hệ thống sẽ tự động cập nhật/trừ ở Khoản chi tương ứng.
                 </p>
               </div>
 

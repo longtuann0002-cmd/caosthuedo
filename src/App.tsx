@@ -2006,29 +2006,103 @@ export default function App() {
   };
 
   const handleUpdateCamera = (updatedCam: Camera) => {
-    // Nếu trước đó chưa có giá vốn (hoặc = 0) và bây giờ mới nhập giá vốn > 0 -> tự động tạo khoản chi
     const oldCam = cameras.find(c => c.id === updatedCam.id);
-    if ((!oldCam?.purchasePrice || oldCam.purchasePrice === 0) && updatedCam.purchasePrice && updatedCam.purchasePrice > 0) {
-      const today = systemDate || new Date().toISOString().split('T')[0];
-      const newExpense: Expense = {
-        id: `exp-outfit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        description: `Vốn nhập trang phục: ${updatedCam.name}${updatedCam.serialNumber ? ` (#${updatedCam.serialNumber})` : ''}`,
-        amount: updatedCam.purchasePrice,
-        date: today,
-        category: 'Equipment',
-        operator: currentUser?.fullName || currentUser?.username || 'Quản trị viên'
-      };
-      setExpenses(prev => [newExpense, ...prev]);
-      addToast(
-        'Đã ghi nhận khoản chi!',
-        'success',
-        `Tự động chuyển ${updatedCam.purchasePrice.toLocaleString()}đ (vốn nhập ${updatedCam.name}) vào mục Khoản chi & Doanh thu.`
-      );
+    const oldSerial = oldCam?.serialNumber?.trim();
+    const newSerial = updatedCam.serialNumber?.trim();
+    const oldPrice = oldCam?.purchasePrice || 0;
+    const newPrice = updatedCam.purchasePrice || 0;
+
+    const isMatchingExpense = (e: Expense) => {
+      if (!e.description || !e.description.includes('Vốn nhập trang phục:')) return false;
+      if (oldSerial && e.description.includes(`(#${oldSerial})`)) return true;
+      if (newSerial && e.description.includes(`(#${newSerial})`)) return true;
+      if (oldCam?.name && e.description.includes(oldCam.name)) return true;
+      return false;
+    };
+
+    if (newPrice !== oldPrice || (oldSerial && newSerial && oldSerial !== newSerial)) {
+      setExpenses(prev => {
+        const matchIdx = prev.findIndex(isMatchingExpense);
+
+        if (newPrice <= 0) {
+          // Xóa giá về 0 -> Tự động xóa bỏ khoản chi tương ứng
+          if (matchIdx !== -1) {
+            const removed = prev[matchIdx];
+            addToast(
+              'Đã cập nhật Khoản chi!',
+              'info',
+              `Đã tự động xóa khoản vốn nhập ${removed.amount.toLocaleString()}đ của "${updatedCam.name}" khỏi mục Khoản chi.`
+            );
+            return prev.filter((_, idx) => idx !== matchIdx);
+          }
+          return prev;
+        } else {
+          // Giá > 0
+          if (matchIdx !== -1) {
+            const updatedExpenses = [...prev];
+            const oldAmount = updatedExpenses[matchIdx].amount;
+            updatedExpenses[matchIdx] = {
+              ...updatedExpenses[matchIdx],
+              description: `Vốn nhập trang phục: ${updatedCam.name}${newSerial ? ` (#${newSerial})` : ''}`,
+              amount: newPrice,
+            };
+            if (oldAmount !== newPrice) {
+              addToast(
+                'Đã cập nhật Khoản chi!',
+                'success',
+                `Đã điều chỉnh vốn nhập "${updatedCam.name}" từ ${oldAmount.toLocaleString()}đ thành ${newPrice.toLocaleString()}đ trong mục Khoản chi.`
+              );
+            }
+            return updatedExpenses;
+          } else {
+            // Chưa có khoản chi -> Tạo mới
+            const today = systemDate || new Date().toISOString().split('T')[0];
+            const newExpense: Expense = {
+              id: `exp-outfit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+              description: `Vốn nhập trang phục: ${updatedCam.name}${newSerial ? ` (#${newSerial})` : ''}`,
+              amount: newPrice,
+              date: today,
+              category: 'Equipment',
+              operator: currentUser?.fullName || currentUser?.username || 'Quản trị viên'
+            };
+            addToast(
+              'Đã ghi nhận khoản chi!',
+              'success',
+              `Tự động chuyển ${newPrice.toLocaleString()}đ (vốn nhập ${updatedCam.name}) vào mục Khoản chi & Doanh thu.`
+            );
+            return [newExpense, ...prev];
+          }
+        }
+      });
     }
+
     setCameras(prev => prev.map(c => (c.id === updatedCam.id ? updatedCam : c)));
   };
 
   const handleDeleteCamera = (id: string) => {
+    const targetCam = cameras.find(c => c.id === id);
+    if (targetCam) {
+      const serial = targetCam.serialNumber?.trim();
+      const isMatchingExpense = (e: Expense) => {
+        if (!e.description || !e.description.includes('Vốn nhập trang phục:')) return false;
+        if (serial && e.description.includes(`(#${serial})`)) return true;
+        if (targetCam.name && e.description.includes(targetCam.name)) return true;
+        return false;
+      };
+
+      setExpenses(prev => {
+        const match = prev.find(isMatchingExpense);
+        if (match) {
+          addToast(
+            'Đã cập nhật Khoản chi!',
+            'info',
+            `Đã tự động xóa khoản vốn nhập ${match.amount.toLocaleString()}đ của "${targetCam.name}" khỏi mục Khoản chi.`
+          );
+          return prev.filter(e => !isMatchingExpense(e));
+        }
+        return prev;
+      });
+    }
     setCameras(prev => prev.filter(c => c.id !== id));
   };
 
