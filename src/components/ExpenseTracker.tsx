@@ -21,6 +21,9 @@ export default function ExpenseTracker({
 }: ExpenseTrackerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [dateFilterMode, setDateFilterMode] = useState<'ALL' | 'TODAY' | 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM'>('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -37,17 +40,38 @@ export default function ExpenseTracker({
   });
 
   const filteredExpenses = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const thisMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
     return expenses.filter(e => {
       const query = searchQuery.toLowerCase().trim();
+      const dateDMY = formatDMY(e.date).toLowerCase();
       const matchesSearch =
         e.description.toLowerCase().includes(query) ||
-        e.operator.toLowerCase().includes(query);
+        e.operator.toLowerCase().includes(query) ||
+        (e.date && e.date.toLowerCase().includes(query)) ||
+        dateDMY.includes(query);
 
       const matchesCategory = categoryFilter === 'ALL' || e.category === categoryFilter;
 
-      return matchesSearch && matchesCategory;
+      let matchesDate = true;
+      if (dateFilterMode === 'TODAY') {
+        matchesDate = e.date === todayStr;
+      } else if (dateFilterMode === 'THIS_MONTH') {
+        matchesDate = !!e.date && e.date.startsWith(thisMonthPrefix);
+      } else if (dateFilterMode === 'LAST_MONTH') {
+        matchesDate = !!e.date && e.date.startsWith(lastMonthPrefix);
+      } else if (dateFilterMode === 'CUSTOM') {
+        if (startDate && e.date < startDate) matchesDate = false;
+        if (endDate && e.date > endDate) matchesDate = false;
+      }
+
+      return matchesSearch && matchesCategory && matchesDate;
     });
-  }, [expenses, searchQuery, categoryFilter]);
+  }, [expenses, searchQuery, categoryFilter, dateFilterMode, startDate, endDate]);
 
   // Pagination Configuration
   const [currentPage, setCurrentPage] = useState(1);
@@ -56,7 +80,7 @@ export default function ExpenseTracker({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter]);
+  }, [searchQuery, categoryFilter, dateFilterMode, startDate, endDate]);
 
   const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage) || 1;
   const paginatedExpenses = useMemo(() => {
@@ -190,12 +214,12 @@ export default function ExpenseTracker({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+        <div className="flex flex-col md:flex-row gap-2 sm:gap-2.5">
           <div className="relative flex-grow">
             <Search className="absolute left-2.5 sm:left-3 top-2 sm:top-2.5 h-3.5 w-3.5 text-gray-400" />
             <input
               type="text"
-              placeholder="Tìm theo nội dung chi, người thanh toán chi..."
+              placeholder="Tìm theo nội dung chi, người thanh toán, ngày (VD: 27/10)..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="pl-8 sm:pl-9 pr-8 py-1.5 sm:py-2 text-[11px] sm:text-xs font-normal w-full border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80 bg-gray-50/60 hover:bg-white"
@@ -211,7 +235,7 @@ export default function ExpenseTracker({
             )}
           </div>
 
-          <div className="relative min-w-[200px] sm:w-64">
+          <div className="relative min-w-[170px] sm:w-56">
             <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
               <Tag className="w-3.5 h-3.5 shrink-0" />
             </div>
@@ -230,7 +254,70 @@ export default function ExpenseTracker({
             </select>
             <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">▼</div>
           </div>
+
+          <div className="relative min-w-[170px] sm:w-52">
+            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+            </div>
+            <select
+              value={dateFilterMode}
+              onChange={e => {
+                const val = e.target.value as any;
+                setDateFilterMode(val);
+                if (val !== 'CUSTOM') {
+                  setStartDate('');
+                  setEndDate('');
+                }
+              }}
+              className="w-full pl-8 pr-6 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-200 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+            >
+              <option value="ALL">Tất cả thời gian</option>
+              <option value="TODAY">Hôm nay</option>
+              <option value="THIS_MONTH">Tháng này</option>
+              <option value="LAST_MONTH">Tháng trước</option>
+              <option value="CUSTOM">Tùy chọn khoảng ngày...</option>
+            </select>
+            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">▼</div>
+          </div>
         </div>
+
+        {dateFilterMode === 'CUSTOM' && (
+          <div className="flex items-center gap-2 pt-1 pb-0.5 text-xs animate-fade-in flex-wrap bg-orange-50/60 p-2.5 rounded-xl border border-orange-200/80">
+            <span className="text-[11.5px] font-bold text-orange-900 flex items-center gap-1.5 shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-orange-600" /> Chọn khoảng ngày:
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] text-gray-500">Từ</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-800 shadow-3xs"
+                />
+              </div>
+              <span className="text-gray-400 font-bold">➔</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] text-gray-500">Đến</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-800 shadow-3xs"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button
+                  type="button"
+                  onClick={() => { setStartDate(''); setEndDate(''); }}
+                  className="text-[11px] text-rose-600 hover:text-rose-800 font-bold px-2.5 py-1 rounded-lg bg-white border border-rose-200 transition cursor-pointer shadow-3xs"
+                >
+                  ✕ Xóa khoảng ngày
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Aggregate metrics box */}
