@@ -4,10 +4,11 @@ import { Camera, RentalContract } from '../types';
 import { compressImageFile } from '../utils/imageUtils';
 import MoneyInput from './MoneyInput';
 import { DressIcon } from './DressIcon';
-import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List, X, Copy } from 'lucide-react';
+import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List, X, Copy, Loader2, Cloud } from 'lucide-react';
 import { getInitialTieredPrices } from '../utils/pricing';
 import { matchCamera } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
+import { uploadOutfitImageToStorage } from '../utils/supabase';
 
 export interface OutfitGroupItem {
   groupKey: string;
@@ -231,6 +232,9 @@ export default function EquipmentTracker({
     printPrice3To9: 0,
     printPrice10Plus: 0,
   });
+
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadingSize, setUploadingSize] = useState<string | null>(null);
 
   const filteredCameras = useMemo(() => {
     const result = cameras.filter(c => {
@@ -2521,39 +2525,56 @@ export default function EquipmentTracker({
                             />
 
                             <label className="shrink-0 inline-flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border border-gray-200 hover:border-orange-300 rounded-lg text-[10.5px] font-bold cursor-pointer transition">
-                              <Upload className="w-3 h-3" />
-                              <span className="hidden sm:inline">Tải ảnh</span>
+                              {uploadingSize === sz ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-orange-600" />
+                              ) : (
+                                <Upload className="w-3 h-3" />
+                              )}
+                              <span className="hidden sm:inline">{uploadingSize === sz ? 'Đang tải...' : 'Tải ảnh'}</span>
                               <input
                                 type="file"
                                 accept="image/*"
+                                disabled={uploadingSize === sz}
                                 className="hidden"
-                                onChange={e => {
+                                onChange={async e => {
                                   const file = e.target.files?.[0];
                                   if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) => {
-                                      const img = new Image();
-                                      img.onload = () => {
-                                        const maxW = 480;
-                                        const scale = img.width > maxW ? maxW / img.width : 1;
-                                        const canvas = document.createElement('canvas');
-                                        canvas.width = Math.round(img.width * scale);
-                                        canvas.height = Math.round(img.height * scale);
-                                        const ctx = canvas.getContext('2d')!;
-                                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                        // Nén ảnh size gọn nhẹ (dưới 35KB)
-                                        const compImg = canvas.toDataURL('image/jpeg', 0.65);
-                                        setFormState(prev => ({
-                                          ...prev,
-                                          sizeImageMap: {
-                                            ...prev.sizeImageMap,
-                                            [sz]: compImg
+                                    setUploadingSize(sz);
+                                    try {
+                                      const reader = new FileReader();
+                                      reader.onload = (ev) => {
+                                        const img = new Image();
+                                        img.onload = async () => {
+                                          try {
+                                            const maxW = 600;
+                                            const scale = img.width > maxW ? maxW / img.width : 1;
+                                            const canvas = document.createElement('canvas');
+                                            canvas.width = Math.round(img.width * scale);
+                                            canvas.height = Math.round(img.height * scale);
+                                            const ctx = canvas.getContext('2d')!;
+                                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                            const compImg = canvas.toDataURL('image/jpeg', 0.8);
+                                            const prefix = `${formState.serialNumber || 'outfit'}_${sz}`;
+                                            const storageUrl = await uploadOutfitImageToStorage(compImg, prefix);
+                                            setFormState(prev => ({
+                                              ...prev,
+                                              sizeImageMap: {
+                                                ...prev.sizeImageMap,
+                                                [sz]: storageUrl
+                                              }
+                                            }));
+                                          } finally {
+                                            setUploadingSize(null);
                                           }
-                                        }));
+                                        };
+                                        img.onerror = () => setUploadingSize(null);
+                                        img.src = ev.target?.result as string;
                                       };
-                                      img.src = ev.target?.result as string;
-                                    };
-                                    reader.readAsDataURL(file);
+                                      reader.onerror = () => setUploadingSize(null);
+                                      reader.readAsDataURL(file);
+                                    } catch {
+                                      setUploadingSize(null);
+                                    }
                                   }
                                   e.target.value = '';
                                 }}
@@ -2831,37 +2852,61 @@ export default function EquipmentTracker({
 
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-lg text-xs font-bold transition cursor-pointer">
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Tải ảnh từ máy tính / điện thoại</span>
+                        {isUploadingImage ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-600" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5" />
+                        )}
+                        <span>{isUploadingImage ? 'Đang tải lên Cloud...' : 'Tải ảnh từ máy tính / điện thoại'}</span>
                         <input
                           type="file"
                           accept="image/*"
+                          disabled={isUploadingImage}
                           className="hidden"
-                          onChange={e => {
+                          onChange={async e => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => {
-                                const img = new Image();
-                                img.onload = () => {
-                                  const maxW = 480;
-                                  const scale = img.width > maxW ? maxW / img.width : 1;
-                                  const canvas = document.createElement('canvas');
-                                  canvas.width = Math.round(img.width * scale);
-                                  canvas.height = Math.round(img.height * scale);
-                                  const ctx = canvas.getContext('2d')!;
-                                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                  // Nén ảnh gọn nhẹ (dưới 35KB) để đồng bộ Cloud không bị lỗi quá tải
-                                  setFormState(prev => ({ ...prev, image: canvas.toDataURL('image/jpeg', 0.65) }));
+                              setIsUploadingImage(true);
+                              try {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  const img = new Image();
+                                  img.onload = async () => {
+                                    try {
+                                      const maxW = 600;
+                                      const scale = img.width > maxW ? maxW / img.width : 1;
+                                      const canvas = document.createElement('canvas');
+                                      canvas.width = Math.round(img.width * scale);
+                                      canvas.height = Math.round(img.height * scale);
+                                      const ctx = canvas.getContext('2d')!;
+                                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                      const compImg = canvas.toDataURL('image/jpeg', 0.8);
+                                      // Tự động đẩy lên Supabase Storage và nhận lại URL công khai
+                                      const prefix = (formState.serialNumber || formState.name || 'outfit').trim();
+                                      const storageUrl = await uploadOutfitImageToStorage(compImg, prefix);
+                                      setFormState(prev => ({ ...prev, image: storageUrl }));
+                                    } finally {
+                                      setIsUploadingImage(false);
+                                    }
+                                  };
+                                  img.onerror = () => setIsUploadingImage(false);
+                                  img.src = ev.target?.result as string;
                                 };
-                                img.src = ev.target?.result as string;
-                              };
-                              reader.readAsDataURL(file);
+                                reader.onerror = () => setIsUploadingImage(false);
+                                reader.readAsDataURL(file);
+                              } catch {
+                                setIsUploadingImage(false);
+                              }
                             }
                             e.target.value = '';
                           }}
                         />
                       </label>
+                      {formState.image && formState.image.startsWith('https://') && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                          <Cloud className="w-3 h-3" /> Link Cloud sẵn sàng
+                        </span>
+                      )}
                       <span className="text-[10px] text-gray-400">hoặc dán đường dẫn ảnh trực tiếp</span>
                     </div>
                   </div>

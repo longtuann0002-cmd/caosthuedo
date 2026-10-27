@@ -271,3 +271,89 @@ export async function syncToSupabaseChunked(key: string, data: any[], chunkSize 
     return false;
   }
 }
+
+/**
+ * Upload an image (File, Blob, or base64 DataURL) directly to Supabase Storage bucket 'outfits'.
+ * Returns the public URL on success, or falls back to returning the original dataUrl/base64 if failed or offline.
+ */
+export async function uploadOutfitImageToStorage(
+  imageSource: File | Blob | string,
+  customNamePrefix = 'outfit'
+): Promise<string> {
+  const client = getSupabase();
+  if (!client) {
+    if (typeof imageSource === 'string') return imageSource;
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(imageSource as Blob);
+    });
+  }
+
+  try {
+    let blob: Blob;
+    let ext = 'jpg';
+    let contentType = 'image/jpeg';
+
+    if (typeof imageSource === 'string') {
+      if (imageSource.startsWith('http://') || imageSource.startsWith('https://')) {
+        return imageSource;
+      }
+      const matches = imageSource.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        contentType = matches[1];
+        ext = contentType.includes('png') ? 'png' : 'jpg';
+        const byteCharacters = atob(matches[2]);
+        const byteNumbers = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        blob = new Blob([byteNumbers], { type: contentType });
+      } else {
+        return imageSource;
+      }
+    } else if (imageSource instanceof File || imageSource instanceof Blob) {
+      blob = imageSource;
+      contentType = imageSource.type || 'image/jpeg';
+      ext = contentType.includes('png') ? 'png' : 'jpg';
+    } else {
+      return '';
+    }
+
+    const cleanPrefix = customNamePrefix.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30) || 'outfit';
+    const fileName = `${cleanPrefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+
+    const { error: uploadError } = await client.storage
+      .from('outfits')
+      .upload(fileName, blob, {
+        contentType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.warn('[Supabase Storage] Upload failed, using fallback:', uploadError.message);
+      if (typeof imageSource === 'string') return imageSource;
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    const { data: publicData } = client.storage.from('outfits').getPublicUrl(fileName);
+    if (publicData?.publicUrl) {
+      return publicData.publicUrl;
+    }
+  } catch (err) {
+    console.error('[Supabase Storage] Exception uploading outfit image:', err);
+  }
+
+  if (typeof imageSource === 'string') return imageSource;
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(imageSource as Blob);
+  });
+}
+
