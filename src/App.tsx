@@ -3955,8 +3955,6 @@ export default function App() {
                   contracts={contracts}
                   initialSearchQuery={equipmentTrackerSearch}
                   systemDate={systemDate}
-                  onRestoreFromExpenses={handleRestoreFromExpenses}
-                  outfitExpensesCount={expenses.filter(e => e.description && e.description.includes('Vốn nhập trang phục:')).length}
                 />
               </TabErrorBoundary>
             )}
@@ -3999,7 +3997,6 @@ export default function App() {
                     expenses={expenses}
                     onAddExpense={handleAddExpense}
                     onDeleteExpense={handleDeleteExpense}
-                    onRestoreToInventory={handleRestoreFromExpenses}
                   />
                 ) : (
                   <div className="bg-white rounded-2xl p-8 text-center border border-gray-150 shadow-xs">
