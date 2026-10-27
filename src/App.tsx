@@ -13,6 +13,7 @@ import {
 import { 
   isSupabaseConfigured, 
   syncToSupabase, 
+  syncToSupabaseChunked,
   fetchFromSupabase,
   getSupabaseCredentials,
   saveCustomSupabaseCredentials,
@@ -725,7 +726,7 @@ export default function App() {
     if (!loaded) return;
     saveStoredData('cameras', cameras);
     if (isSupabaseConfigured) {
-      syncToSupabase('cameras', cameras);
+      syncToSupabaseChunked('cameras', cameras);
     }
   }, [loaded, cameras]);
 
@@ -978,7 +979,7 @@ export default function App() {
             console.log(`[Auto-Repair] Đã tự động tách ${splitCount} trang phục có size gộp thành từng size độc lập.`);
             saveStoredData('cameras', normalized);
             if (isSupabaseConfigured) {
-              syncToSupabase('cameras', normalized);
+              syncToSupabaseChunked('cameras', normalized);
             }
           }
         } else {
@@ -1338,7 +1339,7 @@ export default function App() {
         throw new Error(resTest.message);
       }
       await Promise.all([
-        syncToSupabase('cameras', cameras),
+        syncToSupabaseChunked('cameras', cameras),
         syncToSupabase('contracts', contracts),
         syncToSupabase('customers', customers),
         syncToSupabase('expenses', expenses),
