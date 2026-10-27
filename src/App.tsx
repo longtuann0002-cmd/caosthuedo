@@ -247,6 +247,7 @@ export default function App() {
   });
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState<'synced' | 'syncing' | 'error' | 'offline'>(() => isSupabaseConfigured ? 'synced' : 'offline');
+  const lastSyncedCamerasRef = useRef<string>('');
   const [copiedSql, setCopiedSql] = useState(false);
 
   // Forgot Password States
@@ -272,13 +273,11 @@ export default function App() {
   // If Supabase is configured, start with empty array to avoid showing stale localStorage cache
   // The useEffect below will fill from Supabase immediately
   const [cameras, setCameras] = useState<Camera[]>(() => {
-    if (isSupabaseConfigured) return []; // Wait for Supabase fetch, avoid stale localStorage flash
     const loaded = loadStoredData('cameras', INITIAL_CAMERAS);
     const { normalized } = normalizeOutfitsBySize(loaded);
     return normalized;
   });
   const [contracts, setContracts] = useState<RentalContract[]>(() => {
-    if (isSupabaseConfigured) return [];
     const loaded = loadStoredData('contracts', INITIAL_CONTRACTS);
     const migrationKey = 'camlease_historical_contracts_migrated_v1';
     let baseContracts = loaded;
@@ -295,10 +294,9 @@ export default function App() {
     return deduplicated;
   });
   const [customers, setCustomers] = useState<Customer[]>(() =>
-    isSupabaseConfigured ? [] : loadStoredData('customers', INITIAL_CUSTOMERS)
+    loadStoredData('customers', INITIAL_CUSTOMERS)
   );
   const [expenses, setExpenses] = useState<Expense[]>(() => {
-    if (isSupabaseConfigured) return [];
     const loaded = loadStoredData('expenses', INITIAL_EXPENSES);
     const migrationKey = 'camlease_historical_expenses_migrated_v1';
     if (!localStorage.getItem(migrationKey)) {
@@ -744,15 +742,27 @@ export default function App() {
     if (!loaded) return;
     saveStoredData('cameras', cameras);
     if (isSupabaseConfigured) {
+      // Chỉ đồng bộ lên Cloud khi dữ liệu thực sự có sự thay đổi (tránh vòng lặp tải lên khi vừa kéo về)
+      const currentHash = JSON.stringify(cameras.map(c => c.id + c.name + c.status + c.cleaningStatus + (c.availableSizes || []).join(',')));
+      if (lastSyncedCamerasRef.current && currentHash === lastSyncedCamerasRef.current) {
+        setCloudSyncState('synced');
+        return;
+      }
+
       setCloudSyncState('syncing');
       const timer = setTimeout(async () => {
         try {
           const success = await syncToSupabaseChunked('cameras', cameras);
-          setCloudSyncState(success ? 'synced' : 'error');
+          if (success) {
+            lastSyncedCamerasRef.current = currentHash;
+            setCloudSyncState('synced');
+          } else {
+            setCloudSyncState('error');
+          }
         } catch {
           setCloudSyncState('error');
         }
-      }, 1200);
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [loaded, cameras]);
@@ -1004,6 +1014,9 @@ export default function App() {
           setCameras(normalized);
           // Always update localStorage cache with the authoritative cloud data
           saveStoredData('cameras', normalized);
+          // Đánh dấu hash đã đồng bộ từ Cloud để tránh kích hoạt upload ngược lại
+          lastSyncedCamerasRef.current = JSON.stringify(normalized.map(c => c.id + c.name + c.status + c.cleaningStatus + (c.availableSizes || []).join(',')));
+          setCloudSyncState('synced');
           if (splitCount > 0) {
             console.log(`[Auto-Repair] Đã tự động tách ${splitCount} trang phục có size gộp thành từng size độc lập.`);
             syncToSupabaseChunked('cameras', normalized);
@@ -1012,6 +1025,8 @@ export default function App() {
           const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
           const { normalized, splitCount } = normalizeOutfitsBySize(localCams);
           setCameras(normalized);
+          lastSyncedCamerasRef.current = JSON.stringify(normalized.map(c => c.id + c.name + c.status + c.cleaningStatus + (c.availableSizes || []).join(',')));
+          setCloudSyncState('synced');
           if (splitCount > 0) {
             saveStoredData('cameras', normalized);
           }
