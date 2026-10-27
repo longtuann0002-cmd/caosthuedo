@@ -1,38 +1,127 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Retrieve Supabase environment credentials using safe typing
-const metaEnv = (import.meta as any).env || {};
-const supabaseUrl = metaEnv.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || '';
+// Retrieve credentials safely from Vite env and LocalStorage
+export function getSupabaseCredentials() {
+  const metaEnv = (import.meta as any).env || {};
+  let url = metaEnv.VITE_SUPABASE_URL || '';
+  let anonKey = metaEnv.VITE_SUPABASE_ANON_KEY || '';
 
-// Safely evaluate if Supabase is properly configured in settings
-export const isSupabaseConfigured = !!(
-  supabaseUrl && 
-  supabaseAnonKey && 
-  supabaseUrl !== 'YOUR_SUPABASE_URL' &&
-  !supabaseUrl.toLowerCase().includes('placeholder') &&
-  !supabaseUrl.toLowerCase().includes('your_supabase') &&
-  supabaseUrl.startsWith('https://') &&
-  supabaseAnonKey.length > 20 &&
-  supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY_HERE'
-);
+  if (typeof window !== 'undefined') {
+    const localUrl = localStorage.getItem('custom_supabase_url');
+    const localKey = localStorage.getItem('custom_supabase_key');
+    if (localUrl && localUrl.trim().startsWith('https://')) {
+      url = localUrl.trim();
+    }
+    if (localKey && localKey.trim().length > 20) {
+      anonKey = localKey.trim();
+    }
+  }
 
-// Initialize Supabase client
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+  const isConfigured = !!(
+    url && 
+    anonKey && 
+    url !== 'YOUR_SUPABASE_URL' &&
+    !url.toLowerCase().includes('placeholder') &&
+    !url.toLowerCase().includes('your_supabase') &&
+    url.startsWith('https://') &&
+    anonKey.length > 20 &&
+    anonKey !== 'YOUR_SUPABASE_ANON_KEY_HERE'
+  );
 
+  return { url, anonKey, isConfigured };
+}
+
+// Current client singleton
+let activeClient: SupabaseClient | null = null;
+let activeUrl = '';
+let activeKey = '';
+
+export function getSupabase(): SupabaseClient | null {
+  const creds = getSupabaseCredentials();
+  if (!creds.isConfigured) {
+    activeClient = null;
+    return null;
+  }
+  if (!activeClient || activeUrl !== creds.url || activeKey !== creds.anonKey) {
+    activeUrl = creds.url;
+    activeKey = creds.anonKey;
+    activeClient = createClient(creds.url, creds.anonKey);
+  }
+  return activeClient;
+}
+
+// Evaluate configuration status
+export const isSupabaseConfigured = getSupabaseCredentials().isConfigured;
+
+// Backward-compatible exported instance (lazy-bound proxy)
+export const supabase = getSupabase();
+
+/**
+ * Save or remove custom credentials in LocalStorage
+ */
+export function saveCustomSupabaseCredentials(url: string, key: string) {
+  if (typeof window !== 'undefined') {
+    if (url.trim()) {
+      localStorage.setItem('custom_supabase_url', url.trim());
+    } else {
+      localStorage.removeItem('custom_supabase_url');
+    }
+    if (key.trim()) {
+      localStorage.setItem('custom_supabase_key', key.trim());
+    } else {
+      localStorage.removeItem('custom_supabase_key');
+    }
+  }
+  activeClient = null;
+}
+
+/**
+ * Test Supabase connection and check if table 'camlease_store' exists
+ */
+export async function testSupabaseConnection(customUrl?: string, customKey?: string): Promise<{ success: boolean; message: string; needSchema?: boolean }> {
+  try {
+    const creds = getSupabaseCredentials();
+    const url = customUrl !== undefined ? customUrl.trim() : creds.url;
+    const key = customKey !== undefined ? customKey.trim() : creds.anonKey;
+
+    if (!url || !key) {
+      return { success: false, message: 'Vui lòng nhập đầy đủ Supabase URL và Supabase Anon Key.' };
+    }
+    if (!url.startsWith('https://')) {
+      return { success: false, message: 'Supabase URL không hợp lệ. Phải bắt đầu bằng https://' };
+    }
+    if (key.length < 20) {
+      return { success: false, message: 'Supabase Anon Key không hợp lệ hoặc quá ngắn.' };
+    }
+
+    const testClient = createClient(url, key);
+    const { data, error } = await testClient.from('camlease_store').select('key').limit(1);
+
+    if (error) {
+      if (error.code === '42P01' || error.message.toLowerCase().includes('does not exist') || error.message.includes('relation "camlease_store" does not exist')) {
+        return { 
+          success: false, 
+          needSchema: true,
+          message: 'Kết nối máy chủ thành công, nhưng chưa tạo bảng "camlease_store". Hãy vào SQL Editor của Supabase chạy lệnh khởi tạo.' 
+        };
+      }
+      return { success: false, message: `Lỗi Supabase: ${error.message}` };
+    }
+
+    return { success: true, message: 'Kết nối Supabase thành công! Cơ sở dữ liệu đám mây sẵn sàng hoạt động.' };
+  } catch (err: any) {
+    return { success: false, message: `Không thể kết nối đến máy chủ: ${err?.message || 'Lỗi mạng'}` };
+  }
+}
 
 /**
  * Synchronize data state to Supabase cloud database
- * @param key LocalStorage matched key
- * @param data Array or Object data block to serialize
- * @returns Success status indicator
  */
 export async function syncToSupabase(key: string, data: any): Promise<boolean> {
-  if (!supabase) return false;
+  const client = getSupabase();
+  if (!client) return false;
   try {
-    const { error } = await supabase
+    const { error } = await client
       .from('camlease_store')
       .upsert(
         { 
@@ -66,17 +155,16 @@ export async function syncToSupabase(key: string, data: any): Promise<boolean> {
 
 /**
  * Fetch synchronized data state from Supabase cloud database
- * @param key LocalStorage matched key
- * @returns Parsed JSON data or null if empty/unavailable
  */
 export async function fetchFromSupabase(key: string): Promise<any | null> {
-  if (!supabase) return null;
+  const client = getSupabase();
+  if (!client) return null;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('camlease_store')
       .select('value')
       .eq('key', key)
-      .maybeSingle(); // Prevents throwing 406 on no records found
+      .maybeSingle();
     
     if (error) {
       console.warn(`[Supabase] Fetch failed for "${key}":`, error.message);

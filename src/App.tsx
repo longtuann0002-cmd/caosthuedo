@@ -10,7 +10,14 @@ import {
   INITIAL_CONTRACTS,
   INITIAL_EXPENSES
 } from './utils/mockData';
-import { isSupabaseConfigured, syncToSupabase, fetchFromSupabase } from './utils/supabase';
+import { 
+  isSupabaseConfigured, 
+  syncToSupabase, 
+  fetchFromSupabase,
+  getSupabaseCredentials,
+  saveCustomSupabaseCredentials,
+  testSupabaseConnection
+} from './utils/supabase';
 import { formatDMY } from './utils/dateUtils';
 import { sendOrderCreatedNotification, checkAndTriggerMorningBriefing, showPushNotification, updateAppBadge, clearAppBadge } from './utils/pushNotification';
 import { broadcastToAllDevices, listenToCrossDeviceAlerts, initFirebaseMessaging, syncContractsToCloud, registerDeviceFCMToken } from './utils/firebasePush';
@@ -75,7 +82,13 @@ import {
   Bell,
   Palette,
   ChevronDown,
-  Plus
+  Plus,
+  Cloud,
+  CloudUpload,
+  CloudDownload,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 
 const DEFAULT_USERS = [
@@ -223,6 +236,16 @@ export default function App() {
   const [newSnapshotName, setNewSnapshotName] = useState('');
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cloud Database (Supabase) States
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState(() => getSupabaseCredentials().url);
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState(() => getSupabaseCredentials().anonKey);
+  const [supabaseStatusMsg, setSupabaseStatusMsg] = useState<{ type: 'idle' | 'testing' | 'success' | 'error'; text: string; needSchema?: boolean }>({
+    type: 'idle',
+    text: ''
+  });
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Forgot Password States
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
@@ -1281,6 +1304,133 @@ export default function App() {
   const handleDeleteSnapshot = (id: string, name: string) => {
     setSnapshots(prev => prev.filter(s => s.id !== id));
     addToast('Đã xóa bản ghi sao lưu', 'info', `Yêu cầu gỡ bỏ "${name}" đã được thực hiện.`);
+  };
+
+  // Operations: CLOUD DATABASE (SUPABASE)
+  const handleTestSupabase = async () => {
+    setSupabaseStatusMsg({ type: 'testing', text: 'Đang kiểm tra kết nối tới máy chủ Supabase...' });
+    const res = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
+    if (res.success) {
+      setSupabaseStatusMsg({ type: 'success', text: res.message });
+      addToast('Kết nối thành công!', 'success', res.message);
+    } else {
+      setSupabaseStatusMsg({ type: 'error', text: res.message, needSchema: res.needSchema });
+      addToast('Kiểm tra thất bại', 'error', res.message);
+    }
+  };
+
+  const handleSaveSupabaseConfig = async () => {
+    saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+    addToast('Đã lưu cấu hình Cloud', 'success', 'Thông tin Supabase đã được lưu vào trình duyệt.');
+    await handleTestSupabase();
+  };
+
+  const handlePushAllToCloud = async () => {
+    if (!supabaseUrlInput || !supabaseKeyInput) {
+      addToast('Chưa có thông tin Cloud', 'warning', 'Vui lòng nhập Supabase URL và Anon Key trước khi đẩy dữ liệu.');
+      return;
+    }
+    setIsSyncingCloud(true);
+    try {
+      saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+      const resTest = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
+      if (!resTest.success) {
+        throw new Error(resTest.message);
+      }
+      await Promise.all([
+        syncToSupabase('cameras', cameras),
+        syncToSupabase('contracts', contracts),
+        syncToSupabase('customers', customers),
+        syncToSupabase('expenses', expenses),
+        syncToSupabase('registeredUsers', registeredUsers),
+        syncToSupabase('brand_settings', {
+          logoText,
+          logoTextCase,
+          logoFontSize,
+          logoSubtitle,
+          logoSubtitleCase,
+          logoSubtitleFontSize,
+          logoIconType,
+          logoIconColor,
+          logoBase64,
+          accountSectionTitle
+        })
+      ]);
+      addToast('Tải lên Cloud thành công!', 'success', `Đã đồng bộ toàn bộ ${cameras.length} đồ và dữ liệu lên máy chủ đám mây!`);
+      setSupabaseStatusMsg({ type: 'success', text: `Đã đẩy toàn bộ dữ liệu (${cameras.length} đồ) lên Cloud thành công!` });
+    } catch (err: any) {
+      addToast('Lỗi đồng bộ Cloud', 'error', err?.message || 'Có lỗi khi đồng bộ');
+      setSupabaseStatusMsg({ type: 'error', text: err?.message || 'Có lỗi khi đồng bộ' });
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handlePullAllFromCloud = async () => {
+    if (!supabaseUrlInput || !supabaseKeyInput) {
+      addToast('Chưa có thông tin Cloud', 'warning', 'Vui lòng nhập Supabase URL và Anon Key trước khi kéo dữ liệu.');
+      return;
+    }
+    setIsSyncingCloud(true);
+    try {
+      saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+      const resTest = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
+      if (!resTest.success) {
+        throw new Error(resTest.message);
+      }
+      const [cams, conts, custs, exps, users, brand] = await Promise.all([
+        fetchFromSupabase('cameras'),
+        fetchFromSupabase('contracts'),
+        fetchFromSupabase('customers'),
+        fetchFromSupabase('expenses'),
+        fetchFromSupabase('registeredUsers'),
+        fetchFromSupabase('brand_settings')
+      ]);
+
+      let count = 0;
+      if (cams && Array.isArray(cams)) {
+        const { normalized } = normalizeOutfitsBySize(cams);
+        setCameras(normalized);
+        saveStoredData('cameras', normalized);
+        count = normalized.length;
+      }
+      if (conts && Array.isArray(conts)) {
+        const { deduplicated } = deduplicateContracts(conts);
+        setContracts(deduplicated);
+        saveStoredData('contracts', deduplicated);
+      }
+      if (custs && Array.isArray(custs)) {
+        setCustomers(custs);
+        saveStoredData('customers', custs);
+      }
+      if (exps && Array.isArray(exps)) {
+        setExpenses(exps);
+        saveStoredData('expenses', exps);
+      }
+      if (users && Array.isArray(users)) {
+        setRegisteredUsers(users);
+        saveStoredData('registeredUsers', users);
+      }
+      if (brand) {
+        if (brand.logoText !== undefined) { setLogoText(brand.logoText); saveStoredData('logoText', brand.logoText); }
+        if (brand.logoTextCase !== undefined) { setLogoTextCase(brand.logoTextCase); saveStoredData('logoTextCase', brand.logoTextCase); }
+        if (brand.logoFontSize !== undefined) { setLogoFontSize(brand.logoFontSize); saveStoredData('logoFontSize', brand.logoFontSize); }
+        if (brand.logoSubtitle !== undefined) { setLogoSubtitle(brand.logoSubtitle); saveStoredData('logoSubtitle', brand.logoSubtitle); }
+        if (brand.logoSubtitleCase !== undefined) { setLogoSubtitleCase(brand.logoSubtitleCase); saveStoredData('logoSubtitleCase', brand.logoSubtitleCase); }
+        if (brand.logoSubtitleFontSize !== undefined) { setLogoSubtitleFontSize(brand.logoSubtitleFontSize); saveStoredData('logoSubtitleFontSize', brand.logoSubtitleFontSize); }
+        if (brand.logoIconType !== undefined) { setLogoIconType(brand.logoIconType); saveStoredData('logoIconType', brand.logoIconType); }
+        if (brand.logoIconColor !== undefined) { setLogoIconColor(brand.logoIconColor); saveStoredData('logoIconColor', brand.logoIconColor); }
+        if (brand.logoBase64 !== undefined) { setLogoBase64(brand.logoBase64); saveStoredData('logoBase64', brand.logoBase64); }
+        if (brand.accountSectionTitle !== undefined) { setAccountSectionTitle(brand.accountSectionTitle); saveStoredData('accountSectionTitle', brand.accountSectionTitle); }
+      }
+      addToast('Kéo dữ liệu thành công!', 'success', `Đã đồng bộ ${count} trang phục từ Cloud về máy này.`);
+      setSupabaseStatusMsg({ type: 'success', text: `Đã nạp ${count} trang phục từ Cloud về máy này thành công!` });
+    } catch (err: any) {
+      addToast('Lỗi kéo dữ liệu', 'error', err?.message || 'Có lỗi khi kéo dữ liệu');
+      setSupabaseStatusMsg({ type: 'error', text: err?.message || 'Có lỗi khi kéo dữ liệu' });
+    } finally {
+      setIsSyncingCloud(false);
+    }
   };
 
   // Operations: CONTRACTS
@@ -5728,6 +5878,151 @@ export default function App() {
                       </div>
                     ))
                   )}
+                </div>
+              </div>
+
+              {/* 3. KẾT NỐI CLOUD SUPABASE (ĐỒNG BỘ ĐA THIẾT BỊ) */}
+              <div className="space-y-3 pt-3 border-t border-gray-150">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                    <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Đồng bộ Đám mây Supabase (Nhiều máy tính / Điện thoại)</span>
+                  </h4>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    supabaseUrlInput && supabaseKeyInput 
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                  }`}>
+                    {supabaseUrlInput && supabaseKeyInput ? 'Đã cài đặt Cloud' : 'Chưa kết nối Cloud'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Kết nối tài khoản Supabase (hoàn toàn miễn phí) giúp mọi máy tính và điện thoại trong tiệm của bạn tự động cập nhật kho trang phục, đơn thuê tức thời.
+                </p>
+
+                {/* Input Fields */}
+                <div className="space-y-2.5 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      1. Supabase Project URL (Địa chỉ máy chủ)
+                    </label>
+                    <input
+                      type="text"
+                      value={supabaseUrlInput}
+                      onChange={(e) => setSupabaseUrlInput(e.target.value)}
+                      placeholder="https://xyzabcdefgh.supabase.co"
+                      className="w-full text-xs font-mono px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-hidden focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      2. Supabase Anon Key (Khóa bảo mật công khai)
+                    </label>
+                    <input
+                      type="password"
+                      value={supabaseKeyInput}
+                      onChange={(e) => setSupabaseKeyInput(e.target.value)}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      className="w-full text-xs font-mono px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-hidden focus:border-emerald-500"
+                    />
+                  </div>
+
+                  {/* Status alert */}
+                  {supabaseStatusMsg.text && (
+                    <div className={`p-2.5 rounded-lg text-xs flex items-start gap-2 ${
+                      supabaseStatusMsg.type === 'success' 
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                        : supabaseStatusMsg.type === 'error'
+                        ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                        : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                    }`}>
+                      <span className="font-bold shrink-0">
+                        {supabaseStatusMsg.type === 'success' ? '✓' : supabaseStatusMsg.type === 'error' ? '⚠' : 'ℹ'}
+                      </span>
+                      <div className="flex-1 leading-snug">
+                        {supabaseStatusMsg.text}
+                        {supabaseStatusMsg.needSchema && (
+                          <div className="mt-2 pt-2 border-t border-rose-200/60">
+                            <span className="block text-[10.5px] font-semibold text-rose-900 mb-1">
+                              👉 Bấm nút dưới đây để sao chép mã SQL, sau đó dán vào SQL Editor trên Supabase:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const sql = `CREATE TABLE IF NOT EXISTS camlease_store (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+ALTER TABLE camlease_store ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read access" ON camlease_store FOR SELECT USING (true);
+CREATE POLICY "Allow public insert/upsert" ON camlease_store FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update" ON camlease_store FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete" ON camlease_store FOR DELETE USING (true);`;
+                                navigator.clipboard.writeText(sql);
+                                setCopiedSql(true);
+                                setTimeout(() => setCopiedSql(false), 3000);
+                              }}
+                              className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10.5px] rounded-md transition flex items-center gap-1 cursor-pointer"
+                            >
+                              {copiedSql ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                              <span>{copiedSql ? 'Đã sao chép mã SQL!' : 'Sao chép đoạn mã tạo bảng SQL'}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions buttons */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleTestSupabase}
+                      className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold text-xs rounded-lg transition cursor-pointer flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Kiểm tra kết nối</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveSupabaseConfig}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
+                    >
+                      <Save className="w-3 h-3" />
+                      <span>Lưu cấu hình</span>
+                    </button>
+                  </div>
+
+                  {/* 2 Big Sync Action Buttons */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-gray-200/80">
+                    <button
+                      type="button"
+                      disabled={isSyncingCloud}
+                      onClick={handlePushAllToCloud}
+                      className="p-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer disabled:opacity-50"
+                      title="Tải toàn bộ đồ trên máy này lên máy chủ đám mây"
+                    >
+                      <CloudUpload className="w-4 h-4" />
+                      <span>ĐẨY DỮ LIỆU LÊN CLOUD</span>
+                      <span className="text-[9.5px] text-emerald-100 font-normal">Dùng cho máy có đủ đồ ({cameras.length} đồ)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSyncingCloud}
+                      onClick={handlePullAllFromCloud}
+                      className="p-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer disabled:opacity-50"
+                      title="Kéo toàn bộ đồ từ đám mây về máy này"
+                    >
+                      <CloudDownload className="w-4 h-4" />
+                      <span>KÉO DỮ LIỆU TỪ CLOUD VỀ</span>
+                      <span className="text-[9.5px] text-blue-100 font-normal">Dùng cho máy bị thiếu đồ</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
