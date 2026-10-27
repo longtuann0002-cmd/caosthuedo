@@ -268,12 +268,16 @@ export default function App() {
   const [changePasswordSuccess, setChangePasswordSuccess] = useState('');
 
   // Load states from localStorage or use rich mock dataset
+  // If Supabase is configured, start with empty array to avoid showing stale localStorage cache
+  // The useEffect below will fill from Supabase immediately
   const [cameras, setCameras] = useState<Camera[]>(() => {
+    if (isSupabaseConfigured) return []; // Wait for Supabase fetch, avoid stale localStorage flash
     const loaded = loadStoredData('cameras', INITIAL_CAMERAS);
     const { normalized } = normalizeOutfitsBySize(loaded);
     return normalized;
   });
   const [contracts, setContracts] = useState<RentalContract[]>(() => {
+    if (isSupabaseConfigured) return [];
     const loaded = loadStoredData('contracts', INITIAL_CONTRACTS);
     const migrationKey = 'camlease_historical_contracts_migrated_v1';
     let baseContracts = loaded;
@@ -290,9 +294,10 @@ export default function App() {
     return deduplicated;
   });
   const [customers, setCustomers] = useState<Customer[]>(() =>
-    loadStoredData('customers', INITIAL_CUSTOMERS)
+    isSupabaseConfigured ? [] : loadStoredData('customers', INITIAL_CUSTOMERS)
   );
   const [expenses, setExpenses] = useState<Expense[]>(() => {
+    if (isSupabaseConfigured) return [];
     const loaded = loadStoredData('expenses', INITIAL_EXPENSES);
     const migrationKey = 'camlease_historical_expenses_migrated_v1';
     if (!localStorage.getItem(migrationKey)) {
@@ -975,12 +980,11 @@ export default function App() {
         if (cloudCameras !== null) {
           const { normalized, splitCount } = normalizeOutfitsBySize(cloudCameras as Camera[]);
           setCameras(normalized);
+          // Always update localStorage cache with the authoritative cloud data
+          saveStoredData('cameras', normalized);
           if (splitCount > 0) {
             console.log(`[Auto-Repair] Đã tự động tách ${splitCount} trang phục có size gộp thành từng size độc lập.`);
-            saveStoredData('cameras', normalized);
-            if (isSupabaseConfigured) {
-              syncToSupabaseChunked('cameras', normalized);
-            }
+            syncToSupabaseChunked('cameras', normalized);
           }
         } else {
           const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
