@@ -18,7 +18,8 @@ import {
   getSupabaseCredentials,
   saveCustomSupabaseCredentials,
   testSupabaseConnection,
-  deleteOutfitImageFromStorage
+  deleteOutfitImageFromStorage,
+  cleanOrphanStorageImages
 } from './utils/supabase';
 import { formatDMY } from './utils/dateUtils';
 import { sendOrderCreatedNotification, checkAndTriggerMorningBriefing, showPushNotification, updateAppBadge, clearAppBadge } from './utils/pushNotification';
@@ -1401,11 +1402,38 @@ export default function App() {
       ]);
       addToast('Tải lên Cloud thành công!', 'success', `Đã đồng bộ toàn bộ ${cameras.length} đồ và dữ liệu lên máy chủ đám mây!`);
       setSupabaseStatusMsg({ type: 'success', text: `Đã đẩy toàn bộ dữ liệu (${cameras.length} đồ) lên Cloud thành công!` });
+      // Tự động quét dọn ảnh rác trên Storage
+      cleanOrphanStorageImages(cameras).catch(() => {});
     } catch (err: any) {
       addToast('Lỗi đồng bộ Cloud', 'error', err?.message || 'Có lỗi khi đồng bộ');
       setSupabaseStatusMsg({ type: 'error', text: err?.message || 'Có lỗi khi đồng bộ' });
     } finally {
       setIsSyncingCloud(false);
+    }
+  };
+
+  const [isCleaningStorage, setIsCleaningStorage] = useState(false);
+  const handleCleanCloudStorage = async () => {
+    setIsCleaningStorage(true);
+    try {
+      const res = await cleanOrphanStorageImages(cameras);
+      if (res.deletedCount > 0) {
+        addToast(
+          'Dọn dẹp thành công!',
+          'success',
+          `Đã xóa sạch ${res.deletedCount} file ảnh rác (${res.freedKB} KB) khỏi Supabase Storage!`
+        );
+      } else {
+        addToast(
+          'Cloud hoàn toàn sạch sẽ!',
+          'info',
+          'Tất cả ảnh trên Storage đều đang được dùng bởi các trang phục trong kho, không có ảnh rác nào.'
+        );
+      }
+    } catch {
+      addToast('Lỗi dọn dẹp', 'error', 'Không thể kết nối để dọn dẹp Storage.');
+    } finally {
+      setIsCleaningStorage(false);
     }
   };
 
@@ -2075,6 +2103,12 @@ export default function App() {
           }
         }
       });
+    }
+
+    // Tự động dọn dẹp ảnh cũ trên Supabase Storage nếu đã đổi sang ảnh mới hoặc xóa ảnh
+    if (oldCam?.image && oldCam.image !== updatedCam.image) {
+      const otherCameras = cameras.filter(c => c.id !== updatedCam.id);
+      deleteOutfitImageFromStorage(oldCam.image, otherCameras);
     }
 
     setCameras(prev => prev.map(c => (c.id === updatedCam.id ? updatedCam : c)));
@@ -3359,7 +3393,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Section 2: CÀI ĐẶT & HỆ THỐNG - Ẩn đi, bấm chọn mới hiện ra */}
+          {/* Section 2: CÀI ĐẶT & HỆ THỐNG */}
           <div>
             {!sidebarCollapsed ? (
               <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -3369,119 +3403,59 @@ export default function App() {
               <div className="w-5 h-px bg-slate-200 mx-auto my-1.5" />
             )}
 
-            {!sidebarCollapsed ? (
-              /* Expanded Sidebar Accordion */
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setSettingsExpanded(!settingsExpanded)}
-                  className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center justify-between px-3 py-2.5 cursor-pointer ${
-                    settingsExpanded
-                      ? 'bg-white text-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-slate-900/5'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ${
-                      settingsExpanded 
-                        ? 'bg-orange-500 text-white shadow-sm shadow-orange-500/30' 
-                        : 'text-slate-500 group-hover/nav:text-slate-800 group-hover/nav:bg-white/80'
-                    }`}>
-                      <Settings className={`w-[19px] h-[19px] ${settingsExpanded ? 'stroke-[2.2]' : 'stroke-[1.8] group-hover/nav:stroke-[2]'}`} />
-                    </div>
+            <div className="space-y-1">
+              {/* Nút 1: Thương hiệu & Logo */}
+              <button
+                type="button"
+                onClick={() => setShowLogoModal(true)}
+                className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-white/60 ${
+                  sidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
+                }`}
+                title={sidebarCollapsed ? 'Thương hiệu & Logo' : undefined}
+              >
+                <div className={`flex items-center gap-3 min-w-0 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 text-slate-500 group-hover/nav:text-orange-600 group-hover/nav:bg-orange-50">
+                    <Palette className="w-[19px] h-[19px] stroke-[1.8] group-hover/nav:stroke-[2]" />
+                  </div>
+                  {!sidebarCollapsed && (
                     <div className="leading-tight text-left min-w-0">
-                      <span className={`block text-[13.5px] tracking-tight transition-colors ${settingsExpanded ? 'font-black text-slate-900' : 'font-semibold text-slate-700 group-hover/nav:text-slate-900'}`}>
-                        Cài đặt
+                      <span className="block text-[13.5px] font-semibold text-slate-700 group-hover/nav:text-slate-900 tracking-tight transition-colors">
+                        Thương hiệu & Logo
                       </span>
-                      <span className={`text-[11px] block truncate transition-colors ${settingsExpanded ? 'text-slate-500 font-medium' : 'text-slate-400 font-normal group-hover/nav:text-slate-500'}`}>
-                        Thương hiệu & Sao lưu
+                      <span className="text-[11px] text-slate-400 font-normal group-hover/nav:text-slate-500 block truncate transition-colors">
+                        Tên tiệm, logo & liên hệ
                       </span>
                     </div>
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 group-hover/nav:text-slate-700 transition-transform duration-200 shrink-0 ${
-                    settingsExpanded ? 'rotate-180 text-orange-600' : ''
-                  }`} />
-                </button>
+                  )}
+                </div>
+              </button>
 
-                {/* Sub-items: ONLY shown when settingsExpanded is true */}
-                {settingsExpanded && (
-                  <div className="pl-3 pr-1 py-1 space-y-1 bg-slate-50/80 rounded-2xl border border-slate-200/70 mt-1.5 animate-fade-in">
-                    <button
-                      type="button"
-                      onClick={() => setShowLogoModal(true)}
-                      className="w-full rounded-xl px-3 py-2 text-left flex items-center gap-2.5 hover:bg-white text-slate-700 hover:text-orange-600 font-bold text-xs transition cursor-pointer hover:shadow-3xs"
-                    >
-                      <Palette className="w-4 h-4 text-slate-500 shrink-0" />
-                      <div>
-                        <span className="block leading-tight">Thương hiệu & Logo</span>
-                        <span className="text-[9.5px] text-slate-400 font-normal block">Tùy chỉnh logo, tên quán</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowBackupModal(true)}
-                      className="w-full rounded-xl px-3 py-2 text-left flex items-center gap-2.5 hover:bg-white text-slate-700 hover:text-orange-600 font-bold text-xs transition cursor-pointer hover:shadow-3xs"
-                    >
-                      <Database className="w-4 h-4 text-slate-500 shrink-0" />
-                      <div>
-                        <span className="block leading-tight">Sao lưu dữ liệu</span>
-                        <span className="text-[9.5px] text-slate-400 font-normal block">Xuất & nạp bản sao lưu</span>
-                      </div>
-                    </button>
+              {/* Nút 2: Sao lưu & Cloud */}
+              <button
+                type="button"
+                onClick={() => setShowBackupModal(true)}
+                className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-white/60 ${
+                  sidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
+                }`}
+                title={sidebarCollapsed ? 'Sao lưu & Đồng bộ Cloud' : undefined}
+              >
+                <div className={`flex items-center gap-3 min-w-0 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 text-slate-500 group-hover/nav:text-emerald-600 group-hover/nav:bg-emerald-50">
+                    <Database className="w-[19px] h-[19px] stroke-[1.8] group-hover/nav:stroke-[2]" />
                   </div>
-                )}
-              </div>
-            ) : (
-              /* Collapsed Rail Mode - Squircle button with popup */
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setSettingsExpanded(!settingsExpanded)}
-                  className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center justify-center p-2 cursor-pointer ${
-                    settingsExpanded
-                      ? 'bg-orange-500 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-950 hover:bg-white/80'
-                  }`}
-                  title="Cài đặt"
-                >
-                  <div className={`w-9.5 h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                    settingsExpanded 
-                      ? 'bg-orange-500 text-white' 
-                      : 'bg-slate-100/90 text-slate-600 group-hover/nav:bg-orange-50 group-hover/nav:text-orange-600'
-                  }`}>
-                    <Settings className="w-5 h-5 stroke-[2.2]" />
-                  </div>
-                </button>
-
-                {settingsExpanded && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setSettingsExpanded(false)} />
-                    <div className="absolute left-full ml-3 top-0 w-48 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-1.5 z-50 text-left text-xs animate-fade-in divide-y divide-slate-100">
-                      <div className="px-3 py-1.5 font-extrabold text-[11px] text-slate-400 uppercase tracking-wider">Cài đặt</div>
-                      <div className="py-1">
-                        <button
-                          type="button"
-                          onClick={() => { setSettingsExpanded(false); setShowLogoModal(true); }}
-                          className="w-full px-3 py-2 hover:bg-orange-50 text-left font-bold text-slate-700 hover:text-orange-600 transition flex items-center gap-2 cursor-pointer"
-                        >
-                          <Palette className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Thương hiệu & Logo</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setSettingsExpanded(false); setShowBackupModal(true); }}
-                          className="w-full px-3 py-2 hover:bg-orange-50 text-left font-bold text-slate-700 hover:text-orange-600 transition flex items-center gap-2 cursor-pointer"
-                        >
-                          <Database className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Sao lưu dữ liệu</span>
-                        </button>
-                      </div>
+                  {!sidebarCollapsed && (
+                    <div className="leading-tight text-left min-w-0">
+                      <span className="block text-[13.5px] font-semibold text-slate-700 group-hover/nav:text-slate-900 tracking-tight transition-colors">
+                        Sao lưu & Cloud
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-normal group-hover/nav:text-slate-500 block truncate transition-colors">
+                        Xuất file & đồng bộ dữ liệu
+                      </span>
                     </div>
-                  </>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              </button>
+            </div>
           </div>
         </nav>
 
@@ -6173,6 +6147,20 @@ CREATE POLICY "Allow public delete" ON camlease_store FOR DELETE USING (true);`;
                       <CloudDownload className="w-4 h-4" />
                       <span>KÉO DỮ LIỆU TỪ CLOUD VỀ</span>
                       <span className="text-[9.5px] text-blue-100 font-normal">Dùng cho máy bị thiếu đồ</span>
+                    </button>
+                  </div>
+
+                  {/* Dọn dẹp ảnh rác Storage */}
+                  <div className="pt-2 border-t border-gray-200/80">
+                    <button
+                      type="button"
+                      disabled={isCleaningStorage}
+                      onClick={handleCleanCloudStorage}
+                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 border border-slate-200/80"
+                      title="Quét và xóa vĩnh viễn các ảnh cũ/ảnh thử nghiệm không còn gắn với trang phục nào trong kho"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{isCleaningStorage ? 'Đang quét & dọn dẹp...' : '🧹 Quét & Dọn dẹp ảnh rác trên Storage'}</span>
                     </button>
                   </div>
                 </div>

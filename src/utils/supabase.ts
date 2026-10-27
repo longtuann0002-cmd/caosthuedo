@@ -398,4 +398,49 @@ export async function deleteOutfitImageFromStorage(
   }
 }
 
+/**
+ * Scan Supabase Storage 'outfits' bucket and delete any image files
+ * that are no longer referenced by any camera/outfit in the database.
+ */
+export async function cleanOrphanStorageImages(cameras: any[]): Promise<{ deletedCount: number; freedKB: number }> {
+  const client = getSupabase();
+  if (!client) return { deletedCount: 0, freedKB: 0 };
+
+  try {
+    const activeFileNames = new Set<string>();
+    cameras.forEach(c => {
+      if (c && c.image && typeof c.image === 'string' && c.image.includes('/storage/v1/object/public/outfits/')) {
+        const fn = c.image.split('/storage/v1/object/public/outfits/').pop();
+        if (fn) activeFileNames.add(decodeURIComponent(fn.split('?')[0]));
+      }
+    });
+
+    const { data: files, error } = await client.storage.from('outfits').list('', { limit: 1000 });
+    if (error || !files) return { deletedCount: 0, freedKB: 0 };
+
+    const toDelete: string[] = [];
+    let freedBytes = 0;
+    files.forEach(f => {
+      if (f.name && !activeFileNames.has(f.name)) {
+        toDelete.push(f.name);
+        freedBytes += (f.metadata?.size || 0);
+      }
+    });
+
+    if (toDelete.length > 0) {
+      const { error: delError } = await client.storage.from('outfits').remove(toDelete);
+      if (delError) {
+        console.warn('[Supabase Storage] Lỗi khi dọn dẹp ảnh rác:', delError.message);
+      } else {
+        console.log(`[Supabase Storage] Đã dọn dẹp ${toDelete.length} ảnh rác (${(freedBytes / 1024).toFixed(1)} KB) khỏi Cloud.`);
+      }
+    }
+    return { deletedCount: toDelete.length, freedKB: Math.round(freedBytes / 1024) };
+  } catch (err) {
+    console.error('[Supabase Storage] Ngoại lệ khi quét ảnh rác:', err);
+    return { deletedCount: 0, freedKB: 0 };
+  }
+}
+
+
 
