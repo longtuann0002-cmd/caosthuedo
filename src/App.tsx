@@ -246,6 +246,7 @@ export default function App() {
     text: ''
   });
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [cloudSyncState, setCloudSyncState] = useState<'synced' | 'syncing' | 'error' | 'offline'>(() => isSupabaseConfigured ? 'synced' : 'offline');
   const [copiedSql, setCopiedSql] = useState(false);
 
   // Forgot Password States
@@ -726,12 +727,33 @@ export default function App() {
     return () => window.removeEventListener('supabase-sync-error', handleSyncError);
   }, []);
 
-  // Sync data states to local storage and Supabase
+  // Cảnh báo khi người dùng tắt tab trong lúc Cloud đang gửi dữ liệu
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (cloudSyncState === 'syncing') {
+        e.preventDefault();
+        e.returnValue = 'Dữ liệu đồ vừa nhập đang được tải lên máy chủ Cloud, bạn vui lòng đợi 2-3 giây trước khi thoát!';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [cloudSyncState]);
+
+  // Sync data states to local storage and Supabase with 1.2s Debounce (Chống nghẽn mạng khi nhập nhanh)
   useEffect(() => {
     if (!loaded) return;
     saveStoredData('cameras', cameras);
     if (isSupabaseConfigured) {
-      syncToSupabaseChunked('cameras', cameras);
+      setCloudSyncState('syncing');
+      const timer = setTimeout(async () => {
+        try {
+          const success = await syncToSupabaseChunked('cameras', cameras);
+          setCloudSyncState(success ? 'synced' : 'error');
+        } catch {
+          setCloudSyncState('error');
+        }
+      }, 1200);
+      return () => clearTimeout(timer);
     }
   }, [loaded, cameras]);
 
@@ -3659,6 +3681,37 @@ export default function App() {
               <span className="text-slate-400 font-medium">Hôm nay:</span>
               <span className="font-mono font-black text-slate-800">{formatDMY(systemDate)}</span>
             </div>
+
+            {/* Cloud Sync Status Indicator */}
+            {cloudSyncState === 'syncing' ? (
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-bold shadow-3xs"
+                title="Đang đồng bộ dữ liệu đồ lên máy chủ đám mây..."
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                <span className="hidden sm:inline">Đang lưu Cloud...</span>
+              </div>
+            ) : cloudSyncState === 'error' ? (
+              <button 
+                type="button"
+                onClick={handlePushAllToCloud}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-bold cursor-pointer shadow-3xs hover:bg-rose-100"
+                title="Đồng bộ gặp sự cố. Bấm để thử lại ngay"
+              >
+                <Cloud className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden sm:inline">Thử lại Cloud</span>
+              </button>
+            ) : cloudSyncState === 'synced' ? (
+              <div 
+                onClick={() => setShowBackupModal(true)}
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-200/90 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none"
+                title="Dữ liệu đã được lưu an toàn trên máy chủ Cloud. Nhấp để xem cài đặt."
+              >
+                <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Cloud an toàn</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              </div>
+            ) : null}
 
             {/* Nút kiểm tra nhanh kho đồ trống cạnh thông báo */}
             <button
