@@ -357,3 +357,45 @@ export async function uploadOutfitImageToStorage(
   });
 }
 
+/**
+ * Delete an outfit image from Supabase Storage bucket 'outfits'.
+ * Checks if the URL belongs to Supabase Storage and if other cameras are still using it.
+ */
+export async function deleteOutfitImageFromStorage(
+  imageUrl: string,
+  existingCameras: { image?: string }[] = []
+): Promise<boolean> {
+  if (!imageUrl || typeof imageUrl !== 'string') return false;
+
+  const bucketMarker = '/storage/v1/object/public/outfits/';
+  if (!imageUrl.includes(bucketMarker)) return false;
+
+  // Check if any other camera is still referencing this exact same image URL
+  const count = existingCameras.filter(c => c.image === imageUrl).length;
+  if (count > 1) {
+    console.log('[Supabase Storage] Ảnh này vẫn đang được dùng bởi trang phục khác, giữ lại trên Storage.');
+    return false;
+  }
+
+  const client = getSupabase();
+  if (!client) return false;
+
+  try {
+    const rawFileName = imageUrl.split(bucketMarker).pop();
+    if (!rawFileName) return false;
+    const cleanFileName = decodeURIComponent(rawFileName.split('?')[0]);
+
+    const { error } = await client.storage.from('outfits').remove([cleanFileName]);
+    if (error) {
+      console.warn('[Supabase Storage] Lỗi khi xóa file ảnh cũ:', error.message);
+      return false;
+    }
+    console.log('[Supabase Storage] Đã tự động dọn dẹp file ảnh cũ trên Cloud:', cleanFileName);
+    return true;
+  } catch (err) {
+    console.error('[Supabase Storage] Ngoại lệ khi xóa ảnh:', err);
+    return false;
+  }
+}
+
+

@@ -8,7 +8,7 @@ import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server,
 import { getInitialTieredPrices } from '../utils/pricing';
 import { matchCamera } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
-import { uploadOutfitImageToStorage } from '../utils/supabase';
+import { uploadOutfitImageToStorage, deleteOutfitImageFromStorage } from '../utils/supabase';
 
 export interface OutfitGroupItem {
   groupKey: string;
@@ -2555,6 +2555,7 @@ export default function EquipmentTracker({
                                             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                                             const compImg = canvas.toDataURL('image/jpeg', 0.8);
                                             const prefix = `${formState.serialNumber || 'outfit'}_${sz}`;
+                                            const oldSizeImg = formState.sizeImageMap[sz];
                                             const storageUrl = await uploadOutfitImageToStorage(compImg, prefix);
                                             setFormState(prev => ({
                                               ...prev,
@@ -2563,6 +2564,10 @@ export default function EquipmentTracker({
                                                 [sz]: storageUrl
                                               }
                                             }));
+                                            // Tự động xóa file ảnh cũ trên Storage nếu không còn ai dùng
+                                            if (oldSizeImg && oldSizeImg !== storageUrl) {
+                                              deleteOutfitImageFromStorage(oldSizeImg, cameras);
+                                            }
                                           } finally {
                                             setUploadingSize(null);
                                           }
@@ -2584,11 +2589,17 @@ export default function EquipmentTracker({
                             {currentSizeImg && (
                               <button
                                 type="button"
-                                onClick={() => setFormState(prev => {
-                                  const next = { ...prev.sizeImageMap };
-                                  delete next[sz];
-                                  return { ...prev, sizeImageMap: next };
-                                })}
+                                onClick={() => {
+                                  const oldImg = currentSizeImg;
+                                  setFormState(prev => {
+                                    const next = { ...prev.sizeImageMap };
+                                    delete next[sz];
+                                    return { ...prev, sizeImageMap: next };
+                                  });
+                                  if (oldImg) {
+                                    deleteOutfitImageFromStorage(oldImg, cameras);
+                                  }
+                                }}
                                 className="text-gray-400 hover:text-red-500 text-xs px-1"
                                 title="Bỏ ảnh riêng, dùng ảnh chung"
                               >
@@ -2812,7 +2823,13 @@ export default function EquipmentTracker({
                   {formState.image && (
                     <button
                       type="button"
-                      onClick={() => setFormState(prev => ({ ...prev, image: '' }))}
+                      onClick={() => {
+                        const oldImg = formState.image;
+                        setFormState(prev => ({ ...prev, image: '' }));
+                        if (oldImg) {
+                          deleteOutfitImageFromStorage(oldImg, cameras);
+                        }
+                      }}
                       className="text-[10px] text-rose-500 hover:text-rose-700 font-bold cursor-pointer transition"
                     >
                       ✕ Xóa ảnh
@@ -2883,8 +2900,13 @@ export default function EquipmentTracker({
                                       const compImg = canvas.toDataURL('image/jpeg', 0.8);
                                       // Tự động đẩy lên Supabase Storage và nhận lại URL công khai
                                       const prefix = (formState.serialNumber || formState.name || 'outfit').trim();
+                                      const oldMainImg = formState.image;
                                       const storageUrl = await uploadOutfitImageToStorage(compImg, prefix);
                                       setFormState(prev => ({ ...prev, image: storageUrl }));
+                                      // Tự động dọn dẹp file ảnh cũ nếu không còn ai dùng
+                                      if (oldMainImg && oldMainImg !== storageUrl) {
+                                        deleteOutfitImageFromStorage(oldMainImg, cameras);
+                                      }
                                     } finally {
                                       setIsUploadingImage(false);
                                     }

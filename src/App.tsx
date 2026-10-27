@@ -17,7 +17,8 @@ import {
   fetchFromSupabase,
   getSupabaseCredentials,
   saveCustomSupabaseCredentials,
-  testSupabaseConnection
+  testSupabaseConnection,
+  deleteOutfitImageFromStorage
 } from './utils/supabase';
 import { formatDMY } from './utils/dateUtils';
 import { sendOrderCreatedNotification, checkAndTriggerMorningBriefing, showPushNotification, updateAppBadge, clearAppBadge } from './utils/pushNotification';
@@ -2082,6 +2083,13 @@ export default function App() {
   const handleDeleteCamera = (id: string) => {
     const targetCam = cameras.find(c => c.id === id);
     if (targetCam) {
+      // 1. Tự động dọn dẹp file ảnh trên Supabase Storage nếu không có trang phục nào khác dùng chung
+      if (targetCam.image) {
+        const otherCameras = cameras.filter(c => c.id !== id);
+        deleteOutfitImageFromStorage(targetCam.image, otherCameras);
+      }
+
+      // 2. Tự động dọn dẹp khoản chi vốn nhập
       const serial = targetCam.serialNumber?.trim();
       const isMatchingExpense = (e: Expense) => {
         if (!e.description || !e.description.includes('Vốn nhập trang phục:')) return false;
