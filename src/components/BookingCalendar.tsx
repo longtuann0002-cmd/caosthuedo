@@ -334,6 +334,29 @@ export default function BookingCalendar({
   const [prevCalculatedTotal, setPrevCalculatedTotal] = useState(0);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
   const quickDocNoteInputRef = useRef<HTMLInputElement>(null);
+  const outfitListScrollRef = useRef<HTMLDivElement>(null);
+
+  // Đóng modal và xóa draft + reset form (không lưu nháp khi thoát không submit)
+  const handleCloseQuickModal = () => {
+    try { sessionStorage.removeItem(DRAFT_KEY_BOOKING); } catch {}
+    setFormData({
+      customerId: '',
+      customerName: '',
+      customerPhone: '',
+      customerDocType: 'CCCD',
+      customerDocNote: '',
+      selectedCameraIds: [],
+      printCounts: {},
+      startDate: '',
+      endDate: '',
+      depositAmount: 0,
+      paidAmount: 0,
+      discountPercent: 0,
+      customFinalPrice: null,
+      note: '',
+    });
+    setShowAddQuickModal(false);
+  };
 
   // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
   useEffect(() => {
@@ -1891,7 +1914,7 @@ export default function BookingCalendar({
                 <CalendarIcon className="w-5 h-5" /> Đặt Lịch & Tạo Đơn Nhanh
               </h3>
               <button
-                onClick={() => setShowAddQuickModal(false)}
+                onClick={() => handleCloseQuickModal()}
                 className="text-white/80 hover:text-white font-bold text-xl cursor-pointer"
               >
                 &times;
@@ -2217,10 +2240,26 @@ export default function BookingCalendar({
                     </span>
                   </div>
                   {formData.selectedCameraIds.length > 0 ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-xs flex items-center gap-1 shrink-0 animate-pulse">
-                      <Check className="w-3 h-3 stroke-[3]" />
-                      Đã chọn: {formData.selectedCameraIds.length} món
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const firstSelectedId = formData.selectedCameraIds[0];
+                          const el = document.getElementById(`quick-outfit-card-${firstSelectedId}`);
+                          if (el && outfitListScrollRef.current) {
+                            outfitListScrollRef.current.scrollTo({ top: el.offsetTop - 8, behavior: 'smooth' });
+                          }
+                        }}
+                        className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-orange-600 border border-orange-300 hover:bg-orange-50 shadow-3xs flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Cuộn đến trang phục đã chọn"
+                      >
+                        📍 Xem đã chọn
+                      </button>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-xs flex items-center gap-1 animate-pulse">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        Đã chọn: {formData.selectedCameraIds.length} món
+                      </span>
+                    </div>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-orange-600 border border-orange-200 shadow-3xs shrink-0">
                       Chưa chọn trang phục nào
@@ -2301,7 +2340,7 @@ export default function BookingCalendar({
                   </div>
                 </div>
 
-                <div className="bg-white/95 border border-orange-200/90 rounded-xl p-2 max-h-[300px] lg:max-h-[540px] overflow-y-auto space-y-2 shadow-inner">
+                <div ref={outfitListScrollRef} className="bg-white/95 border border-orange-200/90 rounded-xl p-2 max-h-[300px] lg:max-h-[540px] overflow-y-auto space-y-2 shadow-inner">
                   {(() => {
                     const availableOutfits = cameras
                       .filter(cam => {
@@ -2380,7 +2419,11 @@ export default function BookingCalendar({
                           const displayImage = sorted.find(c => formData.selectedCameraIds.includes(c.id) && c.image)?.image || sorted.find(c => c.image)?.image || first.image;
 
                           return (
-                            <div key={groupKey} className={`p-3 rounded-2xl transition-all border ${anySelected ? 'bg-orange-50/70 border-orange-400 shadow-xs ring-1 ring-orange-300/60' : 'bg-white border-gray-200/90 hover:border-orange-300 hover:shadow-2xs shadow-3xs'}`}>
+                            <div
+                              key={groupKey}
+                              id={`quick-outfit-card-${sorted.find(c => formData.selectedCameraIds.includes(c.id))?.id || sorted[0].id}`}
+                              className={`p-3 rounded-2xl transition-all border ${anySelected ? 'bg-orange-50/70 border-orange-400 shadow-xs ring-1 ring-orange-300/60' : 'bg-white border-gray-200/90 hover:border-orange-300 hover:shadow-2xs shadow-3xs'}`}
+                            >
                               <div className="flex gap-2.5 sm:gap-3 items-start">
                                 {/* Thumbnail ảnh đại diện trang phục */}
                                 <div 
@@ -2889,7 +2932,7 @@ export default function BookingCalendar({
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 sm:pt-4 border-t border-gray-100">
               <button
                 type="button"
-                onClick={() => setShowAddQuickModal(false)}
+                onClick={() => handleCloseQuickModal()}
                 className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
               >
                 Hủy bỏ

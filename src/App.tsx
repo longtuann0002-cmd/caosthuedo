@@ -90,7 +90,6 @@ import {
   CloudUpload,
   CloudDownload,
   Copy,
-  Check,
   ExternalLink
 } from 'lucide-react';
 

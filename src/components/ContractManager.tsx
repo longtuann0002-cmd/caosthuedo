@@ -592,6 +592,28 @@ export default function ContractManager({
   const [prevCalculatedTotal, setPrevCalculatedTotal] = useState(0);
   const contractDocNoteInputRef = useRef<HTMLInputElement>(null);
 
+  // Đóng modal tạo hợp đồng và xóa draft + reset form
+  const handleCloseAddModal = () => {
+    try { sessionStorage.removeItem(DRAFT_KEY_CONTRACT); } catch {}
+    setNewContractForm({
+      customerName: '',
+      customerPhone: '',
+      customerDocType: 'CCCD',
+      customerDocNote: '',
+      selectedCameraIds: [],
+      printCounts: {},
+      startDate: systemDate,
+      endDate: systemDate,
+      depositAmount: 0,
+      paidAmount: 0,
+      discountPercent: 0,
+      customFinalPrice: null,
+      fittingNotes: '',
+      note: ''
+    });
+    setShowAddModal(false);
+  };
+
   // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
   useEffect(() => {
     if (!showAddModal) return;
@@ -2518,7 +2540,7 @@ export default function ContractManager({
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => handleCloseAddModal()}
                 className="text-white hover:text-gray-200 font-bold text-xl cursor-pointer"
               >
                 &times;
@@ -3438,7 +3460,7 @@ export default function ContractManager({
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => handleCloseAddModal()}
                   className="px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-105 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
                 >
                   Hủy bỏ
