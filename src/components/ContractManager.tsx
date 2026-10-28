@@ -558,6 +558,7 @@ export default function ContractManager({
   const [contractOutfitSearch, setContractOutfitSearch] = useState<string>('');
   const [contractSizeFilter, setContractSizeFilter] = useState<string>('ALL');
   const [contractAvailabilityFilter, setContractAvailabilityFilter] = useState<'ALL' | 'READY' | 'BUSY'>('ALL');
+  const [contractShowOnlySelected, setContractShowOnlySelected] = useState<boolean>(false);
 
   // New Contract form state
   const DRAFT_KEY_CONTRACT = 'thuedo_contract_form_draft';
@@ -612,6 +613,7 @@ export default function ContractManager({
       note: ''
     });
     setShowAddModal(false);
+    setContractShowOnlySelected(false);
   };
 
   // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
@@ -2549,9 +2551,12 @@ export default function ContractManager({
 
             <form 
               onSubmit={handleCreateContract} 
-              className="p-6 space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
-              style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              className="flex flex-col flex-1 overflow-hidden min-h-0"
             >
+              <div 
+                className="p-6 space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
+                style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="relative">
                   <label className="block text-xs font-bold text-gray-700 mb-1">Họ tên khách hàng *</label>
@@ -2765,9 +2770,32 @@ export default function ContractManager({
                     </span>
                   </div>
                   {newContractForm.selectedCameraIds.length > 0 ? (
-                    <span className="bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-2xs">
-                      Đã chọn: {newContractForm.selectedCameraIds.length} món
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (contractShowOnlySelected) {
+                            setContractShowOnlySelected(false);
+                          } else {
+                            setContractOutfitSearch('');
+                            setContractSizeFilter('ALL');
+                            setContractAvailabilityFilter('ALL');
+                            setContractShowOnlySelected(true);
+                          }
+                        }}
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer shadow-3xs ${
+                          contractShowOnlySelected
+                            ? 'bg-orange-600 text-white shadow-xs ring-2 ring-orange-300'
+                            : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50'
+                        }`}
+                        title="Bấm để lọc chỉ xem những trang phục đã chọn"
+                      >
+                        {contractShowOnlySelected ? '👁️ Xem tất cả' : '📍 Xem đã chọn'}
+                      </button>
+                      <span className="bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-2xs">
+                        Đã chọn: {newContractForm.selectedCameraIds.length} món
+                      </span>
+                    </div>
                   ) : (
                     <span className="text-[11px] text-gray-400 font-medium">
                       Chưa chọn trang phục nào
@@ -2780,7 +2808,10 @@ export default function ContractManager({
                     <input
                       type="text"
                       value={contractOutfitSearch}
-                      onChange={e => setContractOutfitSearch(e.target.value)}
+                      onChange={e => {
+                        setContractOutfitSearch(e.target.value);
+                        if (contractShowOnlySelected) setContractShowOnlySelected(false);
+                      }}
                       placeholder="🔍 Tìm nhanh mẫu đồ, mã số, màu sắc..."
                       className="w-full bg-white border border-orange-200 rounded-xl px-3 py-1.5 text-xs text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs font-medium"
                     />
@@ -2801,12 +2832,15 @@ export default function ContractManager({
                     <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
                       <span className="text-[10px] font-bold text-gray-500 shrink-0 uppercase tracking-tight">Size:</span>
                       {['ALL', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'].map(sz => {
-                        const isActive = contractSizeFilter === sz;
+                        const isActive = !contractShowOnlySelected && contractSizeFilter === sz;
                         return (
                           <button
                             key={sz}
                             type="button"
-                            onClick={() => setContractSizeFilter(sz)}
+                            onClick={() => {
+                              setContractShowOnlySelected(false);
+                              setContractSizeFilter(sz);
+                            }}
                             className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
                               isActive
                                 ? 'bg-orange-600 text-white shadow-2xs'
@@ -2817,6 +2851,28 @@ export default function ContractManager({
                           </button>
                         );
                       })}
+                      {newContractForm.selectedCameraIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (contractShowOnlySelected) {
+                              setContractShowOnlySelected(false);
+                            } else {
+                              setContractOutfitSearch('');
+                              setContractSizeFilter('ALL');
+                              setContractAvailabilityFilter('ALL');
+                              setContractShowOnlySelected(true);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                            contractShowOnlySelected
+                              ? 'bg-orange-600 text-white shadow-2xs'
+                              : 'bg-orange-100 text-orange-800 hover:bg-orange-200 border border-orange-300'
+                          }`}
+                        >
+                          ⭐ Đã chọn ({newContractForm.selectedCameraIds.length})
+                        </button>
+                      )}
                     </div>
 
                     {/* Availability Status Filter Pills */}
@@ -2827,12 +2883,15 @@ export default function ContractManager({
                         { id: 'READY', label: '✓ Chỉ đồ sẵn sàng' },
                         { id: 'BUSY', label: '🧺 Đang giặt / sửa' }
                       ].map(st => {
-                        const isActive = contractAvailabilityFilter === st.id;
+                        const isActive = !contractShowOnlySelected && contractAvailabilityFilter === st.id;
                         return (
                           <button
                             key={st.id}
                             type="button"
-                            onClick={() => setContractAvailabilityFilter(st.id as any)}
+                            onClick={() => {
+                              setContractShowOnlySelected(false);
+                              setContractAvailabilityFilter(st.id as any);
+                            }}
                             className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
                               isActive
                                 ? (st.id === 'READY' ? 'bg-emerald-600 text-white shadow-2xs' : st.id === 'BUSY' ? 'bg-amber-600 text-white shadow-2xs' : 'bg-slate-700 text-white shadow-2xs')
@@ -2847,11 +2906,81 @@ export default function ContractManager({
                   </div>
                 </div>
 
+                {/* Hộp ghim danh sách trang phục đã chọn */}
+                {newContractForm.selectedCameraIds.length > 0 && (
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50/90 border-2 border-orange-300 rounded-xl p-2.5 shadow-2xs space-y-1.5 mb-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-black text-orange-950 uppercase tracking-wide flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-orange-600 stroke-[3]" />
+                        Mẫu đã chọn ({newContractForm.selectedCameraIds.length} món):
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (contractShowOnlySelected) {
+                            setContractShowOnlySelected(false);
+                          } else {
+                            setContractOutfitSearch('');
+                            setContractSizeFilter('ALL');
+                            setContractAvailabilityFilter('ALL');
+                            setContractShowOnlySelected(true);
+                          }
+                        }}
+                        className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white transition cursor-pointer shadow-3xs"
+                      >
+                        {contractShowOnlySelected ? '👁️ Hiện tất cả mẫu' : '🔍 Chỉ lọc mẫu đã chọn'}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {newContractForm.selectedCameraIds.map(camId => {
+                        const cam = cameras.find(c => c.id === camId);
+                        if (!cam) return null;
+                        const baseName = cam.name.replace(/\s*\(Size\s+\S+\)\s*$/i, '').replace(/\s*\(Freesize\)\s*$/i, '').trim();
+                        return (
+                          <div
+                            key={camId}
+                            className="inline-flex items-center gap-1.5 bg-white border border-orange-300 hover:border-orange-500 text-gray-900 pl-1.5 pr-2 py-1 rounded-lg text-xs font-bold shadow-3xs group transition-all"
+                          >
+                            {cam.image && (
+                              <img src={cam.image} alt={baseName} className="w-6 h-6 rounded-md object-cover object-top border border-gray-200 shrink-0" />
+                            )}
+                            <span className="text-orange-950 font-black max-w-[130px] sm:max-w-[180px] truncate">{baseName}</span>
+                            <span className="bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded shrink-0">
+                              Size {cam.size || 'FS'}
+                            </span>
+                            {cam.color && (
+                              <span className="text-[10px] text-gray-500 font-medium truncate max-w-[70px]">({cam.color})</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNewContractForm(prev => ({
+                                  ...prev,
+                                  selectedCameraIds: prev.selectedCameraIds.filter(id => id !== camId)
+                                }));
+                              }}
+                              className="text-gray-400 hover:text-rose-600 font-black text-xs ml-0.5 p-0.5 cursor-pointer"
+                              title="Bỏ chọn trang phục này"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Card list */}
                 <div className="border border-gray-250 rounded-xl p-2 bg-white shadow-2xs max-h-[220px] overflow-y-auto space-y-1.5">
                   {(() => {
                     const availableOutfits = cameras
                       .filter(cam => {
+                        if (contractShowOnlySelected) {
+                          return newContractForm.selectedCameraIds.includes(cam.id);
+                        }
                         const isLaundry = cam.cleaningStatus === 'Laundry';
                         const isMending = cam.cleaningStatus === 'Mending';
                         const isRented = cam.status === 'Rented';
@@ -3457,11 +3586,14 @@ export default function ContractManager({
                 </div>
               )}
 
-              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-gray-100">
+              </div>
+
+              {/* Fixed Footer - Luôn cố định ở đáy, không bị cuộn mất */}
+              <div className="bg-gray-50/95 px-6 py-3.5 border-t border-gray-200 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0 shadow-xs">
                 <button
                   type="button"
                   onClick={() => handleCloseAddModal()}
-                  className="px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-105 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
+                  className="px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
                 >
                   Hủy bỏ
                 </button>
@@ -3475,7 +3607,7 @@ export default function ContractManager({
                 </button>
                 <button
                   type="submit"
-                  className="bg-orange-600 text-white font-bold px-4 sm:px-5 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap"
+                  className="bg-orange-600 text-white font-bold px-5 sm:px-6 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap shadow-md shadow-orange-500/20 active:scale-[0.98]"
                 >
                   Tạo hợp đồng
                 </button>

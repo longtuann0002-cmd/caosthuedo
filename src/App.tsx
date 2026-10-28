@@ -522,13 +522,19 @@ export default function App() {
 
     const groupsMap = new Map<string, any>();
     allCams.forEach(cam => {
-      const groupKey = cam.shortName || cam.id;
+      const baseShort = (cam.shortName || '')
+        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
+        .trim();
+      const baseSerial = (cam.serialNumber || '')
+        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
+        .trim();
+      const cleanName = cam.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
+      const groupKey = baseShort || baseSerial || cleanName || cam.shortName || cam.id;
       if (!groupsMap.has(groupKey)) {
-        const cleanName = cam.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || cam.name;
         groupsMap.set(groupKey, {
           groupKey,
-          name: cleanName,
-          shortName: cam.shortName,
+          name: cleanName || cam.name,
+          shortName: baseShort || baseSerial || cam.shortName,
           category: cam.category || 'Trang phục',
           color: cam.color,
           dailyRate: cam.dailyRate,

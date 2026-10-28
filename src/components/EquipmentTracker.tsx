@@ -34,17 +34,28 @@ export interface OutfitGroupItem {
 
 export const getOutfitGroupKey = (cam: Camera): string => {
   if (cam.category === 'Printer' || cam.isPrinter) return `printer-${cam.id}`;
-  if (cam.shortName && cam.shortName.trim()) {
-    return `sn-${cam.shortName.trim().toLowerCase()}`;
-  }
-  const baseSerial = cam.serialNumber
-    ? cam.serialNumber.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().toLowerCase()
-    : '';
-  if (baseSerial) return `ser-${baseSerial}`;
 
-  const cleanName = cam.name
-    ? cam.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim().toLowerCase()
+  // 1. Chuẩn hóa mã mẫu từ shortName (loại bỏ hậu tố size nếu có: -S, -M, _L, .XL, v.v.)
+  const baseShort = cam.shortName
+    ? cam.shortName.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().toLowerCase()
     : '';
+
+  // 2. Chuẩn hóa mã mẫu từ serialNumber (loại bỏ hậu tố size)
+  const baseSerial = cam.serialNumber
+    ? cam.serialNumber.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().toLowerCase()
+    : '';
+
+  // 3. Chuẩn hóa tên sạch (loại bỏ hậu tố (Size ...) hoặc - Size ...)
+  const cleanName = cam.name
+    ? cam.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').replace(/[-_.\s]+(Size\s+[^)]+|Freesize|FS)$/i, '').trim().toLowerCase()
+    : '';
+
+  // Ưu tiên gom theo mã mẫu (nếu có baseShort hoặc baseSerial trùng nhau)
+  if (baseShort && baseSerial && baseShort === baseSerial) {
+    return `mod-${baseShort}`;
+  }
+  if (baseShort) return `sn-${baseShort}`;
+  if (baseSerial) return `ser-${baseSerial}`;
   if (cleanName) return `name-${cleanName}`;
 
   return cam.id;
@@ -569,9 +580,13 @@ export default function EquipmentTracker({
       ? cam.availableSizes
       : (cam.size ? cam.size.split(',').map(s => s.trim()).filter(Boolean) : ['M']);
 
+    const baseModelCode = (cam.shortName || cam.serialNumber || '')
+      .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
+      .trim();
+
     setFormState({
       name: cam.name,
-      shortName: cam.serialNumber || cam.shortName || '',
+      shortName: baseModelCode || cam.shortName || cam.serialNumber || '',
       category: cam.category,
       isPrinter: cam.category === 'Printer' || Boolean(cam.isPrinter),
       purchasePrice: cam.purchasePrice ?? (cam.depositAmount ? cam.depositAmount : cam.dailyRate * 5),
@@ -636,7 +651,11 @@ export default function EquipmentTracker({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const effectiveShortName = (formState.serialNumber || formState.shortName || '').trim();
+    const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
+    const baseFromSerial = rawSerial.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/[-_.\s]+$/, '');
+    const baseFromShort = (formState.shortName || '').replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/[-_.\s]+$/, '');
+    const effectiveShortName = baseFromShort || baseFromSerial || rawSerial;
+
     if (!formState.name || !formState.serialNumber) {
       setValidationError('Vui lòng điền đầy đủ các trường thông tin bắt buộc (*)!');
       return;
@@ -723,16 +742,22 @@ export default function EquipmentTracker({
         });
       } else {
         const singleSize = sizesToSave[0] || 'Freesize';
+        const singleSizeCode = singleSize === 'Freesize' ? 'FS' : singleSize;
         const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
+        const baseSerial = rawSerial.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/[-_.\s]+$/, '') || rawSerial;
         const cleanName = savedFormState.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || savedFormState.name;
         const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || '';
         const sizeImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
+
+        const hasSizeSuffix = /[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i.test(rawSerial);
+        const updatedSerial = hasSizeSuffix ? `${baseSerial}-${singleSizeCode}` : rawSerial;
 
         onUpdateCamera({
           ...editingCamera,
           ...savedFormState,
           name: `${cleanName} (${singleSize === 'Freesize' ? 'Freesize' : `Size ${singleSize}`})`,
-          serialNumber: rawSerial,
+          serialNumber: updatedSerial,
+          shortName: baseSerial || effectiveShortName,
           size: singleSize,
           availableSizes: [singleSize],
           color: sizeColor,
@@ -2164,7 +2189,11 @@ export default function EquipmentTracker({
                   type="text"
                   required
                   value={formState.serialNumber}
-                  onChange={e => setFormState({ ...formState, serialNumber: e.target.value, shortName: e.target.value })}
+                  onChange={e => {
+                    const val = e.target.value;
+                    const baseCode = val.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim();
+                    setFormState({ ...formState, serialNumber: val, shortName: baseCode || val });
+                  }}
                   className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono font-bold"
                   placeholder="VD: ĐL K01, VC-01, AD-05, DH-02..."
                 />

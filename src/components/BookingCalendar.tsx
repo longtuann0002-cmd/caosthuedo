@@ -114,6 +114,7 @@ export default function BookingCalendar({
   const [quickSizeFilter, setQuickSizeFilter] = useState<string>('ALL');
   const [quickAvailabilityFilter, setQuickAvailabilityFilter] = useState<'ALL' | 'READY' | 'BUSY'>('ALL');
   const [mobileDetailDate, setMobileDetailDate] = useState<string | null>(null);
+  const [showOnlySelected, setShowOnlySelected] = useState<boolean>(false);
 
   // Tự động hủy lọc nếu thiết bị đang chọn lọc bị chuyển sang trạng thái bảo trì
   useEffect(() => {
@@ -356,6 +357,7 @@ export default function BookingCalendar({
       note: '',
     });
     setShowAddQuickModal(false);
+    setShowOnlySelected(false);
   };
 
   // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
@@ -1923,9 +1925,12 @@ export default function BookingCalendar({
 
             <form 
               onSubmit={handleQuickBookingSubmit} 
-              className="p-3 sm:p-5 lg:p-6 space-y-3.5 sm:space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
-              style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              className="flex flex-col flex-1 overflow-hidden min-h-0"
             >
+              <div 
+                className="p-3 sm:p-5 lg:p-6 space-y-3.5 sm:space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
+                style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              >
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 lg:gap-5 items-start">
                 
                 {/* === BƯỚC 1: THÔNG TIN KHÁCH HÀNG & THỜI GIAN THUÊ (Top Left trên PC, Đầu trang trên Mobile) === */}
@@ -2244,18 +2249,25 @@ export default function BookingCalendar({
                       <button
                         type="button"
                         onClick={() => {
-                          const firstSelectedId = formData.selectedCameraIds[0];
-                          const el = document.getElementById(`quick-outfit-card-${firstSelectedId}`);
-                          if (el && outfitListScrollRef.current) {
-                            outfitListScrollRef.current.scrollTo({ top: el.offsetTop - 8, behavior: 'smooth' });
+                          if (showOnlySelected) {
+                            setShowOnlySelected(false);
+                          } else {
+                            setQuickOutfitSearch('');
+                            setQuickSizeFilter('ALL');
+                            setQuickAvailabilityFilter('ALL');
+                            setShowOnlySelected(true);
                           }
                         }}
-                        className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-orange-600 border border-orange-300 hover:bg-orange-50 shadow-3xs flex items-center gap-1 cursor-pointer transition-colors"
-                        title="Cuộn đến trang phục đã chọn"
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer shadow-xs ${
+                          showOnlySelected
+                            ? 'bg-orange-600 text-white shadow-xs ring-2 ring-orange-300'
+                            : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50'
+                        }`}
+                        title="Bấm để lọc chỉ xem những trang phục đã chọn"
                       >
-                        📍 Xem đã chọn
+                        {showOnlySelected ? '👁️ Xem tất cả' : '📍 Xem đã chọn'}
                       </button>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-xs flex items-center gap-1 animate-pulse">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-xs flex items-center gap-1">
                         <Check className="w-3 h-3 stroke-[3]" />
                         Đã chọn: {formData.selectedCameraIds.length} món
                       </span>
@@ -2273,7 +2285,10 @@ export default function BookingCalendar({
                     <input
                       type="text"
                       value={quickOutfitSearch}
-                      onChange={e => setQuickOutfitSearch(e.target.value)}
+                      onChange={e => {
+                        setQuickOutfitSearch(e.target.value);
+                        if (showOnlySelected) setShowOnlySelected(false);
+                      }}
                       placeholder="🔍 Tìm nhanh mẫu đồ, mã số, màu sắc..."
                       className="w-full bg-white border border-orange-200 rounded-xl px-3 py-1.5 text-xs text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs font-medium"
                     />
@@ -2294,12 +2309,15 @@ export default function BookingCalendar({
                     <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
                       <span className="text-[10px] font-bold text-gray-500 shrink-0 uppercase tracking-tight">Size:</span>
                       {['ALL', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'].map(sz => {
-                        const isActive = quickSizeFilter === sz;
+                        const isActive = !showOnlySelected && quickSizeFilter === sz;
                         return (
                           <button
                             key={sz}
                             type="button"
-                            onClick={() => setQuickSizeFilter(sz)}
+                            onClick={() => {
+                              setShowOnlySelected(false);
+                              setQuickSizeFilter(sz);
+                            }}
                             className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
                               isActive
                                 ? 'bg-orange-600 text-white shadow-2xs'
@@ -2310,6 +2328,28 @@ export default function BookingCalendar({
                           </button>
                         );
                       })}
+                      {formData.selectedCameraIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (showOnlySelected) {
+                              setShowOnlySelected(false);
+                            } else {
+                              setQuickOutfitSearch('');
+                              setQuickSizeFilter('ALL');
+                              setQuickAvailabilityFilter('ALL');
+                              setShowOnlySelected(true);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                            showOnlySelected
+                              ? 'bg-orange-600 text-white shadow-2xs'
+                              : 'bg-orange-100 text-orange-800 hover:bg-orange-200 border border-orange-300'
+                          }`}
+                        >
+                          ⭐ Đã chọn ({formData.selectedCameraIds.length})
+                        </button>
+                      )}
                     </div>
 
                     {/* Availability Status Filter Pills */}
@@ -2320,12 +2360,15 @@ export default function BookingCalendar({
                         { id: 'READY', label: '✓ Chỉ đồ sẵn sàng' },
                         { id: 'BUSY', label: '🧺 Đang giặt / sửa' }
                       ].map(st => {
-                        const isActive = quickAvailabilityFilter === st.id;
+                        const isActive = !showOnlySelected && quickAvailabilityFilter === st.id;
                         return (
                           <button
                             key={st.id}
                             type="button"
-                            onClick={() => setQuickAvailabilityFilter(st.id as any)}
+                            onClick={() => {
+                              setShowOnlySelected(false);
+                              setQuickAvailabilityFilter(st.id as any);
+                            }}
                             className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
                               isActive
                                 ? (st.id === 'READY' ? 'bg-emerald-600 text-white shadow-2xs' : st.id === 'BUSY' ? 'bg-amber-600 text-white shadow-2xs' : 'bg-slate-700 text-white shadow-2xs')
@@ -2340,10 +2383,92 @@ export default function BookingCalendar({
                   </div>
                 </div>
 
+                {/* Hộp ghim danh sách trang phục đã chọn để khách thấy ngay lập tức */}
+                {formData.selectedCameraIds.length > 0 && (
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50/90 border-2 border-orange-300 rounded-xl p-2.5 shadow-2xs space-y-1.5 mb-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-black text-orange-950 uppercase tracking-wide flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-orange-600 stroke-[3]" />
+                        Mẫu đã chọn ({formData.selectedCameraIds.length} món):
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (showOnlySelected) {
+                            setShowOnlySelected(false);
+                          } else {
+                            setQuickOutfitSearch('');
+                            setQuickSizeFilter('ALL');
+                            setQuickAvailabilityFilter('ALL');
+                            setShowOnlySelected(true);
+                          }
+                        }}
+                        className="text-[10px] font-black px-2.5 py-0.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white transition cursor-pointer shadow-3xs"
+                      >
+                        {showOnlySelected ? '👁️ Hiện tất cả mẫu' : '🔍 Chỉ lọc mẫu đã chọn'}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {formData.selectedCameraIds.map(camId => {
+                        const cam = cameras.find(c => c.id === camId);
+                        if (!cam) return null;
+                        const baseName = cam.name.replace(/\s*\(Size\s+\S+\)\s*$/i, '').replace(/\s*\(Freesize\)\s*$/i, '').trim();
+                        return (
+                          <div
+                            key={camId}
+                            onClick={() => {
+                              setShowOnlySelected(false);
+                              setTimeout(() => {
+                                const cardEl = document.getElementById(`quick-outfit-card-${cam.id}`) || document.getElementById(`quick-outfit-group-${cam.shortName || cam.id}`);
+                                if (cardEl) {
+                                  cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  cardEl.classList.add('ring-4', 'ring-orange-500');
+                                  setTimeout(() => cardEl.classList.remove('ring-4', 'ring-orange-500'), 1500);
+                                }
+                              }, 100);
+                            }}
+                            className="inline-flex items-center gap-1.5 bg-white border border-orange-300 hover:border-orange-500 text-gray-900 pl-1.5 pr-2 py-1 rounded-lg text-xs font-bold shadow-3xs cursor-pointer group transition-all"
+                            title="Bấm để cuộn đến vị trí mẫu này trong danh sách"
+                          >
+                            {cam.image && (
+                              <img src={cam.image} alt={baseName} className="w-6 h-6 rounded-md object-cover object-top border border-gray-200 shrink-0" />
+                            )}
+                            <span className="text-orange-950 font-black max-w-[130px] sm:max-w-[180px] truncate">{baseName}</span>
+                            <span className="bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded shrink-0">
+                              Size {cam.size || 'FS'}
+                            </span>
+                            {cam.color && (
+                              <span className="text-[10px] text-gray-500 font-medium truncate max-w-[70px]">({cam.color})</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFormData(prev => ({
+                                  ...prev,
+                                  selectedCameraIds: prev.selectedCameraIds.filter(id => id !== camId)
+                                }));
+                              }}
+                              className="text-gray-400 hover:text-rose-600 font-black text-xs ml-0.5 p-0.5 cursor-pointer"
+                              title="Bỏ chọn trang phục này"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div ref={outfitListScrollRef} className="bg-white/95 border border-orange-200/90 rounded-xl p-2 max-h-[300px] lg:max-h-[540px] overflow-y-auto space-y-2 shadow-inner">
                   {(() => {
                     const availableOutfits = cameras
                       .filter(cam => {
+                        if (showOnlySelected) {
+                          return formData.selectedCameraIds.includes(cam.id);
+                        }
                         const isLaundry = cam.cleaningStatus === 'Laundry';
                         const isMending = cam.cleaningStatus === 'Mending';
                         const isRented = cam.status === 'Rented';
@@ -2370,7 +2495,11 @@ export default function BookingCalendar({
                     if (availableOutfits.length === 0) {
                       return (
                         <p className="text-xs text-gray-400 italic text-center py-4">
-                          {quickOutfitSearch || quickSizeFilter !== 'ALL' || quickAvailabilityFilter !== 'ALL' ? 'Không tìm thấy trang phục nào phù hợp.' : 'Hiện không có trang phục khả dụng trong kho.'}
+                          {showOnlySelected
+                            ? 'Không tìm thấy trang phục đã chọn trong kho.'
+                            : quickOutfitSearch || quickSizeFilter !== 'ALL' || quickAvailabilityFilter !== 'ALL'
+                            ? 'Không tìm thấy trang phục nào phù hợp.'
+                            : 'Hiện không có trang phục khả dụng trong kho.'}
                         </p>
                       );
                     }
@@ -2395,7 +2524,16 @@ export default function BookingCalendar({
                     // Group by shortName (same for all sizes of same model)
                     const groups = new Map<string, typeof outfitCams>();
                     outfitCams.forEach(cam => {
-                      const k = cam.shortName || cam.id;
+                      const baseShort = (cam.shortName || '')
+                        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
+                        .trim();
+                      const baseSerial = (cam.serialNumber || '')
+                        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
+                        .trim();
+                      const cleanName = (cam.name || '')
+                        .replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '')
+                        .trim();
+                      const k = baseShort || baseSerial || cleanName || cam.shortName || cam.id;
                       if (!groups.has(k)) groups.set(k, []);
                       groups.get(k)!.push(cam);
                     });
@@ -2928,12 +3066,14 @@ export default function BookingCalendar({
                 )}
               </div>
             </div>
+          </div>
 
-            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 sm:pt-4 border-t border-gray-100">
+            {/* Fixed Footer - Luôn cố định ở đáy, không bao giờ bị cuộn mất */}
+            <div className="bg-gray-50/95 px-4 py-3 sm:px-6 sm:py-3.5 border-t border-gray-200 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0 shadow-xs">
               <button
                 type="button"
                 onClick={() => handleCloseQuickModal()}
-                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
+                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
               >
                 Hủy bỏ
               </button>
@@ -2947,7 +3087,7 @@ export default function BookingCalendar({
               </button>
               <button
                 type="submit"
-                className="w-full sm:w-auto bg-orange-600 text-white font-bold px-4 sm:px-5 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap shadow-sm"
+                className="w-full sm:w-auto bg-orange-600 text-white font-bold px-5 sm:px-6 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap shadow-md shadow-orange-500/20 active:scale-[0.98]"
               >
                 Xác nhận đặt lịch
               </button>
