@@ -131,6 +131,7 @@ export default function EquipmentTracker({
   // Detail Bottom Sheet Modal state
   const [detailGroupKey, setDetailGroupKey] = useState<string | null>(null);
   const [detailCameraId, setDetailCameraId] = useState<string | null>(null);
+  const [roiViewMode, setRoiViewMode] = useState<'single' | 'group'>('single');
 
   // Lock body scroll whenever modal is open
   useScrollLock(Boolean(showAddModal || cameraToDelete || detailGroupKey || detailCameraId));
@@ -1720,11 +1721,23 @@ export default function EquipmentTracker({
           const title = isGroup && group ? group.cleanName : activeCam.name;
           const category = activeCam.category;
           const gender = activeCam.gender || 'Nữ';
-          const purchase = isGroup && group ? group.totalPurchase : (activeCam.purchasePrice || 0);
-          const revenue = isGroup && group ? group.totalRevenue : (cameraRevenueMap[activeCam.id] || 0);
-          const roiPercent = isGroup && group
-            ? group.overallRoiPercent
-            : (purchase > 0 ? Math.round((revenue / purchase) * 100) : null);
+
+          // --- Single size metrics ---
+          const singlePurchase = activeCam.purchasePrice || 0;
+          const singleRevenue = cameraRevenueMap[activeCam.id] || 0;
+          const singleRoiPercent = singlePurchase > 0 ? Math.round((singleRevenue / singlePurchase) * 100) : null;
+
+          // --- Group metrics ---
+          const groupPurchase = (isGroup && group) ? group.totalPurchase : singlePurchase;
+          const groupRevenue = (isGroup && group) ? group.totalRevenue : singleRevenue;
+          const groupRoiPercent = (isGroup && group) ? group.overallRoiPercent : singleRoiPercent;
+
+          // --- Active metrics based on view mode ---
+          const useGroup = roiViewMode === 'group';
+          const purchase = useGroup ? groupPurchase : singlePurchase;
+          const revenue = useGroup ? groupRevenue : singleRevenue;
+          const roiPercent = useGroup ? groupRoiPercent : singleRoiPercent;
+
           const isBreakeven = roiPercent !== null && roiPercent >= 100;
           const remaining = purchase > revenue ? purchase - revenue : 0;
           const p1 = activeCam.price1Day ?? activeCam.dailyRate;
@@ -1741,6 +1754,7 @@ export default function EquipmentTracker({
           const closeDetail = () => {
             setDetailGroupKey(null);
             setDetailCameraId(null);
+            setRoiViewMode('single');
           };
 
           return (
@@ -1949,11 +1963,39 @@ export default function EquipmentTracker({
 
                   {/* ROI / Break-even section */}
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                    {/* Toggle: single size vs whole group */}
+                    {isGroup && group && group.items.length > 1 && (
+                      <div className="flex gap-1 mb-1">
+                        <button
+                          type="button"
+                          onClick={() => setRoiViewMode('single')}
+                          className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                            roiViewMode === 'single'
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          Size {activeCam.size || activeCam.serialNumber}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRoiViewMode('group')}
+                          className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                            roiViewMode === 'group'
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          Cả mẫu ({group.items.length} size)
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-gray-700 flex items-center gap-1">
                         <span>💎 Vốn nhập:</span>
                         <b className="font-mono text-gray-900">{purchase > 0 ? `${purchase.toLocaleString()}đ` : '—'}</b>
-                        {isGroup && group && <span className="text-gray-400">({group.items.length} size)</span>}
+                        {useGroup && isGroup && group && <span className="text-gray-400">({group.items.length} size)</span>}
                       </span>
                       {roiPercent !== null && (
                         <span className={`px-2 py-0.5 rounded-md font-black text-xs ${
@@ -1982,6 +2024,44 @@ export default function EquipmentTracker({
                             )}
                           </span>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Per-size breakdown when viewing group */}
+                    {useGroup && isGroup && group && group.items.length > 1 && (
+                      <div className="pt-1 border-t border-slate-200 space-y-1">
+                        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wide mb-1">Chi tiết từng size</div>
+                        {group.items.map(item => {
+                          const itemRevenue = cameraRevenueMap[item.id] || 0;
+                          const itemPurchase = item.purchasePrice || 0;
+                          const itemRoi = itemPurchase > 0 ? Math.round((itemRevenue / itemPurchase) * 100) : null;
+                          const isActive = item.id === activeCam.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedGroupSizes(prev => ({ ...prev, [group.groupKey]: item.id }));
+                                setRoiViewMode('single');
+                              }}
+                              className={`w-full flex items-center justify-between text-xs px-2.5 py-1.5 rounded-xl border cursor-pointer transition-colors ${
+                                isActive
+                                  ? 'bg-indigo-50 border-indigo-300 text-indigo-800'
+                                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              <span className="font-bold">{item.size || item.serialNumber}</span>
+                              <span className="font-mono">{itemPurchase > 0 ? `${itemPurchase.toLocaleString()}đ` : '—'}</span>
+                              {itemRoi !== null && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
+                                  itemRoi >= 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {itemRoi}%
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

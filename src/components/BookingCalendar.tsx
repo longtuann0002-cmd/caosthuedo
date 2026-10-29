@@ -1367,9 +1367,8 @@ export default function BookingCalendar({
                         const rawOutfitName = (b.cleanName || matchedCam?.name || b.cameraName || '').trim();
                         const outfitName = rawOutfitName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
 
-                        // TÊN KHÁCH HÀNG: Chỉ lấy tên chính ngắn gọn (ví dụ: Thu Hà -> Hà)
-                        const rawCustName = (b.contract.customerName || '').trim();
-                        const shortCustName = rawCustName ? rawCustName.split(/\s+/).slice(-1)[0] : '';
+                        // TÊN ĐẦY ĐỦ KHÁCH HÀNG (Hiển thị trọn vẹn họ và tên của người thuê)
+                        const custName = (b.contract.customerName || '').trim();
                         
                         const camImage = matchedCam?.image || '';
 
@@ -1386,12 +1385,12 @@ export default function BookingCalendar({
                               </span>
                             </div>
 
-                            {/* Desktop: Dòng 1 Tên khách (hoặc Tên đồ nếu không có khách), Dòng 2 Mã viết tắt + Tên sản phẩm + Size */}
+                            {/* Desktop: Dòng 1 Tên đầy đủ của khách (hoặc Tên đồ nếu không có khách), Dòng 2 Mã viết tắt + Tên sản phẩm + Size */}
                             <div className="hidden sm:flex flex-col gap-0.5">
-                              {shortCustName ? (
+                              {custName ? (
                                 <div className="leading-tight">
-                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900 block" title={b.contract.customerName}>
-                                    {shortCustName}
+                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900 block" title={custName}>
+                                    {custName}
                                   </span>
                                 </div>
                               ) : outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() ? (
@@ -1406,7 +1405,7 @@ export default function BookingCalendar({
                                 <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={outfitShortCode}>
                                   {outfitShortCode}
                                 </span>
-                                {shortCustName && outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() && (
+                                {custName && outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() && (
                                   <span className="text-[10px] font-bold text-gray-900 truncate" title={outfitName}>
                                     {outfitName}
                                   </span>
