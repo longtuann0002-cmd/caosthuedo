@@ -2291,7 +2291,8 @@ export default function ContractManager({
                   )}
                 </div>
 
-                {/* Surcharge Block */}
+                {/* Surcharge Block — chỉ hiển thị khi đang thuê hoặc đã trả (Active/Overdue/Completed) */}
+                {(selectedContract.status === 'Active' || selectedContract.status === 'Overdue' || selectedContract.status === 'Completed') && (
                 <div className="bg-amber-50/70 border border-amber-250 p-3 sm:p-3.5 rounded-xl space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -2428,6 +2429,7 @@ export default function ContractManager({
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Financial Summary Block */}
                 {(() => {
