@@ -2184,40 +2184,95 @@ export default function ContractManager({
                           const q = itemSearchQuery.toLowerCase();
                           const results = cameras.filter(c =>
                             !c.isPrinter && c.category !== 'Printer' &&
-                            c.name.toLowerCase().includes(q)
-                          ).slice(0, 6);
-                          if (results.length === 0) return <div className="text-[11px] text-gray-400 px-1">Không tìm thấy</div>;
+                            (c.name.toLowerCase().includes(q) || (c.serialNumber || '').toLowerCase().includes(q))
+                          ).slice(0, 8);
+                          if (results.length === 0) return <div className="text-[11px] text-gray-400 px-1">Không tìm thấy trang phục phù hợp</div>;
                           return (
-                            <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden bg-white">
-                              {results.map(cam => (
-                                <button
-                                  key={cam.id}
-                                  type="button"
-                                  onClick={() => {
-                                    const days = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
-                                    const rate = cam.price1Day ?? cam.dailyRate ?? 0;
-                                    setItemsDraft(prev => [...prev, {
-                                      cameraId: cam.id,
-                                      cameraName: cam.name,
-                                      dailyRate: rate,
-                                      quantity: 1,
-                                      size: cam.size,
-                                      color: cam.color
-                                    }]);
-                                    setItemSearchQuery('');
-                                  }}
-                                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs text-left hover:bg-green-50 cursor-pointer transition"
-                                >
-                                  {cam.image ? (
-                                    <img src={cam.image} alt="" className="w-5 h-6 rounded object-cover border border-gray-200 shrink-0" />
-                                  ) : (
-                                    <span className="text-orange-400 shrink-0">👗</span>
-                                  )}
-                                  <span className="font-bold text-gray-900 flex-1 truncate">{cam.name}</span>
-                                  {cam.size && <span className="text-[10px] text-gray-500 font-mono">Size {cam.size}</span>}
-                                  <span className="text-[10px] font-mono text-green-700 shrink-0">+ Thêm</span>
-                                </button>
-                              ))}
+                            <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden bg-white max-h-[220px] overflow-y-auto">
+                              {results.map(cam => {
+                                // Kiểm tra xem trang phục này đã có trong danh sách draft chưa
+                                const isAlreadyInDraft = itemsDraft.some(item => item.cameraId === cam.id);
+                                
+                                // Kiểm tra xung đột lịch thuê với các hợp đồng khác trong cùng khoảng thời gian
+                                const otherContracts = contracts.filter(c => c.id !== selectedContract.id && c.status !== 'Cancelled');
+                                const conflictCheck = checkBookingConflict(
+                                  [cam.id],
+                                  selectedContract.startDate,
+                                  selectedContract.endDate,
+                                  false,
+                                  otherContracts
+                                );
+                                const isConflict = conflictCheck.hasConflict;
+
+                                // Kiểm tra trạng thái bảo dưỡng/giặt ủi
+                                const isMaintenance = cam.status === 'Maintenance';
+                                const isLaundry = cam.cleaningStatus === 'Laundry';
+                                const isMending = cam.cleaningStatus === 'Mending';
+                                const isUnavailable = isAlreadyInDraft || isConflict || isMaintenance || isLaundry || isMending;
+
+                                const reasonText = isAlreadyInDraft
+                                  ? 'Đã có trong đơn'
+                                  : isConflict
+                                  ? 'Trùng lịch thuê!'
+                                  : isMaintenance
+                                  ? 'Đang bảo dưỡng'
+                                  : isLaundry
+                                  ? 'Đang giặt hấp'
+                                  : isMending
+                                  ? 'Đang sửa chữa'
+                                  : null;
+
+                                return (
+                                  <button
+                                    key={cam.id}
+                                    type="button"
+                                    disabled={isUnavailable}
+                                    onClick={() => {
+                                      if (isUnavailable) return;
+                                      const days = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
+                                      const rate = cam.price1Day ?? cam.dailyRate ?? 0;
+                                      setItemsDraft(prev => [...prev, {
+                                        cameraId: cam.id,
+                                        cameraName: cam.name,
+                                        dailyRate: rate,
+                                        quantity: 1,
+                                        size: cam.size,
+                                        color: cam.color
+                                      }]);
+                                      setItemSearchQuery('');
+                                    }}
+                                    className={`w-full flex items-center gap-2 px-2.5 py-2 text-xs text-left transition ${
+                                      isUnavailable
+                                        ? 'bg-gray-100/80 opacity-60 cursor-not-allowed text-gray-500'
+                                        : 'hover:bg-green-50 cursor-pointer text-gray-900'
+                                    }`}
+                                    title={reasonText || 'Bấm để thêm vào đơn'}
+                                  >
+                                    {cam.image ? (
+                                      <img src={cam.image} alt="" className="w-5 h-6 rounded object-cover border border-gray-200 shrink-0" />
+                                    ) : (
+                                      <span className="text-orange-400 shrink-0">👗</span>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-bold truncate">{cam.name}</div>
+                                      <div className="text-[10px] text-gray-400 flex items-center gap-1.5 font-mono">
+                                        {cam.size && <span>Size {cam.size}</span>}
+                                        {cam.color && <span>• {cam.color}</span>}
+                                        {cam.serialNumber && <span>• #{cam.serialNumber}</span>}
+                                      </div>
+                                    </div>
+                                    {isUnavailable ? (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 shrink-0">
+                                        🚫 {reasonText}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-md shrink-0">
+                                        + Thêm
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
                             </div>
                           );
                         })()}
