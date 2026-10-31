@@ -3324,46 +3324,25 @@ export default function App() {
         <div className={`p-2 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} mb-3 relative`}>
           <div 
             onClick={() => setShowLogoModal(true)}
-            className={`flex items-center gap-2.5 cursor-pointer group/logo transition-all ${sidebarCollapsed ? 'justify-center' : 'min-w-0 flex-1'}`}
-            title="Thay đổi Logo & Thương hiệu"
+            className="flex items-center cursor-pointer group/logo transition-all"
+            title="Bấm để thay đổi Logo & Thương hiệu"
           >
             {logoIconType === 'upload' && logoBase64 ? (
-              <div className="w-11 h-11 rounded-full overflow-hidden border border-slate-200/80 flex items-center justify-center bg-white shrink-0 shadow-xs group-hover/logo:scale-105 group-hover/logo:shadow-md transition-all">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full overflow-hidden border border-slate-200/90 flex items-center justify-center bg-white shrink-0 shadow-xs group-hover/logo:scale-105 group-hover/logo:shadow-md transition-all">
                 <img src={logoBase64} alt="Logo" className="w-full h-full object-cover" />
               </div>
             ) : (
               <div 
-                className="w-11 h-11 rounded-full text-white shrink-0 shadow-xs flex items-center justify-center font-bold group-hover/logo:scale-105 transition-transform"
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-full text-white shrink-0 shadow-xs flex items-center justify-center font-bold group-hover/logo:scale-105 transition-transform"
                 style={{ backgroundColor: logoIconColor }}
               >
-                {logoIconType === 'dress' && <DressIcon className="w-5.5 h-5.5 text-white" />}
-                {logoIconType === 'aperture' && <Aperture className="w-5.5 h-5.5" />}
-                {logoIconType === 'film' && <Film className="w-5.5 h-5.5" />}
-                {logoIconType === 'sparkles' && <Sparkles className="w-5.5 h-5.5 text-yellow-300" />}
-                {logoIconType === 'smile' && <Smile className="w-5.5 h-5.5" />}
-                {logoIconType === 'image' && <ImageIcon className="w-5.5 h-5.5" />}
-                {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-5.5 h-5.5 text-white" />}
-              </div>
-            )}
-
-            {!sidebarCollapsed && (
-              <div className="leading-tight min-w-0">
-                <span 
-                  className={`font-display font-black text-slate-900 tracking-tight block truncate ${
-                    logoTextCase === 'uppercase' ? 'uppercase' : logoTextCase === 'lowercase' ? 'lowercase' : ''
-                  }`}
-                  style={{ fontSize: `${Math.min(logoFontSize || 15.5, 14)}px` }}
-                >
-                  {logoText || 'TIỆM NHÀ CAO'}
-                </span>
-                <span 
-                  className={`text-gray-400 font-medium block tracking-wide truncate mt-0.5 ${
-                    logoSubtitleCase === 'uppercase' ? 'uppercase' : logoSubtitleCase === 'lowercase' ? 'lowercase' : ''
-                  }`}
-                  style={{ fontSize: `${logoSubtitleFontSize || 9}px` }}
-                >
-                  {logoSubtitle || 'cho thuê trang phục & phụ kiện'}
-                </span>
+                {logoIconType === 'dress' && <DressIcon className="w-6 h-6 text-white" />}
+                {logoIconType === 'aperture' && <Aperture className="w-6 h-6" />}
+                {logoIconType === 'film' && <Film className="w-6 h-6" />}
+                {logoIconType === 'sparkles' && <Sparkles className="w-6 h-6 text-yellow-300" />}
+                {logoIconType === 'smile' && <Smile className="w-6 h-6" />}
+                {logoIconType === 'image' && <ImageIcon className="w-6 h-6" />}
+                {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-6 h-6 text-white" />}
               </div>
             )}
           </div>
