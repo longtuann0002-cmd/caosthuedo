@@ -1855,8 +1855,21 @@ export default function App() {
     );
   };
 
-  const handleDeleteContract = (id: string) => {
-    const contractToDelete = contracts.find(c => c.id === id);
+  const handleUpdateContractDates = (id: string, startDate: string, endDate: string, newTotalPrice: number) => {
+    setContracts(prev =>
+      prev.map(c => c.id === id ? { ...c, startDate, endDate, totalPrice: newTotalPrice } : c)
+    );
+    addToast('Cập nhật ngày thuê', 'info', `Đã cập nhật ngày thuê cho hợp đồng.`);
+  };
+
+  const handleUpdateContractItems = (id: string, items: RentalContract['items'], newTotalPrice: number) => {
+    setContracts(prev =>
+      prev.map(c => c.id === id ? { ...c, items, totalPrice: newTotalPrice } : c)
+    );
+    addToast('Cập nhật trang phục', 'info', `Đã cập nhật danh sách trang phục của hợp đồng.`);
+  };
+
+  const handleDeleteContract = (id: string) => {    const contractToDelete = contracts.find(c => c.id === id);
     if (!contractToDelete) return;
 
     // Remove the contract from the list
@@ -3914,6 +3927,8 @@ export default function App() {
                   onUpdateContractNote={handleUpdateContractNote}
                   onUpdateContractCustomer={handleUpdateContractCustomer}
                   onUpdateContractSurcharge={handleUpdateContractSurcharge}
+                  onUpdateContractDates={currentUser?.role === 'admin' ? handleUpdateContractDates : undefined}
+                  onUpdateContractItems={currentUser?.role === 'admin' ? handleUpdateContractItems : undefined}
                   initialSearchQuery={contractManagerSearch}
                   systemDate={systemDate}
                   isAdmin={currentUser?.role === 'admin'}

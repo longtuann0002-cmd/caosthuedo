@@ -28,6 +28,8 @@ interface ContractManagerProps {
   onUpdateContractNote?: (id: string, note: string) => void;
   onUpdateContractCustomer?: (id: string, customerName: string, customerPhone: string, customerDocType: RentalContract['customerDocType'], customerDocNote: string) => void;
   onUpdateContractSurcharge?: (id: string, surchargeAmount: number, surchargeReason: string) => void;
+  onUpdateContractDates?: (id: string, startDate: string, endDate: string, newTotalPrice: number) => void;
+  onUpdateContractItems?: (id: string, items: RentalContract['items'], newTotalPrice: number) => void;
   initialSearchQuery?: string;
   systemDate: string;
   isAdmin?: boolean;
@@ -148,6 +150,8 @@ export default function ContractManager({
   onUpdateContractNote,
   onUpdateContractCustomer,
   onUpdateContractSurcharge,
+  onUpdateContractDates,
+  onUpdateContractItems,
   initialSearchQuery,
   systemDate,
   isAdmin = false,
@@ -184,6 +188,15 @@ export default function ContractManager({
     docType: 'CCCD' as RentalContract['customerDocType'],
     docNote: ''
   });
+
+  // States for editing dates in modal
+  const [editingDates, setEditingDates] = useState(false);
+  const [dateDraft, setDateDraft] = useState({ startDate: '', endDate: '' });
+
+  // States for editing items (outfit list) in modal
+  const [editingItems, setEditingItems] = useState(false);
+  const [itemsDraft, setItemsDraft] = useState<RentalContract['items']>([]);
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
 
   // State for customizable rental terms
   const [rentalTerms, setRentalTerms] = useState<string>(() => {
@@ -1934,15 +1947,100 @@ export default function ContractManager({
                           </div>
 
                           {/* Thời hạn thuê lồng ghép gọn gàng */}
-                          <div className="bg-white/90 border border-slate-200/90 rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs space-y-0.5">
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Bắt đầu:</span>
-                              <strong className="font-bold font-mono text-gray-900 whitespace-nowrap">{formatDMY(selectedContract.startDate)}</strong>
-                            </div>
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Hạn trả:</span>
-                              <strong className="font-bold font-mono text-orange-600 whitespace-nowrap">{formatDMY(selectedContract.endDate)}</strong>
-                            </div>
+                          <div className="bg-white/90 border border-slate-200/90 rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs">
+                            {editingDates ? (
+                              <div className="space-y-2 animate-fade-in" data-no-export="true">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-extrabold text-gray-500 uppercase block">Bắt đầu</label>
+                                  <input
+                                    type="date"
+                                    value={dateDraft.startDate}
+                                    onChange={e => setDateDraft(d => ({ ...d, startDate: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-900"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-extrabold text-gray-500 uppercase block">Hạn trả</label>
+                                  <input
+                                    type="date"
+                                    value={dateDraft.endDate}
+                                    min={dateDraft.startDate}
+                                    onChange={e => setDateDraft(d => ({ ...d, endDate: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-900"
+                                  />
+                                </div>
+                                {dateDraft.startDate && dateDraft.endDate && (() => {
+                                  const newDays = Math.max(1, Math.ceil((new Date(dateDraft.endDate).getTime() - new Date(dateDraft.startDate).getTime()) / 86400000) + 1);
+                                  const oldDays = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
+                                  const newTotal = oldDays > 0 ? Math.round((selectedContract.totalPrice / oldDays) * newDays) : selectedContract.totalPrice;
+                                  return (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-[10.5px] space-y-0.5">
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Số ngày mới:</span>
+                                        <b className="font-mono text-blue-700">{newDays} ngày</b>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Tổng tiền ước tính:</span>
+                                        <b className="font-mono text-orange-600">{newTotal.toLocaleString()}đ</b>
+                                      </div>
+                                      {newDays !== oldDays && (
+                                        <div className="text-[9.5px] text-amber-700 font-bold pt-0.5">⚠ Tổng tiền sẽ được tính lại theo số ngày mới</div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                                <div className="flex gap-1.5 pt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!dateDraft.startDate || !dateDraft.endDate) return;
+                                      if (dateDraft.endDate < dateDraft.startDate) return;
+                                      const newDays = Math.max(1, Math.ceil((new Date(dateDraft.endDate).getTime() - new Date(dateDraft.startDate).getTime()) / 86400000) + 1);
+                                      const oldDays = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
+                                      const newTotal = oldDays > 0 ? Math.round((selectedContract.totalPrice / oldDays) * newDays) : selectedContract.totalPrice;
+                                      if (onUpdateContractDates) {
+                                        onUpdateContractDates(selectedContract.id, dateDraft.startDate, dateDraft.endDate, newTotal);
+                                      }
+                                      setEditingDates(false);
+                                    }}
+                                    className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition cursor-pointer"
+                                  >
+                                    <Save className="w-3 h-3" /> Lưu ngày
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingDates(false)}
+                                    className="px-3 py-1.5 text-[11px] font-bold text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Bắt đầu:</span>
+                                  <strong className="font-bold font-mono text-gray-900 whitespace-nowrap">{formatDMY(selectedContract.startDate)}</strong>
+                                </div>
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Hạn trả:</span>
+                                  <strong className="font-bold font-mono text-orange-600 whitespace-nowrap">{formatDMY(selectedContract.endDate)}</strong>
+                                </div>
+                                {onUpdateContractDates && !isExporting && (
+                                  <button
+                                    type="button"
+                                    data-no-export="true"
+                                    onClick={() => {
+                                      setDateDraft({ startDate: selectedContract.startDate, endDate: selectedContract.endDate });
+                                      setEditingDates(true);
+                                    }}
+                                    className="no-export-item w-full mt-1 flex items-center justify-center gap-1 text-[10px] font-bold text-blue-600 hover:bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg transition cursor-pointer"
+                                  >
+                                    <Edit2 className="w-2.5 h-2.5" /> Sửa ngày
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -2021,39 +2119,176 @@ export default function ContractManager({
 
                 {/* Rental Items Detail - ONLY item name, no price */}
                 <div className="space-y-1.5">
-                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DANH SÁCH Trang Phục Thuê</h4>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-white">
-                    {selectedContract.items.map((i, idx) => {
-                      const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
-                      const displaySize = i.size || matchedCam?.size;
-                      const displayColor = i.color || matchedCam?.color;
-                      return (
-                        <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
-                          <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
-                            {matchedCam?.image ? (
-                              <img src={matchedCam.image} alt="" className="w-6 h-7 rounded object-cover border border-gray-200 shrink-0" />
-                            ) : (
-                              <span className="text-orange-500 text-sm shrink-0">👗</span>
-                            )}
-                            <span className="truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
-                            {displaySize && (
-                              <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
-                                Size {displaySize}
-                              </span>
-                            )}
-                            {displayColor && (
-                              <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 border border-rose-200">
-                                🎨 {displayColor}
-                              </span>
-                            )}
-                            {i.quantity > 1 && (
-                              <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} chiếc)</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DANH SÁCH Trang Phục Thuê</h4>
+                    {onUpdateContractItems && !isExporting && !editingItems && (
+                      <button
+                        type="button"
+                        data-no-export="true"
+                        onClick={() => {
+                          setItemsDraft([...selectedContract.items]);
+                          setItemSearchQuery('');
+                          setEditingItems(true);
+                        }}
+                        className="no-export-item flex items-center gap-1 text-[10px] font-bold text-green-700 hover:bg-green-50 border border-green-300 px-2 py-0.5 rounded-lg transition cursor-pointer"
+                      >
+                        <Edit2 className="w-3 h-3" /> Sửa danh sách
+                      </button>
+                    )}
                   </div>
+
+                  {editingItems ? (
+                    <div className="border border-green-300 rounded-xl overflow-hidden bg-white space-y-0" data-no-export="true">
+                      {/* Current items with remove button */}
+                      <div className="divide-y divide-gray-100">
+                        {itemsDraft.map((i, idx) => {
+                          const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
+                          const displaySize = i.size || matchedCam?.size;
+                          const displayColor = i.color || matchedCam?.color;
+                          return (
+                            <div key={idx} className="p-2.5 px-3 flex items-center text-xs bg-white gap-2">
+                              {matchedCam?.image ? (
+                                <img src={matchedCam.image} alt="" className="w-6 h-7 rounded object-cover border border-gray-200 shrink-0" />
+                              ) : (
+                                <span className="text-orange-500 text-sm shrink-0">👗</span>
+                              )}
+                              <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-gray-900 truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
+                                {displaySize && <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-slate-200">Size {displaySize}</span>}
+                                {displayColor && <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-rose-200">🎨 {displayColor}</span>}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setItemsDraft(prev => prev.filter((_, i2) => i2 !== idx))}
+                                className="shrink-0 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                title="Xóa khỏi danh sách"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Add outfit search */}
+                      <div className="border-t border-dashed border-green-200 p-2.5 space-y-1.5 bg-green-50/50">
+                        <div className="text-[10px] font-bold text-green-800 uppercase">+ Thêm trang phục</div>
+                        <input
+                          type="text"
+                          value={itemSearchQuery}
+                          onChange={e => setItemSearchQuery(e.target.value)}
+                          placeholder="Tìm theo tên..."
+                          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-green-500 focus:outline-none bg-white"
+                        />
+                        {itemSearchQuery.trim().length >= 1 && (() => {
+                          const q = itemSearchQuery.toLowerCase();
+                          const results = cameras.filter(c =>
+                            !c.isPrinter && c.category !== 'Printer' &&
+                            c.name.toLowerCase().includes(q)
+                          ).slice(0, 6);
+                          if (results.length === 0) return <div className="text-[11px] text-gray-400 px-1">Không tìm thấy</div>;
+                          return (
+                            <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden bg-white">
+                              {results.map(cam => (
+                                <button
+                                  key={cam.id}
+                                  type="button"
+                                  onClick={() => {
+                                    const days = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
+                                    const rate = cam.price1Day ?? cam.dailyRate ?? 0;
+                                    setItemsDraft(prev => [...prev, {
+                                      cameraId: cam.id,
+                                      cameraName: cam.name,
+                                      dailyRate: rate,
+                                      quantity: 1,
+                                      size: cam.size,
+                                      color: cam.color
+                                    }]);
+                                    setItemSearchQuery('');
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-2 text-xs text-left hover:bg-green-50 cursor-pointer transition"
+                                >
+                                  {cam.image ? (
+                                    <img src={cam.image} alt="" className="w-5 h-6 rounded object-cover border border-gray-200 shrink-0" />
+                                  ) : (
+                                    <span className="text-orange-400 shrink-0">👗</span>
+                                  )}
+                                  <span className="font-bold text-gray-900 flex-1 truncate">{cam.name}</span>
+                                  {cam.size && <span className="text-[10px] text-gray-500 font-mono">Size {cam.size}</span>}
+                                  <span className="text-[10px] font-mono text-green-700 shrink-0">+ Thêm</span>
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Save / Cancel */}
+                      <div className="border-t border-green-200 p-2.5 flex gap-2 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (itemsDraft.length === 0) return;
+                            // Recalculate total based on new items
+                            const days = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
+                            const newTotal = itemsDraft.reduce((sum, item) => {
+                              const cam = cameras.find(c => c.id === item.cameraId);
+                              const rate = cam ? (cam.price1Day ?? cam.dailyRate ?? item.dailyRate) : item.dailyRate;
+                              return sum + rate * days * (item.quantity || 1);
+                            }, 0);
+                            if (onUpdateContractItems) {
+                              onUpdateContractItems(selectedContract.id, itemsDraft, newTotal);
+                            }
+                            setEditingItems(false);
+                          }}
+                          disabled={itemsDraft.length === 0}
+                          className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[11px] font-bold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition cursor-pointer"
+                        >
+                          <Save className="w-3 h-3" /> Lưu danh sách
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItems(false)}
+                          className="px-3 py-1.5 text-[11px] font-bold text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-white">
+                      {selectedContract.items.map((i, idx) => {
+                        const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
+                        const displaySize = i.size || matchedCam?.size;
+                        const displayColor = i.color || matchedCam?.color;
+                        return (
+                          <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
+                            <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
+                              {matchedCam?.image ? (
+                                <img src={matchedCam.image} alt="" className="w-6 h-7 rounded object-cover border border-gray-200 shrink-0" />
+                              ) : (
+                                <span className="text-orange-500 text-sm shrink-0">👗</span>
+                              )}
+                              <span className="truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
+                              {displaySize && (
+                                <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
+                                  Size {displaySize}
+                                </span>
+                              )}
+                              {displayColor && (
+                                <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 border border-rose-200">
+                                  🎨 {displayColor}
+                                </span>
+                              )}
+                              {i.quantity > 1 && (
+                                <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} chiếc)</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Surcharge Block */}
