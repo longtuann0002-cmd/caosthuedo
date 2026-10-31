@@ -2572,11 +2572,7 @@ export default function ContractManager({
               </div>
 
               {/* Status Update Quick Controls - Centered */}
-              <div className="border-t border-gray-150 pt-3.5 space-y-2.5 shrink-0 text-center">
-                <h4 className="text-[10px] sm:text-xs uppercase font-extrabold text-gray-400 tracking-wider text-center">
-                  VẬN HÀNH TRẠNG THÁI HỢP ĐỒNG & ĐẶT CỌC GIỮ ĐỒ
-                </h4>
-                
+              <div className="border-t border-gray-150 pt-3.5 space-y-2.5 shrink-0">
                 <div className="flex flex-wrap gap-2 justify-center items-center">
                   {selectedContract.status === 'Pending' && (() => {
                     const deposit50 = Math.round(selectedContract.totalPrice * 0.5);
@@ -2587,46 +2583,9 @@ export default function ContractManager({
                     const isNotPaid = paid === 0;
                     return (
                       <div className="w-full space-y-2.5">
-                        {/* Group 1: Deposit status buttons */}
-                        <div>
-                          <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5 text-left">💰 Trạng thái tiền cọc:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {/* 50% */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onUpdateContractStatus(selectedContract.id, 'Pending', 'Đã nhận đủ 50% tiền cọc giữ đồ chuyển khoản từ khách hàng.', deposit50);
-                                setSelectedContract({ ...selectedContract, paidAmount: deposit50 });
-                              }}
-                              className={`flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer active:scale-95 shrink-0 shadow-xs ${
-                                isHalfPaid
-                                  ? 'bg-amber-600 text-white ring-2 ring-amber-400 ring-offset-1'
-                                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300'
-                              }`}
-                              title="Xác nhận khách đã chuyển khoản 50% tiền cọc"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Đã cọc 50% ({deposit50.toLocaleString()}đ)</span>
-                            </button>
-
-                            {/* 100% */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách đã thanh toán đầy đủ 100% tiền thuê ngay khi đặt lịch.', deposit100);
-                                setSelectedContract({ ...selectedContract, paidAmount: deposit100 });
-                              }}
-                              className={`flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer active:scale-95 shrink-0 shadow-xs ${
-                                isFullPaid
-                                  ? 'bg-indigo-600 text-white ring-2 ring-indigo-400 ring-offset-1'
-                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-300'
-                              }`}
-                              title="Xác nhận khách đã thanh toán toàn bộ 100%"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Đã cọc 100% ({deposit100.toLocaleString()}đ)</span>
-                            </button>
-
+                        {/* Segmented Control for Deposit Status */}
+                        <div className="bg-slate-100/90 p-1 rounded-xl border border-slate-200/80">
+                          <div className="grid grid-cols-3 gap-1">
                             {/* Chưa cọc */}
                             <button
                               type="button"
@@ -2634,30 +2593,57 @@ export default function ContractManager({
                                 onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách hàng chưa thanh toán tiền cọc để giữ đồ.', 0);
                                 setSelectedContract({ ...selectedContract, paidAmount: 0 });
                               }}
-                              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95 shrink-0 ${
+                              className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                                 isNotPaid
-                                  ? 'bg-gray-200 text-gray-700 ring-2 ring-gray-400 ring-offset-1'
-                                  : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-300'
+                                  ? 'bg-white text-gray-800 shadow-2xs font-extrabold'
+                                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                               }`}
-                              title="Đánh dấu khách chưa chuyển tiền cọc"
                             >
-                              <Clock className="w-3.5 h-3.5" />
                               <span>⏳ Chưa cọc</span>
+                            </button>
+
+                            {/* Cọc 50% */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onUpdateContractStatus(selectedContract.id, 'Pending', 'Đã nhận đủ 50% tiền cọc giữ đồ chuyển khoản từ khách hàng.', deposit50);
+                                setSelectedContract({ ...selectedContract, paidAmount: deposit50 });
+                              }}
+                              className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                isHalfPaid
+                                  ? 'bg-amber-500 text-white shadow-2xs font-black'
+                                  : 'text-amber-800 hover:text-amber-950 hover:bg-white/50'
+                              }`}
+                            >
+                              <span>Cọc 50% ({deposit50.toLocaleString()}đ)</span>
+                            </button>
+
+                            {/* Cọc 100% */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách đã thanh toán đầy đủ 100% tiền thuê ngay khi đặt lịch.', deposit100);
+                                setSelectedContract({ ...selectedContract, paidAmount: deposit100 });
+                              }}
+                              className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                isFullPaid
+                                  ? 'bg-indigo-600 text-white shadow-2xs font-black'
+                                  : 'text-indigo-800 hover:text-indigo-950 hover:bg-white/50'
+                              }`}
+                            >
+                              <span>Đủ 100% ({deposit100.toLocaleString()}đ)</span>
                             </button>
                           </div>
                         </div>
 
-                        {/* Divider */}
-                        <div className="border-t border-dashed border-gray-200" />
-
-                        {/* Group 2: Main action */}
+                        {/* Primary Action Button */}
                         <button
                           type="button"
                           onClick={() => {
                             onUpdateContractStatus(selectedContract.id, 'Active', 'Bàn giao trang phục và chụp ảnh lưu hồ sơ.');
                             setSelectedContract(prev => prev ? ({ ...prev, status: 'Active' }) : null);
                           }}
-                          className="w-full bg-blue-600 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                          className="w-full bg-blue-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 shadow-xs"
                         >
                           <Check className="w-4 h-4 text-white" /> Bàn giao trang phục (Bắt đầu thuê)
                         </button>
