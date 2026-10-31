@@ -1285,6 +1285,27 @@ export default function BookingCalendar({
              CHẾ ĐỘ LỊCH THÁNG / TUẦN (GRID CALENDAR)
              ========================================================================= */
           <div className="w-full pb-1">
+            {/* Header hàng Thứ riêng biệt chuẩn Mobile & PC (Cố định siêu mỏng, không che ô) */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-1.5 select-none">
+              {[
+                { label: 'T2', full: 'Thứ 2', color: 'text-slate-600' },
+                { label: 'T3', full: 'Thứ 3', color: 'text-slate-600' },
+                { label: 'T4', full: 'Thứ 4', color: 'text-slate-600' },
+                { label: 'T5', full: 'Thứ 5', color: 'text-slate-600' },
+                { label: 'T6', full: 'Thứ 6', color: 'text-slate-600' },
+                { label: 'T7', full: 'Thứ 7', color: 'text-blue-600 font-black' },
+                { label: 'CN', full: 'Chủ Nhật', color: 'text-rose-600 font-black' },
+              ].map(th => (
+                <div 
+                  key={th.label}
+                  className={`text-center py-1 sm:py-1.5 rounded-lg bg-slate-100/80 border border-slate-200/60 font-black text-[10px] sm:text-xs tracking-tight ${th.color}`}
+                >
+                  <span className="sm:hidden">{th.label}</span>
+                  <span className="hidden sm:inline">{th.full}</span>
+                </div>
+              ))}
+            </div>
+
             {/* Calendar Day Cells */}
             <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {calendarDays.map(({ day, isCurrentMonth, dateString }) => {
@@ -1297,12 +1318,8 @@ export default function BookingCalendar({
                 const isSelected = selectedDate === dateString;
                 const isToday = (systemDate || new Date().toISOString().split('T')[0]) === dateString;
 
-                // Tính toán thứ trong tuần (0: T2, 1: T3, ..., 5: T7, 6: CN)
                 const dObj = new Date(dateString);
-                const dayOfWeekMap = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-                const dayOfWeekLabel = dayOfWeekMap[dObj.getDay()];
                 const isSunday = dObj.getDay() === 0;
-                const isSaturday = dObj.getDay() === 6;
 
                 // Determine status and style matching the legend
                 let statusStyle = 'bg-white border-gray-200 hover:border-emerald-400';
@@ -1336,33 +1353,18 @@ export default function BookingCalendar({
                     } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
-                    {/* Cell Header: Day of week + Day number + count badge */}
+                    {/* Cell Header: Day number TO RÕ + count badge */}
                     <div className="flex justify-between items-center pb-0.5 sm:pb-1">
-                      <div className="flex items-center gap-1 min-w-0">
-                        {/* Nhãn Thứ tinh tế nằm ngay cạnh số ngày */}
-                        <span className={`text-[9.5px] sm:text-[10.5px] font-extrabold uppercase tracking-tight ${
-                          isSunday
-                            ? 'text-rose-600'
-                            : isSaturday
-                            ? 'text-blue-600'
-                            : isCurrentMonth
-                            ? 'text-gray-400'
-                            : 'text-gray-300'
-                        }`}>
-                          {dayOfWeekLabel}
-                        </span>
-                        <span className="text-gray-300 text-[9px] font-bold">•</span>
-                        <span className={`text-[11px] sm:text-xs font-black inline-flex items-center justify-center ${
-                          isToday 
-                            ? 'w-5 h-5 rounded-full bg-orange-600 text-white shadow-3xs' 
-                            : (isCurrentMonth ? (isSelected ? 'text-orange-700 font-black' : (isSunday ? 'text-rose-700' : 'text-gray-900')) : 'text-gray-400')
-                        }`}>
-                          {day}
-                        </span>
-                      </div>
+                      <span className={`text-xs sm:text-sm font-black inline-flex items-center justify-center leading-none ${
+                        isToday 
+                          ? 'w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-orange-600 text-white shadow-3xs' 
+                          : (isCurrentMonth ? (isSelected ? 'text-orange-700 font-black' : (isSunday ? 'text-rose-600' : 'text-gray-900')) : 'text-gray-300')
+                      }`}>
+                        {day}
+                      </span>
 
                       {bookingCount > 0 && (
-                        <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-3xs leading-none shrink-0">
+                        <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.2 rounded-full shadow-3xs leading-none shrink-0">
                           {bookingCount}
                         </span>
                       )}
