@@ -217,6 +217,7 @@ export default function EquipmentTracker({
     isPrinter: false,
     purchasePrice: 0,
     dailyRate: 0,
+    salePrice: 0,
     price1Day: 0,
     price2Days: 0,
     price3Days: 0,
@@ -501,6 +502,7 @@ export default function EquipmentTracker({
       isPrinter: false,
       purchasePrice: rep.purchasePrice || 500000,
       dailyRate: rep.dailyRate,
+      salePrice: rep.salePrice || 0,
       price1Day: p1,
       price2Days: Math.round((rep.price2Days ?? ((p1 + p2_daily) / 2)) * 2),
       price3Days: Math.round((rep.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3),
@@ -592,6 +594,7 @@ export default function EquipmentTracker({
       isPrinter: cam.category === 'Printer' || Boolean(cam.isPrinter),
       purchasePrice: cam.purchasePrice ?? (cam.depositAmount ? cam.depositAmount : cam.dailyRate * 5),
       dailyRate: cam.dailyRate,
+      salePrice: cam.salePrice || 0,
       price1Day: p1,
       price2Days: Math.round((cam.price2Days ?? ((p1 + p2_daily) / 2)) * 2),
       price3Days: Math.round((cam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3),
@@ -695,6 +698,7 @@ export default function EquipmentTracker({
     // Chia 2 cho giá ngày thứ 2, chia 3 cho ngày thứ 3 để có đơn giá/ngày đúng
     const savedFormState = {
       ...formState,
+      salePrice: formState.salePrice > 0 ? formState.salePrice : undefined,
       shortName: effectiveShortName,
       size: sizeString,
       availableSizes: sizesToSave,
@@ -1234,11 +1238,27 @@ export default function EquipmentTracker({
 
                     {/* Price row - 1 dòng duy nhất, to rõ */}
                     <div className="pt-0.5 flex items-baseline justify-between gap-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
-                          {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
-                        </span>
-                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">/ngày</span>
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        {activeCam.salePrice && activeCam.salePrice > 0 ? (
+                          <>
+                            <span className="text-sm sm:text-base font-black text-rose-600 font-mono">
+                              {activeCam.salePrice.toLocaleString()}đ
+                            </span>
+                            <span className="text-[10px] sm:text-xs text-gray-400 line-through font-mono">
+                              {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
+                            </span>
+                            <span className="text-[9px] font-black text-white bg-rose-600 px-1.5 py-0.2 rounded-full uppercase tracking-tighter">
+                              SALE
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
+                              {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
+                            </span>
+                            <span className="text-[10px] sm:text-xs text-gray-400 font-medium">/ngày</span>
+                          </>
+                        )}
                       </div>
                       {roiPercent !== null && (
                         <span className={`text-[9.5px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
@@ -3129,7 +3149,7 @@ export default function EquipmentTracker({
 
                   <div className="space-y-2.5">
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
                         <label className="block text-[11px] font-bold text-gray-650 mb-1">Giá thuê 1 ngày (Chuẩn)</label>
                         <MoneyInput
@@ -3140,6 +3160,26 @@ export default function EquipmentTracker({
                           placeholder="VD: 350.000"
                         />
                       </div>
+                      <div className="bg-rose-50/70 p-2 rounded-lg border border-rose-200">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-extrabold text-rose-700">🏷️ Giá SALE / Khuyến Mãi (VND)</label>
+                          {formState.salePrice > 0 && formState.price1Day > formState.salePrice && (
+                            <span className="text-[10px] font-black text-white bg-rose-500 px-1.5 py-0.2 rounded-full">
+                              -{Math.round(((formState.price1Day - formState.salePrice) / formState.price1Day) * 100)}%
+                            </span>
+                          )}
+                        </div>
+                        <MoneyInput
+                          value={formState.salePrice}
+                          onChange={v => setFormState(prev => ({ ...prev, salePrice: v }))}
+                          className="border border-rose-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-rose-500 focus:outline-none bg-white font-bold text-rose-700"
+                          suffixColor="rose"
+                          placeholder="Để trống = Không sale"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
                         <label className="block text-[11px] font-bold text-gray-650 mb-1">Giá thuê 2 ngày (VND)</label>
                         <MoneyInput

@@ -12,7 +12,9 @@ export function getCameraRateForDuration(camera: Camera, days: number, is6Hours?
     return camera.price1Day ?? camera.dailyRate ?? (camera.printPrice1To2 ?? 40000);
   }
 
-  const p1 = camera.price1Day ?? camera.dailyRate;
+  // Nếu có salePrice > 0 thì dùng làm giá 1 ngày ưu đãi
+  const hasSale = typeof camera.salePrice === 'number' && camera.salePrice > 0;
+  const p1 = hasSale ? camera.salePrice! : (camera.price1Day ?? camera.dailyRate);
   if (is6Hours) {
     return camera.price6Hours ?? (Math.round((p1 * 0.7) / 10000) * 10000); // 70% giá ngày đầu làm tròn chẵn chục nghìn
   }
@@ -26,9 +28,9 @@ export function getCameraRateForDuration(camera: Camera, days: number, is6Hours?
   const defaultPrice2DaysAvg = (p1 + p2_daily) / 2;
   const defaultPrice3DaysAvg = (p1 + p2_daily + p3_daily) / 3;
 
-  const p2 = camera.price2Days ?? defaultPrice2DaysAvg;
-  const p3 = camera.price3Days ?? defaultPrice3DaysAvg;
-  const p4 = camera.price4DaysPlus ?? p4_daily;
+  const p2 = hasSale ? defaultPrice2DaysAvg : (camera.price2Days ?? defaultPrice2DaysAvg);
+  const p3 = hasSale ? defaultPrice3DaysAvg : (camera.price3Days ?? defaultPrice3DaysAvg);
+  const p4 = hasSale ? p4_daily : (camera.price4DaysPlus ?? p4_daily);
 
   if (d === 1) {
     return p1;
