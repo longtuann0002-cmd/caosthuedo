@@ -1285,14 +1285,14 @@ export default function BookingCalendar({
              CHẾ ĐỘ LỊCH THÁNG / TUẦN (GRID CALENDAR)
              ========================================================================= */
           <div className="w-full pb-1">
-            {/* Day Grid Headers: T2 ở đầu, CN ở cuối */}
-            <div className="grid grid-cols-7 gap-1 bg-slate-100/70 py-2 px-1 rounded-xl text-center font-black text-gray-600 text-[11px] sm:text-xs tracking-wider mb-2 select-none">
-              <div>T2</div>
-              <div>T3</div>
-              <div>T4</div>
-              <div>T5</div>
-              <div>T6</div>
-              <div>T7</div>
+            {/* Day Grid Headers: T2 ở đầu, CN ở cuối - STICKY HEADER ghim dính khi cuộn */}
+            <div className="sticky top-0 z-20 grid grid-cols-7 gap-1 bg-white/95 backdrop-blur-md py-2 px-1 rounded-xl text-center font-black text-[11px] sm:text-xs tracking-wider mb-2 select-none border border-slate-200/90 shadow-xs">
+              <div className="text-slate-700">T2</div>
+              <div className="text-slate-700">T3</div>
+              <div className="text-slate-700">T4</div>
+              <div className="text-slate-700">T5</div>
+              <div className="text-slate-700">T6</div>
+              <div className="text-blue-700 font-black">T7</div>
               <div className="text-rose-600 font-black">CN</div>
             </div>
 
