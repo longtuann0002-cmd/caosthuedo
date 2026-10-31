@@ -1285,17 +1285,6 @@ export default function BookingCalendar({
              CHẾ ĐỘ LỊCH THÁNG / TUẦN (GRID CALENDAR)
              ========================================================================= */
           <div className="w-full pb-1">
-            {/* Day Grid Headers: T2 ở đầu, CN ở cuối - STICKY HEADER ghim dính khi cuộn */}
-            <div className="sticky top-0 z-20 grid grid-cols-7 gap-1 bg-white/95 backdrop-blur-md py-2 px-1 rounded-xl text-center font-black text-[11px] sm:text-xs tracking-wider mb-2 select-none border border-slate-200/90 shadow-xs">
-              <div className="text-slate-700">T2</div>
-              <div className="text-slate-700">T3</div>
-              <div className="text-slate-700">T4</div>
-              <div className="text-slate-700">T5</div>
-              <div className="text-slate-700">T6</div>
-              <div className="text-blue-700 font-black">T7</div>
-              <div className="text-rose-600 font-black">CN</div>
-            </div>
-
             {/* Calendar Day Cells */}
             <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {calendarDays.map(({ day, isCurrentMonth, dateString }) => {
@@ -1307,6 +1296,13 @@ export default function BookingCalendar({
                 const bookingCount = bookings.length;
                 const isSelected = selectedDate === dateString;
                 const isToday = (systemDate || new Date().toISOString().split('T')[0]) === dateString;
+
+                // Tính toán thứ trong tuần (0: T2, 1: T3, ..., 5: T7, 6: CN)
+                const dObj = new Date(dateString);
+                const dayOfWeekMap = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                const dayOfWeekLabel = dayOfWeekMap[dObj.getDay()];
+                const isSunday = dObj.getDay() === 0;
+                const isSaturday = dObj.getDay() === 6;
 
                 // Determine status and style matching the legend
                 let statusStyle = 'bg-white border-gray-200 hover:border-emerald-400';
@@ -1340,17 +1336,33 @@ export default function BookingCalendar({
                     } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
-                    {/* Cell Header: Day number + count badge */}
+                    {/* Cell Header: Day of week + Day number + count badge */}
                     <div className="flex justify-between items-center pb-0.5 sm:pb-1">
-                      <span className={`text-[11px] sm:text-xs font-black inline-flex items-center justify-center ${
-                        isToday 
-                          ? 'w-5 h-5 rounded-full bg-orange-600 text-white shadow-3xs' 
-                          : (isCurrentMonth ? (isSelected ? 'text-orange-700' : 'text-gray-800') : 'text-gray-400')
-                      }`}>
-                        {day}
-                      </span>
+                      <div className="flex items-center gap-1 min-w-0">
+                        {/* Nhãn Thứ tinh tế nằm ngay cạnh số ngày */}
+                        <span className={`text-[9.5px] sm:text-[10.5px] font-extrabold uppercase tracking-tight ${
+                          isSunday
+                            ? 'text-rose-600'
+                            : isSaturday
+                            ? 'text-blue-600'
+                            : isCurrentMonth
+                            ? 'text-gray-400'
+                            : 'text-gray-300'
+                        }`}>
+                          {dayOfWeekLabel}
+                        </span>
+                        <span className="text-gray-300 text-[9px] font-bold">•</span>
+                        <span className={`text-[11px] sm:text-xs font-black inline-flex items-center justify-center ${
+                          isToday 
+                            ? 'w-5 h-5 rounded-full bg-orange-600 text-white shadow-3xs' 
+                            : (isCurrentMonth ? (isSelected ? 'text-orange-700 font-black' : (isSunday ? 'text-rose-700' : 'text-gray-900')) : 'text-gray-400')
+                        }`}>
+                          {day}
+                        </span>
+                      </div>
+
                       {bookingCount > 0 && (
-                        <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-3xs leading-none">
+                        <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-3xs leading-none shrink-0">
                           {bookingCount}
                         </span>
                       )}
