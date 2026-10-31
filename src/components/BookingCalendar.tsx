@@ -327,6 +327,7 @@ export default function BookingCalendar({
       depositAmount: 0,
       paidAmount: 0,
       discountPercent: 0, // Tỷ lệ tự giảm giá (%)
+      itemDiscounts: {} as Record<string, number>, // Giảm giá riêng cho từng món: { [cameraId]: discountPercent (0-100) }
       customFinalPrice: null as number | null,
       note: '',
     };
@@ -353,6 +354,7 @@ export default function BookingCalendar({
       depositAmount: 0,
       paidAmount: 0,
       discountPercent: 0,
+      itemDiscounts: {},
       customFinalPrice: null,
       note: '',
     });
@@ -384,18 +386,22 @@ export default function BookingCalendar({
     formData.selectedCameraIds.forEach(id => {
       const cam = cameras.find(c => c.id === id);
       if (!cam) return;
+      const itemDisc = formData.itemDiscounts?.[id] || 0;
+      const discMultiplier = Math.max(0, 1 - itemDisc / 100);
+
       if (cam.category === 'Printer' || cam.isPrinter) {
         const prints = formData.printCounts?.[id] || 5;
         const { totalPrice } = getPrintPrice(cam, prints);
-        printerTotal += totalPrice;
+        printerTotal += Math.round(totalPrice * discMultiplier);
       } else {
-        regularDailyTotal += getCameraRateForDuration(cam, calculatedDays);
+        const baseRate = getCameraRateForDuration(cam, calculatedDays);
+        regularDailyTotal += Math.round(baseRate * discMultiplier);
       }
     });
 
     const camerasCost = regularDailyTotal * calculatedDays;
     return camerasCost + printerTotal;
-  }, [formData.selectedCameraIds, formData.printCounts, calculatedDays, cameras]);
+  }, [formData.selectedCameraIds, formData.printCounts, formData.itemDiscounts, calculatedDays, cameras]);
 
   const calculatedTotal = useMemo(() => {
     if (formData.customFinalPrice !== null && formData.customFinalPrice !== undefined) {
@@ -867,20 +873,23 @@ export default function BookingCalendar({
       const cam = cameras.find(c => c.id === id);
       const isPrinter = cam?.category === 'Printer' || Boolean(cam?.isPrinter);
       const prints = isPrinter ? (formData.printCounts?.[id] || 5) : undefined;
+      const itemDisc = formData.itemDiscounts?.[id] || 0;
       const rate = isPrinter && cam
         ? getPrintPrice(cam, prints!).totalPrice
         : (cam ? getCameraRateForDuration(cam, calculatedDays) : 100000);
+      const finalRate = itemDisc > 0 ? Math.round(rate * Math.max(0, 1 - itemDisc / 100)) : rate;
 
       return {
         cameraId: id,
         cameraName: isPrinter
           ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)`
           : (cam?.name?.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || 'Trang phục'),
-        dailyRate: rate,
+        dailyRate: finalRate,
         quantity: 1,
         printCount: prints,
         size: cam?.size,
-        color: cam?.color
+        color: cam?.color,
+        discountPercent: itemDisc > 0 ? itemDisc : undefined
       };
     });
 
@@ -930,6 +939,7 @@ export default function BookingCalendar({
       depositAmount: 0,
       paidAmount: 0,
       discountPercent: 0,
+      itemDiscounts: {},
       customFinalPrice: null,
       note: '',
     });
@@ -2440,6 +2450,15 @@ export default function BookingCalendar({
                             {cam.color && (
                               <span className="text-[10px] text-gray-500 font-medium truncate max-w-[70px]">({cam.color})</span>
                             )}
+                            {formData.itemDiscounts?.[camId] ? (
+                              <span className={`text-[9.5px] font-black px-1.5 py-0.2 rounded ${
+                                formData.itemDiscounts[camId] === 100
+                                  ? 'bg-rose-600 text-white'
+                                  : 'bg-orange-100 text-orange-850 border border-orange-200'
+                              }`}>
+                                {formData.itemDiscounts[camId] === 100 ? 'Tặng 0đ' : `-${formData.itemDiscounts[camId]}%`}
+                              </span>
+                            ) : null}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2766,12 +2785,65 @@ export default function BookingCalendar({
                                   <span className="text-[10px] text-orange-800 font-black uppercase tracking-wide shrink-0">
                                     ✓ Đã chọn ({selectedSizes.length}):
                                   </span>
-                                  {selectedSizes.map(c => (
-                                    <span key={c.id} className="text-[10px] font-mono font-black bg-white text-orange-900 px-2 py-0.5 rounded-lg border border-orange-300 shadow-3xs flex items-center gap-1">
-                                      <span>Size {c.size || 'FS'}</span>
-                                      {c.serialNumber && <span className="text-gray-400 font-normal">#{c.serialNumber}</span>}
-                                    </span>
-                                  ))}
+                                  {selectedSizes.map(c => {
+                                    const itemDisc = formData.itemDiscounts?.[c.id] || 0;
+                                    const baseRate = getCameraRateForDuration(c, calculatedDays);
+                                    const cost = baseRate * calculatedDays;
+                                    const finalCost = Math.round(cost * (1 - itemDisc / 100));
+
+                                    return (
+                                      <div key={c.id} className="w-full flex items-center justify-between gap-1.5 bg-white p-1.5 px-2 rounded-xl border border-orange-200 shadow-3xs flex-wrap">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-mono font-black text-orange-950 text-[11px]">Size {c.size || 'FS'}</span>
+                                          {c.color && <span className="text-[10px] text-gray-500 font-bold">({c.color})</span>}
+                                          <span className="text-[10px] font-mono text-gray-600 font-bold">
+                                            {itemDisc > 0 ? (
+                                              <>
+                                                <span className="text-rose-600 font-black">{finalCost.toLocaleString()}đ</span>
+                                                <span className="line-through text-gray-400 text-[9px] ml-1">{cost.toLocaleString()}đ</span>
+                                              </>
+                                            ) : (
+                                              <span>{cost.toLocaleString()}đ</span>
+                                            )}
+                                          </span>
+                                        </div>
+
+                                        {/* Thanh chọn % giảm giá riêng cho Size này */}
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[9.5px] font-extrabold text-rose-800">Giảm:</span>
+                                          {[0, 10, 20, 50, 100].map(pct => {
+                                            const active = itemDisc === pct;
+                                            return (
+                                              <button
+                                                key={pct}
+                                                type="button"
+                                                onClick={() => {
+                                                  setFormData(prev => ({
+                                                    ...prev,
+                                                    itemDiscounts: {
+                                                      ...prev.itemDiscounts,
+                                                      [c.id]: pct
+                                                    }
+                                                  }));
+                                                }}
+                                                className={`text-[9.5px] font-extrabold px-1.5 py-0.5 rounded cursor-pointer transition ${
+                                                  active
+                                                    ? pct === 100
+                                                      ? 'bg-rose-600 text-white font-black shadow-xs ring-1 ring-rose-400'
+                                                      : pct === 0
+                                                      ? 'bg-gray-200 text-gray-800 font-bold'
+                                                      : 'bg-orange-500 text-white font-black shadow-xs'
+                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                                                }`}
+                                              >
+                                                {pct === 0 ? 'Gốc' : pct === 100 ? 'Tặng 0đ (100%)' : `-${pct}%`}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>

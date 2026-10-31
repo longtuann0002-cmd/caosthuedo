@@ -1238,27 +1238,11 @@ export default function EquipmentTracker({
 
                     {/* Price row - 1 dòng duy nhất, to rõ */}
                     <div className="pt-0.5 flex items-baseline justify-between gap-1">
-                      <div className="flex items-baseline gap-1.5 flex-wrap">
-                        {activeCam.salePrice && activeCam.salePrice > 0 ? (
-                          <>
-                            <span className="text-sm sm:text-base font-black text-rose-600 font-mono">
-                              {activeCam.salePrice.toLocaleString()}đ
-                            </span>
-                            <span className="text-[10px] sm:text-xs text-gray-400 line-through font-mono">
-                              {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
-                            </span>
-                            <span className="text-[9px] font-black text-white bg-rose-600 px-1.5 py-0.2 rounded-full uppercase tracking-tighter">
-                              SALE
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
-                              {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
-                            </span>
-                            <span className="text-[10px] sm:text-xs text-gray-400 font-medium">/ngày</span>
-                          </>
-                        )}
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
+                          {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
+                        </span>
+                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">/ngày</span>
                       </div>
                       {roiPercent !== null && (
                         <span className={`text-[9.5px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
@@ -3149,7 +3133,7 @@ export default function EquipmentTracker({
 
                   <div className="space-y-2.5">
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div>
                         <label className="block text-[11px] font-bold text-gray-650 mb-1">Giá thuê 1 ngày (Chuẩn)</label>
                         <MoneyInput
@@ -3160,102 +3144,6 @@ export default function EquipmentTracker({
                           placeholder="VD: 350.000"
                         />
                       </div>
-                      <div className="bg-rose-50/70 p-2.5 rounded-lg border border-rose-200 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <label className="block text-[11px] font-extrabold text-rose-700">🏷️ SALE / Khuyến Mãi</label>
-                          {formState.salePrice > 0 && formState.price1Day > formState.salePrice && (
-                            <span className="text-[10px] font-black text-white bg-rose-500 px-1.5 py-0.2 rounded-full">
-                              Đang giảm -{Math.round(((formState.price1Day - formState.salePrice) / formState.price1Day) * 100)}%
-                            </span>
-                          )}
-                        </div>
-
-                        {/* 2 ô song song: Nhập % hoặc Nhập thẳng Tiền Sale */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <div className="flex items-center justify-between text-[10px] text-rose-900 font-bold mb-0.5">
-                              <span>Nhập % Sale</span>
-                              {formState.salePrice > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setFormState(prev => ({ ...prev, salePrice: 0 }))}
-                                  className="text-gray-400 hover:text-rose-600 underline text-[9px] cursor-pointer"
-                                >
-                                  Bỏ sale
-                                </button>
-                              )}
-                            </div>
-                            <div className="relative">
-                              <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                value={
-                                  formState.salePrice > 0 && formState.price1Day > 0
-                                    ? Math.round(((formState.price1Day - formState.salePrice) / formState.price1Day) * 100) || ''
-                                    : ''
-                                }
-                                onChange={e => {
-                                  const pct = parseFloat(e.target.value) || 0;
-                                  if (pct <= 0) {
-                                    setFormState(prev => ({ ...prev, salePrice: 0 }));
-                                  } else {
-                                    const validPct = Math.min(100, Math.max(0, pct));
-                                    const base = formState.price1Day || formState.dailyRate || 0;
-                                    const calculatedSale = Math.round(base * (1 - validPct / 100));
-                                    setFormState(prev => ({ ...prev, salePrice: calculatedSale }));
-                                  }
-                                }}
-                                placeholder="VD: 20%"
-                                className="w-full border border-rose-300 rounded-lg p-1.5 text-xs font-bold text-rose-700 bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none pr-6 font-mono"
-                              />
-                              <span className="absolute right-2 top-1.5 text-xs font-bold text-rose-400 pointer-events-none">%</span>
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="text-[10px] text-rose-900 font-bold mb-0.5">Giá sau sale (VNĐ)</div>
-                            <MoneyInput
-                              value={formState.salePrice}
-                              onChange={v => setFormState(prev => ({ ...prev, salePrice: v }))}
-                              className="border border-rose-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-rose-500 focus:outline-none bg-white font-bold text-rose-700"
-                              suffixColor="rose"
-                              placeholder="Để trống = ko sale"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Quick % buttons */}
-                        <div className="flex items-center gap-1 pt-0.5">
-                          <span className="text-[9.5px] text-gray-500 font-medium">Gợi ý nhanh:</span>
-                          {[10, 15, 20, 30, 50].map(pct => {
-                            const base = formState.price1Day || formState.dailyRate || 0;
-                            const isCurrentPct = formState.salePrice > 0 && base > 0 && Math.round(((base - formState.salePrice) / base) * 100) === pct;
-                            return (
-                              <button
-                                key={pct}
-                                type="button"
-                                onClick={() => {
-                                  if (base > 0) {
-                                    const calculatedSale = Math.round(base * (1 - pct / 100));
-                                    setFormState(prev => ({ ...prev, salePrice: calculatedSale }));
-                                  }
-                                }}
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition cursor-pointer ${
-                                  isCurrentPct
-                                    ? 'bg-rose-600 text-white font-black'
-                                    : 'bg-white hover:bg-rose-100 text-rose-700 border border-rose-200'
-                                }`}
-                              >
-                                -{pct}%
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
                         <label className="block text-[11px] font-bold text-gray-650 mb-1">Giá thuê 2 ngày (VND)</label>
                         <MoneyInput

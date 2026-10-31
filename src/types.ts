@@ -53,6 +53,7 @@ export interface RentalContract {
     printCount?: number;
     size?: string;
     color?: string;
+    discountPercent?: number; // Giảm giá riêng cho món này (%) - từ 0% đến 100%
   }[];
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD

@@ -2280,6 +2280,15 @@ export default function ContractManager({
                                   🎨 {displayColor}
                                 </span>
                               )}
+                              {i.discountPercent ? (
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 ${
+                                  i.discountPercent === 100
+                                    ? 'bg-rose-600 text-white shadow-3xs'
+                                    : 'bg-orange-100 text-orange-900 border border-orange-200'
+                                }`}>
+                                  {i.discountPercent === 100 ? '🎁 Tặng 0đ (100%)' : `Giảm -${i.discountPercent}%`}
+                                </span>
+                              ) : null}
                               {i.quantity > 1 && (
                                 <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} chiếc)</span>
                               )}
