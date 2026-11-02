@@ -1370,123 +1370,102 @@ export default function BookingCalendar({
                       )}
                     </div>
 
-                    {/* Booking item text blocks (Dong 1: Ten nguoi dat lich, Dong 2: Ma mau + Size) */}
-                    <div className="space-y-0.5 sm:space-y-1 mt-0.5 flex-grow select-none w-full">
-                      {bookings.map((b, idx) => {
-                        const colors = getCameraColorProps(b.cameraShort);
-                        const sizeLabel = b.isPrinter
-                          ? `🖨️ ${b.printCount ?? '?'}t`
-                          : (b.size === 'Freesize' || b.size === 'FS' ? 'FS' : `Size ${b.size || 'M'}`);
-                        
-                        // Tìm trang phục tương ứng trong danh sách cameras (hỗ trợ fallback đa tiêu chí)
-                        const matchedCam = cameras.find(c => c.id === b.cameraId)
-                          || cameras.find(c => c.serialNumber && b.cameraShort && c.serialNumber.toLowerCase() === b.cameraShort.toLowerCase())
-                          || cameras.find(c => c.shortName && b.cameraShort && c.shortName.toLowerCase() === b.cameraShort.toLowerCase())
-                          || cameras.find(c => c.name && b.cameraName && c.name.toLowerCase() === b.cameraName.toLowerCase());
-                        
-                        // TÊN VIẾT TẮT TRANG PHỤC: Ưu tiên mã tag/serialNumber hoặc tên viết tắt, tuyệt đối ẩn tên đầy đủ để không bị trùng lặp
-                        const outfitShortCode = (matchedCam?.serialNumber || b.cameraShort || matchedCam?.shortName || b.cleanName || b.cameraName || 'Đồ thuê').trim();
-                        
-                        // TÊN ĐẦY ĐỦ TRANG PHỤC (Lược bỏ hậu tố Size trong tên để không bị hiển thị 2 lần)
-                        const rawOutfitName = (b.cleanName || matchedCam?.name || b.cameraName || '').trim();
-                        const outfitName = rawOutfitName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
+                    {/* Booking item text blocks: Gộp theo từng Hợp Đồng / Khách Hàng */}
+                    <div className="space-y-1 mt-0.5 flex-grow select-none w-full">
+                      {(() => {
+                        // Nhóm các booking theo contract.id để gộp cùng 1 khách lại
+                        const groupedByContract: { contract: RentalContract; items: typeof bookings }[] = [];
+                        bookings.forEach(b => {
+                          const existing = groupedByContract.find(g => g.contract.id === b.contract.id);
+                          if (existing) {
+                            existing.items.push(b);
+                          } else {
+                            groupedByContract.push({ contract: b.contract, items: [b] });
+                          }
+                        });
 
-                        // TÊN ĐẦY ĐỦ KHÁCH HÀNG (Hiển thị trọn vẹn họ và tên của người thuê)
-                        const custName = (b.contract.customerName || '').trim();
-                        
-                        const camImage = matchedCam?.image || '';
+                        return groupedByContract.map(({ contract, items }, groupIdx) => {
+                          const firstBooking = items[0];
+                          const colors = getCameraColorProps(firstBooking.cameraShort);
+                          const custName = (contract.customerName || '').trim();
 
-                        return (
-                          <div
-                            key={idx}
-                            className={`group flex flex-col justify-center px-1 sm:px-1.5 py-0.5 sm:py-1 border-0 border-l-[2px] sm:border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative flex`}
-                            title={`Khách: ${b.contract.customerName || 'Chưa có tên'} | ${b.contract.customerPhone || 'Chưa có SĐT'}\n${b.cameraName} (${sizeLabel})`}
-                          >
-                            {/* Mobile: Chỉ hiện pill mã viết tắt, gọn tối đa */}
-                            <div className="flex sm:hidden items-center leading-none min-w-0">
-                              <span className={`font-mono font-black text-[8px] truncate leading-tight px-1 py-0.5 rounded ${colors.tagColor}`}>
-                                {outfitShortCode}
-                              </span>
-                            </div>
-
-                            {/* Desktop: Dòng 1 Tên đầy đủ của khách (hoặc Tên đồ nếu không có khách), Dòng 2 Mã viết tắt + Tên sản phẩm + Size */}
-                            <div className="hidden sm:flex flex-col gap-0.5">
-                              {custName ? (
-                                <div className="leading-tight">
-                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900 block" title={custName}>
-                                    {custName}
-                                  </span>
-                                </div>
-                              ) : outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() ? (
-                                <div className="leading-tight">
-                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900 block" title={outfitName}>
-                                    {outfitName}
-                                  </span>
-                                </div>
-                              ) : null}
-
-                              <div className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-none min-w-0">
-                                <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={outfitShortCode}>
-                                  {outfitShortCode}
-                                </span>
-                                {custName && outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() && (
-                                  <span className="text-[10px] font-bold text-gray-900 truncate" title={outfitName}>
-                                    {outfitName}
-                                  </span>
-                                )}
-                                <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
-                                  {sizeLabel}
-                                </span>
+                          return (
+                            <div
+                              key={contract.id || groupIdx}
+                              className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-lg shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative`}
+                              title={`Khách: ${contract.customerName || 'Chưa có tên'} | ${contract.customerPhone || 'Chưa có SĐT'}\n${items.length} món: ${items.map(it => it.cameraName).join(', ')}`}
+                            >
+                              {/* Mobile: Hiển thị danh sách các tag mã viết tắt gọn gàng */}
+                              <div className="flex sm:hidden flex-wrap gap-0.5 items-center leading-none">
+                                {items.map((it, itIdx) => {
+                                  const mCam = cameras.find(c => c.id === it.cameraId)
+                                    || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
+                                    || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase());
+                                  const code = (mCam?.serialNumber || it.cameraShort || it.cleanName || 'Đồ').trim();
+                                  return (
+                                    <span key={itIdx} className={`font-mono font-black text-[7.5px] px-1 py-0.2 rounded leading-tight ${colors.tagColor}`}>
+                                      {code}
+                                    </span>
+                                  );
+                                })}
                               </div>
 
-                              {b.contract.customerPhone && (
-                                <div className="text-[8.5px] font-bold text-gray-500 leading-none mt-0.5 truncate font-mono">
-                                  📞 {b.contract.customerPhone}
+                              {/* Desktop: Header Khách hàng (Tên + SĐT) CHỈ HIỆN 1 LẦN */}
+                              <div className="hidden sm:flex flex-col gap-0.5">
+                                <div className="flex items-center justify-between gap-1 leading-tight">
+                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900" title={custName}>
+                                    {custName || 'Khách thuê'}
+                                  </span>
+                                  {items.length > 1 && (
+                                    <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-white/95 text-gray-700 rounded-full border border-gray-200/80 shadow-3xs shrink-0">
+                                      {items.length} món
+                                    </span>
+                                  )}
                                 </div>
-                              )}
-                            </div>
 
-                            {/* HOVER PREVIEW POPUP: Rê chuột vào hiển thị hình ảnh sản phẩm to rõ nét */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-[9999] hidden group-hover:flex flex-col items-center pointer-events-none drop-shadow-2xl">
-                              <div className="w-32 bg-white rounded-xl overflow-hidden border-2 border-orange-500 shadow-2xl p-1 text-center">
-                                {camImage ? (
-                                  <img 
-                                    src={camImage} 
-                                    alt={outfitShortCode} 
-                                    className="w-full h-36 object-cover object-top rounded-lg" 
-                                    referrerPolicy="no-referrer" 
-                                  />
-                                ) : (
-                                  <div className="w-full h-24 bg-orange-50 rounded-lg flex flex-col items-center justify-center text-orange-600">
-                                    <span className="text-2xl">👗</span>
-                                    <span className="text-[8.5px] font-bold text-gray-400 mt-0.5">Chưa có ảnh</span>
+                                {/* Danh sách từng món của khách này */}
+                                <div className="space-y-0.5 pt-0.5">
+                                  {items.map((it, itIdx) => {
+                                    const mCam = cameras.find(c => c.id === it.cameraId)
+                                      || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
+                                      || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase())
+                                      || cameras.find(c => c.name && it.cameraName && c.name.toLowerCase() === it.cameraName.toLowerCase());
+                                    
+                                    const code = (mCam?.serialNumber || it.cameraShort || mCam?.shortName || it.cleanName || it.cameraName || 'Đồ thuê').trim();
+                                    const rawName = (it.cleanName || mCam?.name || it.cameraName || '').trim();
+                                    const name = rawName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
+                                    const sizeLbl = it.isPrinter
+                                      ? `🖨️ ${it.printCount ?? '?'}t`
+                                      : (it.size === 'Freesize' || it.size === 'FS' ? 'FS' : `Size ${it.size || 'M'}`);
+
+                                    return (
+                                      <div key={itIdx} className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-none min-w-0">
+                                        <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={code}>
+                                          {code}
+                                        </span>
+                                        {name && name.toLowerCase() !== code.toLowerCase() && (
+                                          <span className="text-[9.5px] font-bold text-gray-900 truncate" title={name}>
+                                            {name}
+                                          </span>
+                                        )}
+                                        <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
+                                          {sizeLbl}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {contract.customerPhone && (
+                                  <div className="text-[8.5px] font-bold text-gray-500 leading-none mt-0.5 truncate font-mono">
+                                    📞 {contract.customerPhone}
                                   </div>
                                 )}
-                                <div className="mt-1 px-0.5">
-                                  <div className="font-mono font-black text-[10px] text-gray-900 truncate">
-                                    {outfitShortCode}
-                                  </div>
-                                  {outfitName && outfitName.toLowerCase() !== outfitShortCode.toLowerCase() && (
-                                    <div className="font-bold text-[9px] text-gray-800 truncate" title={outfitName}>
-                                      {outfitName}
-                                    </div>
-                                  )}
-                                  <div className="text-[8.5px] font-medium text-gray-500 truncate">
-                                    {sizeLabel} {matchedCam?.color ? `• ${matchedCam.color}` : ''}
-                                  </div>
-                                  {b.contract.customerName && (
-                                    <div className="text-[8px] font-bold text-orange-700 bg-orange-50 rounded py-0.5 mt-0.5 truncate">
-                                      👤 {b.contract.customerName}
-                                    </div>
-                                  )}
-                                </div>
                               </div>
-                              {/* Mũi tên chỉ xuống card */}
-                              <div className="w-2.5 h-2.5 bg-orange-500 rotate-45 -mt-1.5 shadow-xs"></div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 );
