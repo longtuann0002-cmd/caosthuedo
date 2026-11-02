@@ -1285,30 +1285,9 @@ export default function BookingCalendar({
              CHẾ ĐỘ LỊCH THÁNG / TUẦN (GRID CALENDAR)
              ========================================================================= */
           <div className="w-full pb-1">
-            {/* Header hàng Thứ riêng biệt chuẩn Mobile & PC (Cố định siêu mỏng, không che ô) */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-1.5 select-none">
-              {[
-                { label: 'T2', full: 'Thứ 2', color: 'text-slate-600' },
-                { label: 'T3', full: 'Thứ 3', color: 'text-slate-600' },
-                { label: 'T4', full: 'Thứ 4', color: 'text-slate-600' },
-                { label: 'T5', full: 'Thứ 5', color: 'text-slate-600' },
-                { label: 'T6', full: 'Thứ 6', color: 'text-slate-600' },
-                { label: 'T7', full: 'Thứ 7', color: 'text-blue-600 font-black' },
-                { label: 'CN', full: 'Chủ Nhật', color: 'text-rose-600 font-black' },
-              ].map(th => (
-                <div 
-                  key={th.label}
-                  className={`text-center py-1 sm:py-1.5 rounded-lg bg-slate-100/80 border border-slate-200/60 font-black text-[10px] sm:text-xs tracking-tight ${th.color}`}
-                >
-                  <span className="sm:hidden">{th.label}</span>
-                  <span className="hidden sm:inline">{th.full}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Day Cells */}
+            {/* Calendar Day Cells — Thứ được tích hợp vào hàng đầu tiên của mỗi ô */}
             <div className="grid grid-cols-7 gap-1 sm:gap-2">
-              {calendarDays.map(({ day, isCurrentMonth, dateString }) => {
+              {calendarDays.map(({ day, isCurrentMonth, dateString }, cellIndex) => {
                 const allBookings = dayBookingsMap[dateString] || [];
                 const bookings = selectedCameraFilter === 'ALL'
                   ? allBookings
@@ -1353,21 +1332,43 @@ export default function BookingCalendar({
                     } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
-                    {/* Cell Header: Day number TO RÕ + count badge (số khách/contract) */}
-                    <div className="flex justify-between items-center pb-0.5 sm:pb-1">
-                      <span className={`text-xs sm:text-sm font-black inline-flex items-center justify-center leading-none ${
-                        isToday 
-                          ? 'w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-orange-600 text-white shadow-3xs' 
-                          : (isCurrentMonth ? (isSelected ? 'text-orange-700 font-black' : (isSunday ? 'text-rose-600' : 'text-gray-900')) : 'text-gray-300')
-                      }`}>
-                        {day}
-                      </span>
+                    {/* Cell Header: Thứ (chỉ hàng đầu) + Số ngày + badge booking */}
+                    <div className="flex flex-col gap-0 pb-0.5 sm:pb-1">
+                      {/* Nhãn Thứ — chỉ hiện ở 7 ô đầu tiên (hàng 1) */}
+                      {cellIndex < 7 && (() => {
+                        const WEEKDAY_LABELS = [
+                          { short: 'T2', full: 'Thứ 2',    color: 'text-slate-400' },
+                          { short: 'T3', full: 'Thứ 3',    color: 'text-slate-400' },
+                          { short: 'T4', full: 'Thứ 4',    color: 'text-slate-400' },
+                          { short: 'T5', full: 'Thứ 5',    color: 'text-slate-400' },
+                          { short: 'T6', full: 'Thứ 6',    color: 'text-slate-400' },
+                          { short: 'T7', full: 'Thứ 7',    color: 'text-blue-400 font-black' },
+                          { short: 'CN', full: 'Chủ Nhật', color: 'text-rose-400 font-black' },
+                        ];
+                        const w = WEEKDAY_LABELS[cellIndex];
+                        return (
+                          <div className={`text-center font-bold tracking-tight leading-none mb-0.5 select-none ${w.color} text-[8px] sm:text-[10px]`}>
+                            <span className="sm:hidden">{w.short}</span>
+                            <span className="hidden sm:inline">{w.full}</span>
+                          </div>
+                        );
+                      })()}
 
-                      {bookingCount > 0 && (
-                        <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.2 rounded-full shadow-3xs leading-none shrink-0">
-                          {bookingCount}
+                      {/* Số ngày + badge */}
+                      <div className="flex justify-between items-center">
+                        <span className={`text-xs sm:text-sm font-black inline-flex items-center justify-center leading-none ${
+                          isToday
+                            ? 'w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-orange-600 text-white shadow-3xs'
+                            : (isCurrentMonth ? (isSelected ? 'text-orange-700 font-black' : (isSunday ? 'text-rose-600' : 'text-gray-900')) : 'text-gray-300')
+                        }`}>
+                          {day}
                         </span>
-                      )}
+                        {bookingCount > 0 && (
+                          <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.2 rounded-full shadow-3xs leading-none shrink-0">
+                            {bookingCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Booking item text blocks: Gộp theo từng Hợp Đồng / Khách Hàng */}
