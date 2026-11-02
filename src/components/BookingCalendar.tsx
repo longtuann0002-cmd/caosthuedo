@@ -448,27 +448,11 @@ export default function BookingCalendar({
   // Calculate grid info for the rendered month OR week (T2 đầu tuần, CN cuối tuần)
   const calendarDays = useMemo(() => {
     if (viewMode === 'month') {
-      // Get first day of the month (Monday-first: 0 is T2, 1 is T3, ..., 6 is CN)
-      const rawFirstDayIndex = new Date(currentYear, currentMonth - 1, 1).getDay(); // 0 is CN, 1 is T2...
-      const firstDayIndex = (rawFirstDayIndex + 6) % 7; // Convert to Monday-first (T2 = 0, ..., CN = 6)
       const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-      const prevMonthDays = new Date(currentYear, currentMonth - 1, 0).getDate();
 
       const days: { day: number; isCurrentMonth: boolean; dateString: string }[] = [];
 
-      // Fill previous month padding days
-      for (let i = firstDayIndex - 1; i >= 0; i--) {
-        const prevDay = prevMonthDays - i;
-        const m = currentMonth === 1 ? 12 : currentMonth - 1;
-        const y = currentMonth === 1 ? currentYear - 1 : currentYear;
-        days.push({
-          day: prevDay,
-          isCurrentMonth: false,
-          dateString: `${y}-${String(m).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`
-        });
-      }
-
-      // Fill current month days
+      // Chỉ fill ngày của tháng hiện tại — ngày 1 luôn ở ô đầu tiên góc trái
       for (let i = 1; i <= daysInMonth; i++) {
         days.push({
           day: i,
@@ -477,7 +461,7 @@ export default function BookingCalendar({
         });
       }
 
-      // Fill next month padding days to round up to multiple of 7 (usually 35 or 42 cells)
+      // Fill next month padding days để lưới luôn tròn hàng (bội số của 7)
       const remainingCells = (7 - (days.length % 7)) % 7;
       for (let i = 1; i <= remainingCells; i++) {
         const m = currentMonth === 12 ? 1 : currentMonth + 1;
