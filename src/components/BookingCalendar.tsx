@@ -1499,7 +1499,7 @@ export default function BookingCalendar({
                                     </div>
 
                                     {contract.customerPhone && (
-                                      <div className="text-[8.5px] font-bold text-gray-500 leading-none pt-1 border-t border-black/10 truncate font-mono">
+                                      <div className="text-[10px] font-bold text-gray-600 leading-none pt-1 border-t border-black/10 truncate font-mono">
                                         📞 {contract.customerPhone}
                                       </div>
                                     )}
