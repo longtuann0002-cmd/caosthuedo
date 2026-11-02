@@ -1654,9 +1654,27 @@ export default function BookingCalendar({
                             <div className="bg-white divide-y divide-gray-100">
                               {items.map((b, bIdx) => {
                                 const colors = getCameraColorProps(b.cameraShort);
+                                const bCam = cameras.find(c => c.id === b.cameraId)
+                                  || cameras.find(c => c.serialNumber && b.cameraShort && c.serialNumber.toLowerCase() === b.cameraShort.toLowerCase())
+                                  || cameras.find(c => c.shortName && b.cameraShort && c.shortName.toLowerCase() === b.cameraShort.toLowerCase());
+                                const imgUrl = bCam?.image || null;
                                 return (
                                   <div key={bIdx} className="px-3 py-2 flex items-center gap-2">
                                     <div className={`w-0.5 h-full self-stretch rounded-full shrink-0 ${colors.border.replace('border-', 'bg-')}`} />
+                                    {/* Ảnh thumbnail — hiển thị thường trực nếu có */}
+                                    {imgUrl ? (
+                                      <img
+                                        src={imgUrl}
+                                        alt={b.cleanName || b.cameraName}
+                                        className="w-10 h-13 object-cover rounded-lg border border-gray-200 shrink-0 shadow-xs"
+                                        style={{ height: '52px', width: '40px' }}
+                                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                      />
+                                    ) : (
+                                      <div className="w-10 shrink-0 flex items-center justify-center bg-gray-100 rounded-lg border border-gray-200" style={{ height: '52px', width: '40px' }}>
+                                        <span className="text-lg">👗</span>
+                                      </div>
+                                    )}
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-1.5 flex-wrap">
                                         <span className="font-mono text-[10px] font-black text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
