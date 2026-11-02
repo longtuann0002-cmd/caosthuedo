@@ -335,6 +335,8 @@ export default function App() {
   const [searchFilterTab, setSearchFilterTab] = useState<'all' | 'outfits' | 'contracts' | 'customers'>('all');
   const [contractManagerSearch, setContractManagerSearch] = useState('');
   const [equipmentTrackerSearch, setEquipmentTrackerSearch] = useState('');
+  const [equipmentTrackerCleaningFilter, setEquipmentTrackerCleaningFilter] = useState('ALL');
+  const [equipmentTrackerStatusFilter, setEquipmentTrackerStatusFilter] = useState('ALL');
   const [customerManagerSearch, setCustomerManagerSearch] = useState('');
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string>('ALL');
   const [inventoryOnlyAvailable, setInventoryOnlyAvailable] = useState<boolean>(false);
@@ -3779,14 +3781,18 @@ export default function App() {
                 <div
                   onClick={() => {
                     setActiveTab('equipment');
-                    // Set filter tùy theo loại đồ đang chờ xử lý
+                    setEquipmentTrackerSearch('');
+                    // Set filter trực tiếp cho trang Kho Đồ (EquipmentTracker)
                     if (laundryCount > 0 && mendingCount === 0) {
-                      setInventoryStatusFilter('LAUNDRY');
+                      setEquipmentTrackerCleaningFilter('Laundry');
+                      setEquipmentTrackerStatusFilter('ALL');
                     } else if (mendingCount > 0 && laundryCount === 0) {
-                      setInventoryStatusFilter('MENDING');
+                      setEquipmentTrackerCleaningFilter('Mending');
+                      setEquipmentTrackerStatusFilter('ALL');
                     } else {
-                      // Có cả 2 → filter LAUNDRY trước (phổ biến hơn)
-                      setInventoryStatusFilter('LAUNDRY');
+                      // Có cả 2 hoặc đồ giặt chiếm đa số -> lọc Đang giặt
+                      setEquipmentTrackerCleaningFilter('Laundry');
+                      setEquipmentTrackerStatusFilter('ALL');
                     }
                   }}
                   className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 hover:bg-blue-100 text-blue-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none"
@@ -3949,6 +3955,8 @@ export default function App() {
                   currentUserRole={currentUser?.role}
                   contracts={contracts}
                   initialSearchQuery={equipmentTrackerSearch}
+                  initialCleaningFilter={equipmentTrackerCleaningFilter}
+                  initialStatusFilter={equipmentTrackerStatusFilter}
                   systemDate={systemDate}
                 />
               </TabErrorBoundary>

@@ -70,6 +70,8 @@ interface EquipmentTrackerProps {
   currentUserRole?: string;
   contracts?: RentalContract[];
   initialSearchQuery?: string;
+  initialCleaningFilter?: string;
+  initialStatusFilter?: string;
   systemDate?: string;
   onRestoreFromExpenses?: () => void;
   outfitExpensesCount?: number;
@@ -84,6 +86,8 @@ export default function EquipmentTracker({
   currentUserRole,
   contracts = [],
   initialSearchQuery,
+  initialCleaningFilter,
+  initialStatusFilter,
   systemDate = '2026-06-17',
   onRestoreFromExpenses,
   outfitExpensesCount = 0
@@ -95,10 +99,23 @@ export default function EquipmentTracker({
       setSearchQuery(initialSearchQuery);
     }
   }, [initialSearchQuery]);
+
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'ALL');
   const [sizeFilter, setSizeFilter] = useState<string>('ALL');
-  const [cleaningFilter, setCleaningFilter] = useState<string>('ALL');
+  const [cleaningFilter, setCleaningFilter] = useState<string>(initialCleaningFilter || 'ALL');
+
+  useEffect(() => {
+    if (initialCleaningFilter !== undefined) {
+      setCleaningFilter(initialCleaningFilter);
+    }
+  }, [initialCleaningFilter]);
+
+  useEffect(() => {
+    if (initialStatusFilter !== undefined) {
+      setStatusFilter(initialStatusFilter);
+    }
+  }, [initialStatusFilter]);
   const [viewMode, setViewMode] = useState<'grouped' | 'individual'>(() => {
     return (localStorage.getItem('outfit_inventory_view_mode') as 'grouped' | 'individual') || 'grouped';
   });
@@ -1044,15 +1061,27 @@ export default function EquipmentTracker({
               <Clock className="w-3.5 h-3.5" />
             </div>
             <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
+              value={cleaningFilter !== 'ALL' ? `CLEANING_${cleaningFilter}` : statusFilter}
+              onChange={e => {
+                const val = e.target.value;
+                if (val.startsWith('CLEANING_')) {
+                  const cStatus = val.replace('CLEANING_', '');
+                  setCleaningFilter(cStatus);
+                  setStatusFilter('ALL');
+                } else {
+                  setCleaningFilter('ALL');
+                  setStatusFilter(val);
+                }
+              }}
               className="w-full pl-7.5 pr-6 py-2 text-xs sm:text-sm font-medium border border-gray-250 rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
               title="Lọc theo trạng thái"
             >
               <option value="ALL">Tất cả trạng thái</option>
               <option value="Available">✓ Sẵn sàng</option>
               <option value="Rented">⏳ Đang thuê</option>
-              <option value="Maintenance">🧺 Giặt / sửa</option>
+              <option value="CLEANING_Laundry">🧺 Đang giặt</option>
+              <option value="CLEANING_Mending">🪡 Đang sửa</option>
+              <option value="Maintenance">🔧 Bảo dưỡng / Khác</option>
             </select>
             <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
               ▼
