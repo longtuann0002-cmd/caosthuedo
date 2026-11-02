@@ -1288,10 +1288,10 @@ export default function BookingCalendar({
                 let statusStyle = 'bg-white border-gray-200 hover:border-emerald-400';
                 if (bookingCount > 0) {
                   const hasFullDayBooking = bookings.some(b => !b.contract.is6Hours);
-                  if (bookingCount >= 2 && hasFullDayBooking) {
-                    statusStyle = 'bg-rose-50/80 border-rose-300 hover:border-rose-400';
+                  if (bookingCount >= 3 && hasFullDayBooking) {
+                    statusStyle = 'bg-rose-50/80 border-rose-300 hover:border-rose-400'; // Nhiều lịch
                   } else {
-                    statusStyle = 'bg-amber-50/80 border-amber-300 hover:border-amber-400';
+                    statusStyle = 'bg-amber-50/80 border-amber-300 hover:border-amber-400'; // Đã có lịch
                   }
                 }
 
@@ -1524,7 +1524,7 @@ export default function BookingCalendar({
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md border border-rose-300 bg-rose-100 inline-block"></span>
-              <span>Kín lịch</span>
+              <span>Nhiều lịch (≥3 đơn)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md border-2 border-orange-500 bg-orange-100 inline-block"></span>

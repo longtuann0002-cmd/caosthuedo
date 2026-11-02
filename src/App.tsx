@@ -3769,17 +3769,28 @@ export default function App() {
                 <Cloud className="w-3.5 h-3.5 text-rose-600" />
                 <span className="hidden sm:inline">Thử lại Cloud</span>
               </button>
-            ) : cloudSyncState === 'synced' ? (
-              <div 
-                onClick={() => setShowBackupModal(true)}
-                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-200/90 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none"
-                title="Dữ liệu đã được lưu an toàn trên máy chủ Cloud. Nhấp để xem cài đặt."
-              >
-                <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Cloud an toàn</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              </div>
-            ) : null}
+            ) : cloudSyncState === 'synced' ? (() => {
+              // Đếm đồ đang giặt / đang sửa
+              const laundryCount = cameras.filter(c => c.cleaningStatus === 'Laundry').length;
+              const mendingCount = cameras.filter(c => c.cleaningStatus === 'Mending').length;
+              const total = laundryCount + mendingCount;
+              if (total === 0) return null;
+              return (
+                <div
+                  onClick={() => setActiveTab('equipment')}
+                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 hover:bg-blue-100 text-blue-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none"
+                  title={`${laundryCount > 0 ? `${laundryCount} bộ đang giặt hấp` : ''}${laundryCount > 0 && mendingCount > 0 ? ' · ' : ''}${mendingCount > 0 ? `${mendingCount} bộ đang sửa chữa` : ''}. Bấm để xem kho đồ.`}
+                >
+                  <span className="text-sm leading-none">🧺</span>
+                  <span>
+                    {laundryCount > 0 && <span>{laundryCount} đang giặt</span>}
+                    {laundryCount > 0 && mendingCount > 0 && <span className="mx-1 opacity-50">·</span>}
+                    {mendingCount > 0 && <span>{mendingCount} đang sửa</span>}
+                  </span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                </div>
+              );
+            })() : null}
 
             {/* Nút kiểm tra nhanh kho đồ trống cạnh thông báo */}
             <button
