@@ -1420,33 +1420,18 @@ export default function BookingCalendar({
                                   className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-lg shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative ${!isCurrentMonth ? 'opacity-40 hover:opacity-90' : ''}`}
                                   title={`Khách: ${contract.customerName || 'Chưa có tên'} | ${contract.customerPhone || 'Chưa có SĐT'}\n${items.length} món: ${items.map(it => it.cameraName).join(', ')}`}
                                 >
-                                  {/* Mobile: Tên khách ngắn gọn + tags mã (giới hạn MAX_MOBILE_TAGS) */}
-                                  <div className="flex sm:hidden flex-col gap-0.5 leading-none">
-                                    {/* Tên khách - chỉ show họ tên đầu */}
-                                    {custName && (
-                                      <span className="font-black text-[8px] truncate text-gray-900 leading-tight">
-                                        {custName.split(' ').slice(-2).join(' ')}
+                                  {/* Mobile: 1 dòng compact — Tên ngắn + badge số món */}
+                                  <div className="flex sm:hidden items-center justify-between gap-0.5 leading-none min-w-0">
+                                    <span className="font-black text-[8px] truncate text-gray-900 leading-tight flex-1 min-w-0">
+                                      {custName
+                                        ? custName.split(' ').slice(-2).join(' ')
+                                        : 'Khách'}
+                                    </span>
+                                    {items.length > 1 && (
+                                      <span className="text-[7px] font-black bg-white/80 border border-black/10 px-1 py-0.2 rounded shrink-0 leading-tight">
+                                        {items.length}
                                       </span>
                                     )}
-                                    {/* Tags mã viết tắt, giới hạn */}
-                                    <div className="flex flex-wrap gap-0.5 items-center">
-                                      {visibleMobileTags.map((it, itIdx) => {
-                                        const mCam = cameras.find(c => c.id === it.cameraId)
-                                          || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
-                                          || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase());
-                                        const code = (mCam?.serialNumber || it.cameraShort || it.cleanName || 'Đồ').trim();
-                                        return (
-                                          <span key={itIdx} className={`font-mono font-black text-[7px] px-1 py-0.2 rounded leading-tight ${colors.tagColor}`}>
-                                            {code}
-                                          </span>
-                                        );
-                                      })}
-                                      {hiddenMobileTagCount > 0 && (
-                                        <span className="text-[7px] font-black text-gray-600 bg-white/80 border border-gray-300/60 px-1 rounded leading-tight">
-                                          +{hiddenMobileTagCount}
-                                        </span>
-                                      )}
-                                    </div>
                                   </div>
 
                                   {/* Desktop: Header Khách hàng (Tên + SĐT) CHỈ HIỆN 1 LẦN */}
