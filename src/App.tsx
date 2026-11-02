@@ -4649,16 +4649,16 @@ export default function App() {
         document.body
       )}
 
-      {/* Modern Logo Customization Modal */}
+      {/* Modern Logo Customization Modal (Thu gọn tinh tế) */}
       {showLogoModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[9999] animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-100 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-gray-100 flex flex-col">
             
             {/* Modal Header */}
-            <div className="px-6 py-4.5 border-b border-gray-150 flex justify-between items-center bg-gray-50/70 select-none">
+            <div className="px-5 py-4 border-b border-gray-150 flex justify-between items-center bg-gray-50/70 select-none">
               <div>
-                <h3 className="font-bold text-gray-900 text-base">Cài đặt Logo & Thương hiệu</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Tùy chỉnh biểu tượng, tên thương hiệu hiển thị trên thanh tiêu đề</p>
+                <h3 className="font-bold text-gray-900 text-base">Cài đặt Logo & Tên tiệm</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Tùy chỉnh ảnh logo tròn và tên thương hiệu</p>
               </div>
               <button
                 onClick={() => setShowLogoModal(false)}
@@ -4668,529 +4668,117 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Content - Scrollable if small screen */}
-            <div className="p-6 overflow-y-auto space-y-6">
+            {/* Modal Content */}
+            <div className="p-5 space-y-5">
               
-              {/* BRAND LOGO PREVIEW BOX */}
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200/60 text-center flex flex-col items-center">
-                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">Xem trước hiển thị (Header)</span>
-                <div className="bg-white border border-gray-150 p-4 rounded-xl shadow-sm inline-flex items-center gap-3.5 min-w-[240px] justify-center">
+              {/* Xem trước Logo Tròn */}
+              <div className="flex flex-col items-center justify-center p-4 bg-orange-50/50 rounded-2xl border border-orange-100/80">
+                <span className="text-[10.5px] font-bold text-orange-900/60 uppercase tracking-wider mb-2">Xem trước Logo Sidebar</span>
+                <div className="relative group/prev">
                   {logoIconType === 'upload' && logoBase64 ? (
-                    <div className="w-14 h-14 rounded-full overflow-hidden border border-gray-150 flex items-center justify-center bg-white shrink-0 shadow-xs">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center">
                       <img src={logoBase64} alt="Preview" className="w-full h-full object-cover" />
                     </div>
                   ) : (
-                    <span 
-                      className="w-14 h-14 rounded-full text-white shrink-0 flex items-center justify-center font-bold shadow-xs"
+                    <div 
+                      className="w-16 h-16 rounded-full text-white shadow-md flex items-center justify-center font-bold"
                       style={{ backgroundColor: logoIconColor }}
                     >
-                      {logoIconType === 'dress' && <DressIcon className="w-8 h-8 text-white" />}
-                      {logoIconType === 'aperture' && <Aperture className="w-8 h-8" />}
-                      {logoIconType === 'film' && <Film className="w-8 h-8" />}
-                      {logoIconType === 'sparkles' && <Sparkles className="w-8 h-8 text-yellow-200" />}
-                      {logoIconType === 'smile' && <Smile className="w-8 h-8" />}
-                      {logoIconType === 'image' && <ImageIcon className="w-8 h-8" />}
-                      {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-8 h-8 text-white" />}
-                    </span>
+                      <DressIcon className="w-9 h-9 text-white" />
+                    </div>
                   )}
-                  <div className="leading-tight text-left min-w-0">
-                    <span 
-                      className={`font-display font-black text-gray-950 tracking-tight block leading-snug break-words ${
-                        logoTextCase === 'uppercase' ? 'uppercase' : logoTextCase === 'lowercase' ? 'lowercase' : ''
-                      }`}
-                      style={{ fontSize: `${logoFontSize || 15.5}px` }}
+                  {logoBase64 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLogoBase64('');
+                        setLogoIconType('dress');
+                      }}
+                      className="absolute -top-1 -right-1 p-1 bg-rose-600 text-white rounded-full shadow-xs hover:bg-rose-700 transition"
+                      title="Xóa ảnh tự chọn"
                     >
-                      {logoText || 'TIỆM ẢNH NHÀ CAOS'}
-                    </span>
-                    <span 
-                      className={`text-gray-400 font-normal block tracking-wide mt-0.5 ${
-                        logoSubtitleCase === 'uppercase' ? 'uppercase' : logoSubtitleCase === 'lowercase' ? 'lowercase' : ''
-                      }`}
-                      style={{ fontSize: `${logoSubtitleFontSize || 9.5}px` }}
-                    >
-                      {logoSubtitle || 'cho thuê trang phục cao cấp'}
-                    </span>
-                  </div>
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 text-center">
+                  <span className="font-extrabold text-sm text-gray-900 block">{logoText || 'Tiệm Nhà Caos'}</span>
+                  <span className="text-[11px] text-gray-400">Hiển thị tròn ở góc trái ứng dụng</span>
                 </div>
               </div>
 
-              {/* Form entries */}
-              <div className="space-y-4">
-                
-                {/* Brand Name Input & Font Size Control */}
-                <div className="space-y-2.5">
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Tên thương hiệu chính</label>
+              {/* Tải ảnh Logo */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Ảnh biểu tượng Logo</label>
+                <div className="flex items-center gap-2">
                   <input
-                    type="text"
-                    maxLength={25}
-                    value={logoText}
-                    onChange={(e) => setLogoText(e.target.value)}
-                    placeholder="ví dụ: Tiệm Nhà Cao"
-                    className={`w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-semibold ${
-                      logoTextCase === 'uppercase' ? 'uppercase' : logoTextCase === 'lowercase' ? 'lowercase' : ''
-                    }`}
+                    type="file"
+                    accept="image/*"
+                    id="logo-upload-input-compact"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        try {
+                          const compressed = await compressImageFile(file, 256, 256, 0.85);
+                          setLogoBase64(compressed);
+                          setLogoIconType('upload');
+                        } catch {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setLogoBase64(reader.result as string);
+                            setLogoIconType('upload');
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }
+                    }}
+                    className="hidden"
                   />
-
-                  {/* Kiểu hiển thị chữ hoa / thường cho thương hiệu chính */}
-                  <div className="bg-gray-50/90 p-2.5 rounded-xl border border-gray-200/90 space-y-1.5">
-                    <span className="block font-bold text-gray-700 uppercase tracking-wider text-[10.5px]">
-                      Kiểu viết hoa / thường tên thương hiệu
-                    </span>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setLogoTextCase('lowercase')}
-                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                          logoTextCase === 'lowercase'
-                            ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                            : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
-                        }`}
-                      >
-                        <span className="font-mono">abc</span>
-                        <span className="text-[10px] font-normal opacity-90">(Viết thường)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLogoTextCase('uppercase')}
-                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                          logoTextCase === 'uppercase'
-                            ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                            : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
-                        }`}
-                      >
-                        <span className="font-mono font-black">ABC</span>
-                        <span className="text-[10px] font-normal opacity-90">(Viết hoa)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLogoTextCase('normal')}
-                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                          logoTextCase === 'normal'
-                            ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                            : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
-                        }`}
-                      >
-                        <span className="font-mono font-bold">Aa</span>
-                        <span className="text-[10px] font-normal opacity-90">(Theo ý gõ)</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Font Size Adjustment Slider & Presets */}
-                  <div className="bg-gray-50/90 p-3 rounded-xl border border-gray-200/90 space-y-2.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-gray-700 uppercase tracking-wider text-[10.5px]">
-                        Điều chỉnh cỡ chữ thương hiệu
-                      </span>
-                      <span className="font-mono font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 text-xs">
-                        {logoFontSize || 15.5}px
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-gray-400 font-bold">11px</span>
-                      <input
-                        type="range"
-                        min={11}
-                        max={24}
-                        step={0.5}
-                        value={logoFontSize || 15.5}
-                        onChange={(e) => setLogoFontSize(parseFloat(e.target.value))}
-                        className="flex-1 accent-orange-600 h-2 bg-gray-200 rounded-lg cursor-pointer"
-                      />
-                      <span className="text-[10px] text-gray-400 font-bold">24px</span>
-                    </div>
-
-                    {/* Quick Presets */}
-                    <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto scrollbar-none">
-                      {[
-                        { label: 'Nhỏ', size: 12 },
-                        { label: 'Vừa', size: 14 },
-                        { label: 'Chuẩn', size: 15.5 },
-                        { label: 'Lớn', size: 18 },
-                        { label: 'Rất lớn', size: 21 },
-                      ].map((preset) => (
-                        <button
-                          key={preset.size}
-                          type="button"
-                          onClick={() => setLogoFontSize(preset.size)}
-                          className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold border transition cursor-pointer shrink-0 ${
-                            logoFontSize === preset.size
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                              : 'bg-white text-gray-650 hover:bg-gray-100 hover:text-gray-900 border-gray-200'
-                          }`}
-                        >
-                          {preset.label} ({preset.size}px)
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tagline / Subtitle Input & Controls */}
-                <div className="space-y-2.5">
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Dòng chữ phụ (Subtitle / Slogan)
+                  <label
+                    htmlFor="logo-upload-input-compact"
+                    className="flex-1 py-2 px-3 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl font-bold text-xs text-gray-700 flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs transition"
+                  >
+                    <Upload className="w-4 h-4 text-orange-600" />
+                    <span>{logoBase64 ? 'Thay đổi ảnh khác' : 'Tải ảnh logo lên (.png / .jpg)'}</span>
                   </label>
-                  <input
-                    type="text"
-                    maxLength={35}
-                    value={logoSubtitle}
-                    onChange={(e) => setLogoSubtitle(e.target.value)}
-                    placeholder="ví dụ: cho thuê trang phục dạ hội hà nội"
-                    className="w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-medium text-gray-700 text-xs"
-                  />
-
-                  {/* Subtitle Style: Viết hoa / Viết thường & Cỡ chữ */}
-                  <div className="bg-gray-50/90 p-3 rounded-xl border border-gray-200/90 space-y-3">
-                    {/* Kiểu hiển thị chữ hoa / thường */}
-                    <div>
-                      <span className="block font-bold text-gray-700 uppercase tracking-wider text-[10.5px] mb-1.5">
-                        Kiểu viết hoa / thường dòng phụ
-                      </span>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setLogoSubtitleCase('lowercase')}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                            logoSubtitleCase === 'lowercase'
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                              : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
-                          }`}
-                        >
-                          <span className="font-mono">abc</span>
-                          <span className="text-[10px] font-normal opacity-90">(Viết thường)</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLogoSubtitleCase('uppercase')}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                            logoSubtitleCase === 'uppercase'
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                              : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
-                          }`}
-                        >
-                          <span className="font-mono font-black">ABC</span>
-                          <span className="text-[10px] font-normal opacity-90">(Viết hoa)</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLogoSubtitleCase('normal')}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
-                            logoSubtitleCase === 'normal'
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                              : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
-                          }`}
-                        >
-                          <span className="font-mono font-bold">Aa</span>
-                          <span className="text-[10px] font-normal opacity-90">(Theo ý gõ)</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Cỡ chữ dòng phụ */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-gray-700 uppercase tracking-wider text-[10.5px]">
-                          Điều chỉnh cỡ chữ dòng phụ
-                        </span>
-                        <span className="font-mono font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 text-xs">
-                          {logoSubtitleFontSize || 9}px
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] text-gray-400 font-bold">8px</span>
-                        <input
-                          type="range"
-                          min={8}
-                          max={13}
-                          step={0.5}
-                          value={logoSubtitleFontSize || 9}
-                          onChange={(e) => setLogoSubtitleFontSize(parseFloat(e.target.value))}
-                          className="flex-1 accent-orange-600 h-2 bg-gray-200 rounded-lg cursor-pointer"
-                        />
-                        <span className="text-[10px] text-gray-400 font-bold">13px</span>
-                      </div>
-
-                      {/* Quick Presets */}
-                      <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto scrollbar-none">
-                        {[
-                          { label: 'Cực nhỏ', size: 8 },
-                          { label: 'Nhỏ (Chuẩn)', size: 9 },
-                          { label: 'Vừa', size: 10 },
-                          { label: 'Lớn', size: 11.5 },
-                        ].map((preset) => (
-                          <button
-                            key={preset.size}
-                            type="button"
-                            onClick={() => setLogoSubtitleFontSize(preset.size)}
-                            className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold border transition cursor-pointer shrink-0 ${
-                              logoSubtitleFontSize === preset.size
-                                ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
-                                : 'bg-white text-gray-650 hover:bg-gray-100 hover:text-gray-900 border-gray-200'
-                            }`}
-                          >
-                            {preset.label} ({preset.size}px)
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Account Section Title */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Nhãn mục "Tài khoản" trên sidebar</label>
-                  <input
-                    type="text"
-                    maxLength={20}
-                    value={accountSectionTitle}
-                    onChange={(e) => setAccountSectionTitle(e.target.value)}
-                    placeholder="ví dụ: Tài khoản, Account, ..."
-                    className="w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-medium text-gray-700 text-xs"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-1">Nhãn hiển thị phía trên khu vực tài khoản trong sidebar.</p>
-                </div>
-
-                {/* Icon option selector */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Phương thức &amp; Kiểu biểu tượng (Icon)</label>
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    
-                    {/* Váy dạ hội / Trang phục */}
-                    <button
-                      type="button"
-                      onClick={() => setLogoIconType('dress')}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
-                        logoIconType === 'dress'
-                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <DressIcon className="w-5 h-5" />
-                      <span className="text-[10px]">Váy đầm</span>
-                    </button>
-
-                    {/* Aperture */}
-                    <button
-                      type="button"
-                      onClick={() => setLogoIconType('aperture')}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
-                        logoIconType === 'aperture'
-                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Aperture className="w-5 h-5" />
-                      <span className="text-[10px]">Khẩu độ</span>
-                    </button>
-
-                    {/* Film */}
-                    <button
-                      type="button"
-                      onClick={() => setLogoIconType('film')}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
-                        logoIconType === 'film'
-                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Film className="w-5 h-5" />
-                      <span className="text-[10px]">Cuộn phim</span>
-                    </button>
-
-                    {/* Sparkles */}
-                    <button
-                      type="button"
-                      onClick={() => setLogoIconType('sparkles')}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
-                        logoIconType === 'sparkles'
-                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Sparkles className="w-5 h-5" />
-                      <span className="text-[10px]">Lấp lánh</span>
-                    </button>
-
-                    {/* Smile */}
-                    <button
-                      type="button"
-                      onClick={() => setLogoIconType('smile')}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
-                        logoIconType === 'smile'
-                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Smile className="w-5 h-5" />
-                      <span className="text-[10px]">Thân thiện</span>
-                    </button>
-
-                    {/* Image */}
-                    <button
-                      type="button"
-                      onClick={() => setLogoIconType('image')}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
-                        logoIconType === 'image'
-                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <ImageIcon className="w-5 h-5" />
-                      <span className="text-[10px]">Hình ảnh</span>
-                    </button>
-
-                    {/* Custom upload Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => setLogoIconType('upload')}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition-all col-span-2 ${
-                        logoIconType === 'upload'
-                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1">
-                        <Upload className="w-4 h-4 shrink-0" />
-                        <span className="text-[10px] truncate max-w-[80px]">
-                          {logoBase64 ? 'Đã tải ảnh' : 'Tải ảnh lên'}
-                        </span>
-                      </div>
-                      <span className="text-[9px] text-gray-400 font-normal truncate">Logo tự chọn (.png/.jpg)</span>
-                    </button>
-                    
-                  </div>
-
-                  {/* Real upload file block */}
-                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-150 flex items-center justify-between gap-4 text-xs">
-                    <div className="min-w-0">
-                      <span className="block font-semibold text-gray-700">Tải tệp ảnh lên</span>
-                      <span className="text-[10px] text-gray-400 block truncate">Khuyên dùng tỷ lệ 1:1, ảnh nhỏ, trong suốt</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        id="logo-upload-input"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const compressed = await compressImageFile(file, 256, 256, 0.85);
-                              setLogoBase64(compressed);
-                              setLogoIconType('upload');
-                            } catch {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setLogoBase64(reader.result as string);
-                                setLogoIconType('upload');
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor="logo-upload-input"
-                        className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-250 px-2.5 py-1.5 rounded-lg font-bold text-[11px] cursor-pointer transition shrink-0 inline-block text-center"
-                      >
-                        Chọn tệp
-                      </label>
-                      {logoBase64 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLogoBase64('');
-                            if (logoIconType === 'upload') {
-                              setLogoIconType('camera');
-                            }
-                          }}
-                          className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg border border-rose-150 transition cursor-pointer"
-                          title="Xóa ảnh tự chọn"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Icon Background colors selection - only showing if NOT custom picture */}
-                {logoIconType !== 'upload' && (
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Màu nền biểu tượng</label>
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      {[
-                        { color: '#ea580c', name: 'Cam' },
-                        { color: '#2563eb', name: 'Xanh dương' },
-                        { color: '#dc2626', name: 'Đỏ thẫm' },
-                        { color: '#059669', name: 'Xanh lá' },
-                        { color: '#4f46e5', name: 'Tím Indigo' },
-                        { color: '#d97706', name: 'Vàng hổ phách' },
-                        { color: '#1f2937', name: 'Xám đậm' },
-                        { color: '#db2777', name: 'Hồng sen' }
-                      ].map((item) => (
-                        <button
-                          key={item.color}
-                          type="button"
-                          onClick={() => setLogoIconColor(item.color)}
-                          className="w-7 h-7 rounded-full flex items-center justify-center transition hover:scale-110 cursor-pointer border border-black/10 relative"
-                          style={{ backgroundColor: item.color }}
-                          title={item.name}
-                        >
-                          {logoIconColor === item.color && (
-                            <Check className="w-4 h-4 text-white drop-shadow-xs" />
-                          )}
-                        </button>
-                      ))}
-                      
-                      {/* Custom color picker */}
-                      <div className="flex items-center gap-1.5 ml-2 border-l border-gray-200 pl-3">
-                        <input
-                          type="color"
-                          id="logo-color-picker"
-                          value={logoIconColor}
-                          onChange={(e) => setLogoIconColor(e.target.value)}
-                          className="w-6 h-6 p-0 border-0 rounded-md cursor-pointer outline-none shrink-0"
-                        />
-                        <label htmlFor="logo-color-picker" className="text-[10px] text-gray-500 font-mono font-bold uppercase cursor-pointer">
-                          {logoIconColor}
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
               </div>
+
+              {/* Tên thương hiệu */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Tên thương hiệu / Cửa hàng</label>
+                <input
+                  type="text"
+                  maxLength={30}
+                  value={logoText}
+                  onChange={(e) => setLogoText(e.target.value)}
+                  placeholder="ví dụ: Tiệm Nhà Caos"
+                  className="w-full px-3 py-2 text-sm border border-gray-250 rounded-xl focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-bold text-gray-900"
+                />
+                <p className="text-[10px] text-gray-400">Dùng cho tiêu đề trình duyệt và xuất hóa đơn.</p>
+              </div>
+
             </div>
 
             {/* Modal Actions */}
-            <div className="px-6 py-4.5 border-t border-gray-150 bg-gray-50/60 flex items-center justify-between gap-3 select-none">
+            <div className="px-5 py-3.5 border-t border-gray-150 bg-gray-50/60 flex items-center justify-between gap-3 select-none">
               <button
                 type="button"
                 onClick={() => {
-                  setLogoText('TIỆM ẢNH NHÀ CAOS');
-                  setLogoTextCase('normal');
-                  setLogoFontSize(15.5);
-                  setLogoSubtitle('cho thuê trang phục cao cấp');
-                  setLogoSubtitleCase('lowercase');
-                  setLogoSubtitleFontSize(9);
+                  setLogoText('Tiệm nhà Caos');
                   setLogoIconType('upload');
                   setLogoIconColor('#ea580c');
                   setLogoBase64('/logocaos.png');
                 }}
                 className="text-xs text-gray-500 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition cursor-pointer"
               >
-                Khôi phục mặc định
+                Mặc định
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowLogoModal(false)}
-                className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition shadow-xs cursor-pointer"
+                className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-xs cursor-pointer"
               >
                 Hoàn tất
               </button>
