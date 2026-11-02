@@ -1406,9 +1406,8 @@ export default function BookingCalendar({
                               const colors = getCameraColorProps(firstBooking.cameraShort);
                               const custName = (contract.customerName || '').trim();
 
-                              // Desktop: giới hạn số món hiển thị
-                              const visibleDesktopItems = items.slice(0, MAX_DESKTOP_ITEMS);
-                              const hiddenDesktopCount = Math.max(0, items.length - MAX_DESKTOP_ITEMS);
+                              // Desktop: hiển thị TẤT CẢ món (không collapse)
+                              const visibleDesktopItems = items;
 
                               // Mobile: giới hạn số tag hiển thị trong mỗi contract
                               const visibleMobileTags = items.slice(0, MAX_MOBILE_TAGS);
@@ -1447,7 +1446,7 @@ export default function BookingCalendar({
                                       )}
                                     </div>
 
-                                    {/* Danh sách từng món — giới hạn MAX_DESKTOP_ITEMS, còn lại collapse */}
+                                    {/* Danh sách từng món — tất cả, có tooltip ảnh khi hover */}
                                     <div className="divide-y divide-black/10 divide-dashed">
                                       {visibleDesktopItems.map((it, itIdx) => {
                                         const mCam = cameras.find(c => c.id === it.cameraId)
@@ -1461,9 +1460,10 @@ export default function BookingCalendar({
                                         const sizeLbl = it.isPrinter
                                           ? `🖨️ ${it.printCount ?? '?'}t`
                                           : (it.size === 'Freesize' || it.size === 'FS' ? 'FS' : `Size ${it.size || 'M'}`);
+                                        const imgUrl = mCam?.image || null;
 
                                         return (
-                                          <div key={itIdx} className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-tight min-w-0 py-1">
+                                          <div key={itIdx} className="group/item relative flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-tight min-w-0 py-1">
                                             <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={code}>
                                               {code}
                                             </span>
@@ -1475,17 +1475,28 @@ export default function BookingCalendar({
                                             <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
                                               {sizeLbl}
                                             </span>
+                                            {/* Tooltip ảnh khi hover — chỉ hiện nếu có ảnh */}
+                                            {imgUrl && (
+                                              <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 z-[9999] hidden group-hover/item:flex flex-col items-start">
+                                                <div className="bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden w-32">
+                                                  <img
+                                                    src={imgUrl}
+                                                    alt={name || code}
+                                                    className="w-32 h-40 object-cover"
+                                                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                                                  />
+                                                  <div className="px-2 py-1 text-[9px] font-black text-gray-700 truncate border-t border-gray-100">
+                                                    {name || code}
+                                                  </div>
+                                                </div>
+                                                {/* Mũi tên nhỏ */}
+                                                <div className="ml-3 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-200" />
+                                              </div>
+                                            )}
                                           </div>
                                         );
                                       })}
                                     </div>
-
-                                    {/* Badge "+N món nữa" nếu bị collapse */}
-                                    {hiddenDesktopCount > 0 && (
-                                      <div className="text-[8px] font-black text-gray-500 italic leading-none pt-0.5">
-                                        +{hiddenDesktopCount} món nữa…
-                                      </div>
-                                    )}
 
                                     {contract.customerPhone && (
                                       <div className="text-[8.5px] font-bold text-gray-500 leading-none pt-1 border-t border-black/10 truncate font-mono">
