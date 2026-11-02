@@ -1596,69 +1596,109 @@ export default function BookingCalendar({
                     </button>
                   </div>
 
-                  {/* Booking list */}
-                  <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2.5 scrollbar-none">
-                    {sheetBookings.length > 0 ? (
-                      sheetBookings.map((b, bIdx) => {
-                        const colors = getCameraColorProps(b.cameraShort);
-                        const statusLabel = b.contract.status === 'Active' ? 'Đang thuê' :
-                          b.contract.status === 'Completed' ? 'Đã trả' :
-                          b.contract.status === 'Cancelled' ? 'Đã hủy' : 'Đã đặt';
-                        const statusColor = b.contract.status === 'Active'
+                  {/* Booking list — Gộp theo khách/contract */}
+                  <div className="overflow-y-auto flex-1 px-4 py-3 space-y-3 scrollbar-none">
+                    {sheetBookings.length > 0 ? (() => {
+                      // Gộp theo contract.id
+                      const grouped: { contract: typeof sheetBookings[0]['contract']; items: typeof sheetBookings }[] = [];
+                      sheetBookings.forEach(b => {
+                        const ex = grouped.find(g => g.contract.id === b.contract.id);
+                        if (ex) ex.items.push(b);
+                        else grouped.push({ contract: b.contract, items: [b] });
+                      });
+
+                      return grouped.map((group, gIdx) => {
+                        const { contract, items } = group;
+                        const firstColors = getCameraColorProps(items[0].cameraShort);
+                        const statusLabel = contract.status === 'Active' ? 'Đang thuê' :
+                          contract.status === 'Completed' ? 'Đã trả' :
+                          contract.status === 'Cancelled' ? 'Đã hủy' : 'Đã đặt';
+                        const statusColor = contract.status === 'Active'
                           ? 'bg-green-50 text-green-700 border-green-200'
-                          : b.contract.status === 'Completed'
+                          : contract.status === 'Completed'
                           ? 'bg-gray-100 text-gray-600 border-gray-200'
-                          : b.contract.status === 'Cancelled'
+                          : contract.status === 'Cancelled'
                           ? 'bg-red-50 text-red-600 border-red-200'
                           : 'bg-orange-50 text-orange-700 border-orange-200';
+
                         return (
                           <div
-                            key={bIdx}
-                            className={`p-3 rounded-xl border-0 border-l-4 ${colors.bgClass} ${colors.border} shadow-sm`}
+                            key={contract.id || gIdx}
+                            className={`rounded-2xl border border-gray-100 shadow-sm overflow-hidden`}
                           >
-                            {/* Row 1: Code + Name + Size + Color + Status */}
-                            <div className="flex items-start justify-between gap-2 mb-1.5">
-                              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                <span className="font-mono text-[11px] font-black text-gray-700 shrink-0 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200">{b.cameraShort}</span>
-                                <span className="text-sm font-black text-gray-900 truncate">
-                                  {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
-                                </span>
-                                <span className="bg-white/90 text-[9.5px] font-black px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
-                                  {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
-                                </span>
-                                {b.color && (
-                                  <span className="bg-rose-50 text-rose-700 text-[9.5px] font-black px-1.5 py-0.5 rounded border border-rose-200 shrink-0 inline-flex items-center gap-1">
-                                    🎨 {b.color}
-                                  </span>
-                                )}
+                            {/* Header khách — nền màu nhẹ theo palette */}
+                            <div className={`px-3 py-2.5 flex items-center justify-between gap-2 border-b border-black/8 ${firstColors.bgClass}`}>
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <div className={`w-1 h-8 rounded-full shrink-0 ${firstColors.border.replace('border-', 'bg-')}`} />
+                                <div className="min-w-0">
+                                  <div className="font-black text-[13px] text-gray-900 truncate leading-tight">
+                                    {contract.customerName || 'Khách thuê'}
+                                  </div>
+                                  {contract.customerPhone && (
+                                    <a
+                                      href={`tel:${contract.customerPhone}`}
+                                      className="font-mono text-[10.5px] text-blue-600 underline underline-offset-2 leading-tight"
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      📞 {contract.customerPhone}
+                                    </a>
+                                  )}
+                                </div>
                               </div>
-                              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 ${statusColor}`}>
-                                {statusLabel}
-                              </span>
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${statusColor}`}>
+                                  {statusLabel}
+                                </span>
+                                <span className="text-[9px] font-bold text-gray-500 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200">
+                                  {items.length} món
+                                </span>
+                              </div>
                             </div>
-                            {/* Row 2: Customer info */}
-                            <div className="text-[10px] text-gray-600 font-medium flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                              <span>👤 {b.contract.customerName}</span>
-                              {b.contract.customerPhone && (
-                                <a
-                                  href={`tel:${b.contract.customerPhone}`}
-                                  className="font-mono text-blue-600 underline-offset-2 underline"
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  📞 {b.contract.customerPhone}
-                                </a>
-                              )}
+
+                            {/* Danh sách từng món của khách này */}
+                            <div className="bg-white divide-y divide-gray-100">
+                              {items.map((b, bIdx) => {
+                                const colors = getCameraColorProps(b.cameraShort);
+                                return (
+                                  <div key={bIdx} className="px-3 py-2 flex items-center gap-2">
+                                    <div className={`w-0.5 h-full self-stretch rounded-full shrink-0 ${colors.border.replace('border-', 'bg-')}`} />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-mono text-[10px] font-black text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
+                                          {b.cameraShort}
+                                        </span>
+                                        <span className="text-[12px] font-black text-gray-900 truncate">
+                                          {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                        <span className="text-[9.5px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                                          {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
+                                        </span>
+                                        {b.color && (
+                                          <span className="text-[9.5px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 inline-flex items-center gap-1">
+                                            🎨 {b.color}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                            {/* Row 3: Date range */}
-                            {(b.contract.startDate || b.contract.endDate) && (
-                              <div className="text-[9.5px] text-gray-500 mt-1 font-mono">
-                                📅 {b.contract.startDate} → {b.contract.endDate}
+
+                            {/* Footer: ngày thuê */}
+                            {(contract.startDate || contract.endDate) && (
+                              <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-100">
+                                <span className="text-[9.5px] text-gray-400 font-mono">
+                                  📅 {contract.startDate} → {contract.endDate}
+                                </span>
                               </div>
                             )}
                           </div>
                         );
-                      })
-                    ) : (
+                      });
+                    })() : (
                       <div className="py-8 text-center text-gray-400 text-xs italic">
                         Ngày này chưa có lịch thuê
                       </div>
