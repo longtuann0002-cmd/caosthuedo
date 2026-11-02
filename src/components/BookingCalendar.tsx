@@ -1416,7 +1416,7 @@ export default function BookingCalendar({
                               return (
                                 <div
                                   key={contract.id || groupIdx}
-                                  className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-lg shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative`}
+                                  className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-lg shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative ${!isCurrentMonth ? 'opacity-40 hover:opacity-90' : ''}`}
                                   title={`Khách: ${contract.customerName || 'Chưa có tên'} | ${contract.customerPhone || 'Chưa có SĐT'}\n${items.length} món: ${items.map(it => it.cameraName).join(', ')}`}
                                 >
                                   {/* Mobile: Tên khách ngắn gọn + tags mã (giới hạn MAX_MOBILE_TAGS) */}
