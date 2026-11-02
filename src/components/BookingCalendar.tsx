@@ -1411,8 +1411,8 @@ export default function BookingCalendar({
                               </div>
 
                               {/* Desktop: Header Khách hàng (Tên + SĐT) CHỈ HIỆN 1 LẦN */}
-                              <div className="hidden sm:flex flex-col gap-0.5">
-                                <div className="flex items-center justify-between gap-1 leading-tight">
+                              <div className="hidden sm:flex flex-col gap-1">
+                                <div className="flex items-center justify-between gap-1 leading-tight pb-1 border-b border-black/10">
                                   <span className="font-black text-[11px] truncate tracking-tight text-gray-900" title={custName}>
                                     {custName || 'Khách thuê'}
                                   </span>
@@ -1423,8 +1423,8 @@ export default function BookingCalendar({
                                   )}
                                 </div>
 
-                                {/* Danh sách từng món của khách này */}
-                                <div className="space-y-0.5 pt-0.5">
+                                {/* Danh sách từng món của khách này - Có dòng kẻ nét đứt phân cách rõ ràng */}
+                                <div className="divide-y divide-black/10 divide-dashed">
                                   {items.map((it, itIdx) => {
                                     const mCam = cameras.find(c => c.id === it.cameraId)
                                       || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
@@ -1439,12 +1439,12 @@ export default function BookingCalendar({
                                       : (it.size === 'Freesize' || it.size === 'FS' ? 'FS' : `Size ${it.size || 'M'}`);
 
                                     return (
-                                      <div key={itIdx} className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-none min-w-0">
+                                      <div key={itIdx} className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-tight min-w-0 py-1">
                                         <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={code}>
                                           {code}
                                         </span>
                                         {name && name.toLowerCase() !== code.toLowerCase() && (
-                                          <span className="text-[9.5px] font-bold text-gray-900 truncate" title={name}>
+                                          <span className="text-[9.5px] font-bold text-gray-900 truncate flex-1 min-w-0" title={name}>
                                             {name}
                                           </span>
                                         )}
@@ -1457,7 +1457,7 @@ export default function BookingCalendar({
                                 </div>
 
                                 {contract.customerPhone && (
-                                  <div className="text-[8.5px] font-bold text-gray-500 leading-none mt-0.5 truncate font-mono">
+                                  <div className="text-[8.5px] font-bold text-gray-500 leading-none pt-1 border-t border-black/10 truncate font-mono">
                                     📞 {contract.customerPhone}
                                   </div>
                                 )}
