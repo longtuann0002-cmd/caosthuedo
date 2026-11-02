@@ -315,6 +315,15 @@ export default function App() {
   // Active view tab state (default to 'calendar' as shown in screenshot)
   const [activeTab, setActiveTab] = useState<'calendar' | 'contracts' | 'equipment' | 'revenue' | 'customers' | 'expenses'>('calendar');
 
+  const handleTabChange = (newTab: 'calendar' | 'contracts' | 'equipment' | 'revenue' | 'customers' | 'expenses') => {
+    // Nếu người dùng chủ động chuyển tab (ví dụ bấm menu Kho đồ, Lịch, v.v.), xóa bộ lọc tạm thời của đồ giặt
+    if (newTab !== 'equipment') {
+      setEquipmentTrackerCleaningFilter('ALL');
+      setEquipmentTrackerStatusFilter('ALL');
+    }
+    setActiveTab(newTab);
+  };
+
   // Modern Sidebar Collapsible State (remembered in localStorage)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('camlease_sidebar_collapsed') === 'true';
@@ -3259,7 +3268,14 @@ export default function App() {
       <button
         key={tabId}
         type="button"
-        onClick={() => setActiveTab(tabId)}
+        onClick={() => {
+          if (tabId === 'equipment') {
+            // Khi bấm trực tiếp vào menu Kho Đồ thì xem tất cả
+            setEquipmentTrackerCleaningFilter('ALL');
+            setEquipmentTrackerStatusFilter('ALL');
+          }
+          handleTabChange(tabId);
+        }}
         className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center cursor-pointer ${
           sidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
         } ${
@@ -3870,7 +3886,13 @@ export default function App() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  if (tab.id === 'equipment') {
+                    setEquipmentTrackerCleaningFilter('ALL');
+                    setEquipmentTrackerStatusFilter('ALL');
+                  }
+                  handleTabChange(tab.id as any);
+                }}
                 className={`relative flex flex-col items-center justify-center flex-1 py-0.5 px-0.5 transition-all duration-150 cursor-pointer active:scale-92 ${
                   isActive ? 'text-orange-600' : 'text-gray-400 active:text-gray-700'
                 }`}
