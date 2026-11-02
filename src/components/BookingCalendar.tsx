@@ -1353,7 +1353,7 @@ export default function BookingCalendar({
                     } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
-                    {/* Cell Header: Day number TO RÕ + count badge */}
+                    {/* Cell Header: Day number TO RÕ + count badge (số khách/contract) */}
                     <div className="flex justify-between items-center pb-0.5 sm:pb-1">
                       <span className={`text-xs sm:text-sm font-black inline-flex items-center justify-center leading-none ${
                         isToday 
@@ -1384,87 +1384,143 @@ export default function BookingCalendar({
                           }
                         });
 
-                        return groupedByContract.map(({ contract, items }, groupIdx) => {
-                          const firstBooking = items[0];
-                          const colors = getCameraColorProps(firstBooking.cameraShort);
-                          const custName = (contract.customerName || '').trim();
+                        // Mobile: giới hạn số contract hiển thị trong ô ngày để tránh tràn
+                        const MAX_MOBILE_CONTRACTS = 3;
+                        const MAX_MOBILE_TAGS = 2;       // Số tag tối đa mỗi contract trên mobile
+                        const MAX_DESKTOP_ITEMS = 3;     // Số món tối đa trước khi collapse trên desktop
 
-                          return (
-                            <div
-                              key={contract.id || groupIdx}
-                              className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-lg shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative`}
-                              title={`Khách: ${contract.customerName || 'Chưa có tên'} | ${contract.customerPhone || 'Chưa có SĐT'}\n${items.length} món: ${items.map(it => it.cameraName).join(', ')}`}
-                            >
-                              {/* Mobile: Hiển thị danh sách các tag mã viết tắt gọn gàng */}
-                              <div className="flex sm:hidden flex-wrap gap-0.5 items-center leading-none">
-                                {items.map((it, itIdx) => {
-                                  const mCam = cameras.find(c => c.id === it.cameraId)
-                                    || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
-                                    || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase());
-                                  const code = (mCam?.serialNumber || it.cameraShort || it.cleanName || 'Đồ').trim();
-                                  return (
-                                    <span key={itIdx} className={`font-mono font-black text-[7.5px] px-1 py-0.2 rounded leading-tight ${colors.tagColor}`}>
-                                      {code}
-                                    </span>
-                                  );
-                                })}
-                              </div>
+                        // Mobile: chỉ hiện tối đa MAX_MOBILE_CONTRACTS thẻ, phần còn lại gom vào badge
+                        const isMobileView = typeof window !== 'undefined' && window.innerWidth < 640;
+                        const visibleContracts = isMobileView
+                          ? groupedByContract.slice(0, MAX_MOBILE_CONTRACTS)
+                          : groupedByContract;
+                        const hiddenContractCount = isMobileView
+                          ? Math.max(0, groupedByContract.length - MAX_MOBILE_CONTRACTS)
+                          : 0;
 
-                              {/* Desktop: Header Khách hàng (Tên + SĐT) CHỈ HIỆN 1 LẦN */}
-                              <div className="hidden sm:flex flex-col gap-1">
-                                <div className="flex items-center justify-between gap-1 leading-tight pb-1 border-b border-black/10">
-                                  <span className="font-black text-[11px] truncate tracking-tight text-gray-900" title={custName}>
-                                    {custName || 'Khách thuê'}
-                                  </span>
-                                  {items.length > 1 && (
-                                    <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-white/95 text-gray-700 rounded-full border border-gray-200/80 shadow-3xs shrink-0">
-                                      {items.length} món
-                                    </span>
-                                  )}
-                                </div>
+                        return (
+                          <>
+                            {visibleContracts.map(({ contract, items }, groupIdx) => {
+                              const firstBooking = items[0];
+                              const colors = getCameraColorProps(firstBooking.cameraShort);
+                              const custName = (contract.customerName || '').trim();
 
-                                {/* Danh sách từng món của khách này - Có dòng kẻ nét đứt phân cách rõ ràng */}
-                                <div className="divide-y divide-black/10 divide-dashed">
-                                  {items.map((it, itIdx) => {
-                                    const mCam = cameras.find(c => c.id === it.cameraId)
-                                      || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
-                                      || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase())
-                                      || cameras.find(c => c.name && it.cameraName && c.name.toLowerCase() === it.cameraName.toLowerCase());
-                                    
-                                    const code = (mCam?.serialNumber || it.cameraShort || mCam?.shortName || it.cleanName || it.cameraName || 'Đồ thuê').trim();
-                                    const rawName = (it.cleanName || mCam?.name || it.cameraName || '').trim();
-                                    const name = rawName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
-                                    const sizeLbl = it.isPrinter
-                                      ? `🖨️ ${it.printCount ?? '?'}t`
-                                      : (it.size === 'Freesize' || it.size === 'FS' ? 'FS' : `Size ${it.size || 'M'}`);
+                              // Desktop: giới hạn số món hiển thị
+                              const visibleDesktopItems = items.slice(0, MAX_DESKTOP_ITEMS);
+                              const hiddenDesktopCount = Math.max(0, items.length - MAX_DESKTOP_ITEMS);
 
-                                    return (
-                                      <div key={itIdx} className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-tight min-w-0 py-1">
-                                        <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={code}>
-                                          {code}
-                                        </span>
-                                        {name && name.toLowerCase() !== code.toLowerCase() && (
-                                          <span className="text-[9.5px] font-bold text-gray-900 truncate flex-1 min-w-0" title={name}>
-                                            {name}
+                              // Mobile: giới hạn số tag hiển thị trong mỗi contract
+                              const visibleMobileTags = items.slice(0, MAX_MOBILE_TAGS);
+                              const hiddenMobileTagCount = Math.max(0, items.length - MAX_MOBILE_TAGS);
+
+                              return (
+                                <div
+                                  key={contract.id || groupIdx}
+                                  className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-lg shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative`}
+                                  title={`Khách: ${contract.customerName || 'Chưa có tên'} | ${contract.customerPhone || 'Chưa có SĐT'}\n${items.length} món: ${items.map(it => it.cameraName).join(', ')}`}
+                                >
+                                  {/* Mobile: Tên khách ngắn gọn + tags mã (giới hạn MAX_MOBILE_TAGS) */}
+                                  <div className="flex sm:hidden flex-col gap-0.5 leading-none">
+                                    {/* Tên khách - chỉ show họ tên đầu */}
+                                    {custName && (
+                                      <span className="font-black text-[8px] truncate text-gray-900 leading-tight">
+                                        {custName.split(' ').slice(-2).join(' ')}
+                                      </span>
+                                    )}
+                                    {/* Tags mã viết tắt, giới hạn */}
+                                    <div className="flex flex-wrap gap-0.5 items-center">
+                                      {visibleMobileTags.map((it, itIdx) => {
+                                        const mCam = cameras.find(c => c.id === it.cameraId)
+                                          || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
+                                          || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase());
+                                        const code = (mCam?.serialNumber || it.cameraShort || it.cleanName || 'Đồ').trim();
+                                        return (
+                                          <span key={itIdx} className={`font-mono font-black text-[7px] px-1 py-0.2 rounded leading-tight ${colors.tagColor}`}>
+                                            {code}
                                           </span>
-                                        )}
-                                        <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
-                                          {sizeLbl}
+                                        );
+                                      })}
+                                      {hiddenMobileTagCount > 0 && (
+                                        <span className="text-[7px] font-black text-gray-600 bg-white/80 border border-gray-300/60 px-1 rounded leading-tight">
+                                          +{hiddenMobileTagCount}
                                         </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                {contract.customerPhone && (
-                                  <div className="text-[8.5px] font-bold text-gray-500 leading-none pt-1 border-t border-black/10 truncate font-mono">
-                                    📞 {contract.customerPhone}
+                                      )}
+                                    </div>
                                   </div>
-                                )}
+
+                                  {/* Desktop: Header Khách hàng (Tên + SĐT) CHỈ HIỆN 1 LẦN */}
+                                  <div className="hidden sm:flex flex-col gap-1">
+                                    <div className="flex items-center justify-between gap-1 leading-tight pb-1 border-b border-black/10">
+                                      <span className="font-black text-[11px] truncate tracking-tight text-gray-900" title={custName}>
+                                        {custName || 'Khách thuê'}
+                                      </span>
+                                      {items.length > 1 && (
+                                        <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-white/95 text-gray-700 rounded-full border border-gray-200/80 shadow-3xs shrink-0">
+                                          {items.length} món
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Danh sách từng món — giới hạn MAX_DESKTOP_ITEMS, còn lại collapse */}
+                                    <div className="divide-y divide-black/10 divide-dashed">
+                                      {visibleDesktopItems.map((it, itIdx) => {
+                                        const mCam = cameras.find(c => c.id === it.cameraId)
+                                          || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
+                                          || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase())
+                                          || cameras.find(c => c.name && it.cameraName && c.name.toLowerCase() === it.cameraName.toLowerCase());
+                                        
+                                        const code = (mCam?.serialNumber || it.cameraShort || mCam?.shortName || it.cleanName || it.cameraName || 'Đồ thuê').trim();
+                                        const rawName = (it.cleanName || mCam?.name || it.cameraName || '').trim();
+                                        const name = rawName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
+                                        const sizeLbl = it.isPrinter
+                                          ? `🖨️ ${it.printCount ?? '?'}t`
+                                          : (it.size === 'Freesize' || it.size === 'FS' ? 'FS' : `Size ${it.size || 'M'}`);
+
+                                        return (
+                                          <div key={itIdx} className="flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-tight min-w-0 py-1">
+                                            <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={code}>
+                                              {code}
+                                            </span>
+                                            {name && name.toLowerCase() !== code.toLowerCase() && (
+                                              <span className="text-[9.5px] font-bold text-gray-900 truncate flex-1 min-w-0" title={name}>
+                                                {name}
+                                              </span>
+                                            )}
+                                            <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
+                                              {sizeLbl}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {/* Badge "+N món nữa" nếu bị collapse */}
+                                    {hiddenDesktopCount > 0 && (
+                                      <div className="text-[8px] font-black text-gray-500 italic leading-none pt-0.5">
+                                        +{hiddenDesktopCount} món nữa…
+                                      </div>
+                                    )}
+
+                                    {contract.customerPhone && (
+                                      <div className="text-[8.5px] font-bold text-gray-500 leading-none pt-1 border-t border-black/10 truncate font-mono">
+                                        📞 {contract.customerPhone}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Mobile: Badge tổng số contract bị ẩn */}
+                            {hiddenContractCount > 0 && (
+                              <div className="flex sm:hidden items-center justify-center py-0.5">
+                                <span className="text-[7.5px] font-black text-gray-600 bg-white/90 border border-gray-300/80 px-1.5 py-0.5 rounded-full shadow-3xs leading-none">
+                                  +{hiddenContractCount} khách nữa
+                                </span>
                               </div>
-                            </div>
-                          );
-                        });
+                            )}
+                          </>
+                        );
                       })()}
                     </div>
                   </div>
