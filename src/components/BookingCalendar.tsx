@@ -2535,7 +2535,8 @@ export default function BookingCalendar({
                                 e.stopPropagation();
                                 setFormData(prev => ({
                                   ...prev,
-                                  selectedCameraIds: prev.selectedCameraIds.filter(id => id !== camId)
+                                  selectedCameraIds: prev.selectedCameraIds.filter(id => id !== camId),
+                                  customFinalPrice: null, // Reset giá chốt để tính lại tự động
                                 }));
                               }}
                               className="text-gray-400 hover:text-rose-600 font-black text-xs ml-0.5 p-0.5 cursor-pointer"
@@ -2772,7 +2773,7 @@ export default function BookingCalendar({
                                         type="button"
                                         onClick={() => {
                                           if (isSel) {
-                                            setFormData({...formData, selectedCameraIds: formData.selectedCameraIds.filter(id => id !== cam.id)});
+                                            setFormData({...formData, selectedCameraIds: formData.selectedCameraIds.filter(id => id !== cam.id), customFinalPrice: null});
                                             return;
                                           }
                                           if (isBlocked) {
@@ -2930,7 +2931,7 @@ export default function BookingCalendar({
                           return (
                             <div key={cam.id} onClick={() => {
                               if (isUnavailable) { setCustomAlertMessage(`Máy in "${cam.name}" không khả dụng!`); return; }
-                              if (isSelected) setFormData({...formData, selectedCameraIds: formData.selectedCameraIds.filter(id => id!==cam.id)});
+                              if (isSelected) setFormData({...formData, selectedCameraIds: formData.selectedCameraIds.filter(id => id!==cam.id), customFinalPrice: null});
                               else setFormData({...formData, selectedCameraIds: [...formData.selectedCameraIds, cam.id], printCounts: {...formData.printCounts, [cam.id]: formData.printCounts?.[cam.id]||5}});
                             }} className={`p-2.5 rounded-xl select-none transition-all ${isUnavailable ? 'bg-gray-100/80 border border-gray-200 opacity-65 cursor-not-allowed' : isSelected ? 'bg-orange-50 border-2 border-orange-500 shadow-xs cursor-pointer' : 'bg-white hover:bg-orange-50/40 border border-gray-200 hover:border-orange-200 shadow-3xs cursor-pointer'}`}>
                               <div className="flex items-center justify-between gap-2">
