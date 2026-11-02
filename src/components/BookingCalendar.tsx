@@ -1332,22 +1332,22 @@ export default function BookingCalendar({
                     } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
-                    {/* Cell Header: Thứ (chỉ hàng đầu) + Số ngày + badge booking */}
+                    {/* Cell Header: Thứ (mọi ô) + Số ngày + badge booking */}
                     <div className="flex flex-col gap-0 pb-0.5 sm:pb-1">
-                      {/* Nhãn Thứ — chỉ hiện ở 7 ô đầu tiên (hàng 1) */}
-                      {cellIndex < 7 && (() => {
-                        const WEEKDAY_LABELS = [
-                          { short: 'T2', full: 'Thứ 2',    color: 'text-slate-400' },
-                          { short: 'T3', full: 'Thứ 3',    color: 'text-slate-400' },
-                          { short: 'T4', full: 'Thứ 4',    color: 'text-slate-400' },
-                          { short: 'T5', full: 'Thứ 5',    color: 'text-slate-400' },
-                          { short: 'T6', full: 'Thứ 6',    color: 'text-slate-400' },
-                          { short: 'T7', full: 'Thứ 7',    color: 'text-blue-400 font-black' },
-                          { short: 'CN', full: 'Chủ Nhật', color: 'text-rose-400 font-black' },
-                        ];
-                        const w = WEEKDAY_LABELS[cellIndex];
+                      {/* Nhãn Thứ — hiện trong mọi ô, tính từ ngày thực tế */}
+                      {(() => {
+                        const WEEKDAY_MAP: Record<number, { short: string; full: string; color: string }> = {
+                          1: { short: 'T2', full: 'Thứ 2',    color: 'text-slate-400' },
+                          2: { short: 'T3', full: 'Thứ 3',    color: 'text-slate-400' },
+                          3: { short: 'T4', full: 'Thứ 4',    color: 'text-slate-400' },
+                          4: { short: 'T5', full: 'Thứ 5',    color: 'text-slate-400' },
+                          5: { short: 'T6', full: 'Thứ 6',    color: 'text-slate-400' },
+                          6: { short: 'T7', full: 'Thứ 7',    color: 'text-blue-400 font-black' },
+                          0: { short: 'CN', full: 'Chủ Nhật', color: 'text-rose-400 font-black' },
+                        };
+                        const w = WEEKDAY_MAP[dObj.getDay()];
                         return (
-                          <div className={`text-center font-bold tracking-tight leading-none mb-0.5 select-none ${w.color} text-[8px] sm:text-[10px]`}>
+                          <div className={`font-bold tracking-tight leading-none mb-0.5 select-none ${w.color} text-[7px] sm:text-[9px] text-center sm:text-left`}>
                             <span className="sm:hidden">{w.short}</span>
                             <span className="hidden sm:inline">{w.full}</span>
                           </div>
