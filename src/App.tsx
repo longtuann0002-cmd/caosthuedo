@@ -3777,7 +3777,18 @@ export default function App() {
               if (total === 0) return null;
               return (
                 <div
-                  onClick={() => setActiveTab('equipment')}
+                  onClick={() => {
+                    setActiveTab('equipment');
+                    // Set filter tùy theo loại đồ đang chờ xử lý
+                    if (laundryCount > 0 && mendingCount === 0) {
+                      setInventoryStatusFilter('LAUNDRY');
+                    } else if (mendingCount > 0 && laundryCount === 0) {
+                      setInventoryStatusFilter('MENDING');
+                    } else {
+                      // Có cả 2 → filter LAUNDRY trước (phổ biến hơn)
+                      setInventoryStatusFilter('LAUNDRY');
+                    }
+                  }}
                   className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 hover:bg-blue-100 text-blue-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none"
                   title={`${laundryCount > 0 ? `${laundryCount} bộ đang giặt hấp` : ''}${laundryCount > 0 && mendingCount > 0 ? ' · ' : ''}${mendingCount > 0 ? `${mendingCount} bộ đang sửa chữa` : ''}. Bấm để xem kho đồ.`}
                 >
