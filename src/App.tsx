@@ -509,8 +509,10 @@ export default function App() {
     }
 
     const unsubscribe = listenToCrossDeviceAlerts((alert) => {
-      // App is OPEN: only show in-app toast (no extra push — FCM already delivered it outside)
+      // 1. Toast trong ứng dụng
       addToast(alert.title, 'info', alert.body);
+      // 2. Nảy banner thông báo & rung ra ngoài màn hình thiết bị
+      showPushNotification(alert.title, alert.body).catch(() => {});
     });
 
     return () => {
@@ -1606,6 +1608,9 @@ export default function App() {
     broadcastToAllDevices(title, body, { contractId: newContract.id }).catch(err => {
       console.warn('Broadcast to all devices error:', err);
     });
+
+    // Hiển thị thông báo local ngay lập tức (không phụ thuộc Firebase)
+    sendOrderCreatedNotification(contractToAdd).catch(() => {});
   };
 
   const handleFixDuplicateContracts = () => {
@@ -3629,7 +3634,7 @@ export default function App() {
                   </div>
                   <div className="flex items-center gap-1 mt-0.5">
                     <span className="text-[10px] font-bold text-gray-400 truncate leading-tight">
-                      {logoText || 'TIỆM ẢNH NHÀ CAOS'}
+                      {logoText || 'TIỆM NHÀ CAOS'}
                     </span>
                     <ChevronDown className={`w-3 h-3 text-gray-400 group-hover:text-gray-700 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
                   </div>
@@ -3735,7 +3740,7 @@ export default function App() {
 
             {/* Desktop Clean Breadcrumb (As seen in Reference: Maham > Overview) */}
             <div className="hidden md:flex items-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">{logoText || 'Tiệm ảnh Nhà Caos'}</span>
+              <span className="text-slate-400 font-medium">{logoText || 'Tiệm Nhà Caos'}</span>
               <ChevronRight className="w-3.5 h-3.5 text-slate-300 stroke-[2.5]" />
               <div className="flex items-center gap-1.5 text-slate-800 font-extrabold bg-slate-100/70 px-2.5 py-1 rounded-xl border border-slate-200/50">
                 {activeTab === 'calendar' && <Calendar className="w-3.5 h-3.5 text-orange-600" />}

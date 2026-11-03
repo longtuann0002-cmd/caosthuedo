@@ -3,7 +3,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
 // Cache name for PWA
-const CACHE_NAME = 'thuedo-app-v1';
+const CACHE_NAME = 'thuedo-app-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

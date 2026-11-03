@@ -1,5 +1,5 @@
 // Service Worker for Quản Lý Thuê Đồ - PWA Push Notifications (iOS 16.4+ & Android)
-const CACHE_NAME = 'thuedo-app-v1';
+const CACHE_NAME = 'thuedo-app-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

@@ -108,7 +108,14 @@ export async function showPushNotification(
   const notificationTag = tag || `caos-${Date.now()}`;
 
   try {
-    const reg = await navigator.serviceWorker.ready;
+    let reg: ServiceWorkerRegistration | null = null;
+    try {
+      reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 1200))
+      ]);
+    } catch (e) {}
+
     if (reg && reg.showNotification) {
       await reg.showNotification(title, {
         body,
@@ -141,7 +148,7 @@ export async function showPushNotification(
 export async function sendTestNotification(): Promise<boolean> {
   updateAppBadge(1);
   return showPushNotification(
-    '📷 Tiệm Ảnh Nhà Caos - Trợ lý vận hành',
+    '🧾 Tiệm Nhà Caos - Trợ lý vận hành',
     'Thông báo trên iPhone của bạn đã hoạt động hoàn hảo! 🎉',
     `test-${Date.now()}`
   );
