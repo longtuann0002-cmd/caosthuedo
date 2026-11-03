@@ -12,7 +12,6 @@ import { formatDMY } from '../utils/dateUtils';
 import { VIET_BANKS, getBankBin, QrDisplay, DEFAULT_RENTAL_TERMS } from './ContractManager';
 import { useScrollLock } from '../utils/useScrollLock';
 import { generateNextContractCode } from '../utils/contractUtils';
-import { generateZaloMessage, openZaloChat, ZaloMessageType } from '../utils/zaloHelper';
 
 // 20 fully distinct vivid palettes — ordered so adjacent entries look maximally different
 const CAMERA_COLOR_PALETTES = [
@@ -3565,21 +3564,6 @@ export default function BookingCalendar({
 
             {/* Print Simulate buttons - Centered */}
             <div className="bg-gray-50 px-4 sm:px-5 py-3.5 flex flex-wrap gap-2.5 justify-center items-center border-t border-gray-150 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  const msgType: ZaloMessageType = quickReceiptContract.status === 'Overdue' ? 'overdue_alert' : quickReceiptContract.status === 'Active' ? 'return_reminder' : 'booking_confirmed';
-                  const msg = generateZaloMessage(quickReceiptContract, msgType);
-                  const res = openZaloChat(quickReceiptContract.customerPhone, msg);
-                  setCustomAlertMessage(res.message);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs border border-transparent min-h-[38px] whitespace-nowrap"
-                title="Gửi xác nhận đơn thuê qua Zalo cho khách hàng"
-              >
-                <span>💬</span>
-                <span>Gửi Zalo Khách</span>
-              </button>
-
               <button
                 type="button"
                 className="bg-white hover:bg-gray-100 border border-gray-250 text-gray-750 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"

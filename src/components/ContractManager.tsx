@@ -17,7 +17,6 @@ import { toPng } from 'html-to-image';
 import { matchContract } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
 import { generateNextContractCode } from '../utils/contractUtils';
-import { generateZaloMessage, openZaloChat, ZaloMessageType } from '../utils/zaloHelper';
 
 interface ContractManagerProps {
   contracts: RentalContract[];
@@ -1276,19 +1275,6 @@ export default function ContractManager({
                         <a href={`tel:${c.customerPhone}`} className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 hover:bg-orange-100 border border-orange-100/60 rounded-lg text-[11px] text-orange-700 font-mono font-bold transition-all shrink-0">
                           <Phone className="w-3 h-3 text-orange-500 fill-orange-500/10" /> {c.customerPhone}
                         </a>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const msgType: ZaloMessageType = c.status === 'Overdue' ? 'overdue_alert' : c.status === 'Active' ? 'return_reminder' : 'booking_confirmed';
-                            const msg = generateZaloMessage(c, msgType);
-                            const res = openZaloChat(c.customerPhone, msg);
-                            setCustomAlertMessage(res.message);
-                          }}
-                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-3xs"
-                          title="Nhắn tin Zalo với thông tin đơn hàng soạn sẵn"
-                        >
-                          <span className="text-[11px]">💬</span> Nhắn Zalo
-                        </button>
                         <span className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200/50 px-1.5 py-0.5 rounded font-bold">
                           {c.customerDocType === 'Other'
                             ? (c.customerDocNote?.trim() || 'Tài sản khác')
@@ -1565,21 +1551,8 @@ export default function ContractManager({
                       <td className="px-6 py-4 font-mono font-bold text-gray-900">{c.contractCode}</td>
                       <td className="px-6 py-4">
                         <div className="font-semibold text-gray-850">{c.customerName}</div>
-                        <div className="text-gray-400 font-mono text-xs flex items-center gap-1.5 flex-wrap">
-                          <span className="flex items-center gap-1"><Phone className="w-3 h-3 text-gray-400" /> {c.customerPhone}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const msgType: ZaloMessageType = c.status === 'Overdue' ? 'overdue_alert' : c.status === 'Active' ? 'return_reminder' : 'booking_confirmed';
-                              const msg = generateZaloMessage(c, msgType);
-                              const res = openZaloChat(c.customerPhone, msg);
-                              setCustomAlertMessage(res.message);
-                            }}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded text-[10px] font-bold transition-all cursor-pointer shadow-3xs"
-                            title="Mở Zalo và dán tin nhắn thông tin đơn hàng"
-                          >
-                            <span>💬</span> Zalo
-                          </button>
+                        <div className="text-gray-400 font-mono text-xs flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-gray-400" /> {c.customerPhone}
                         </div>
                         
                         {/* Inline Quick Notes (Ghi chú nhanh) */}
@@ -2822,21 +2795,6 @@ export default function ContractManager({
 
             {/* Print Simulate buttons - Centered */}
             <div className="bg-gray-50 px-4 sm:px-5 py-3.5 flex flex-wrap gap-2.5 justify-center items-center border-t border-gray-150 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  const msgType: ZaloMessageType = selectedContract.status === 'Overdue' ? 'overdue_alert' : selectedContract.status === 'Active' ? 'return_reminder' : 'booking_confirmed';
-                  const msg = generateZaloMessage(selectedContract, msgType);
-                  const res = openZaloChat(selectedContract.customerPhone, msg);
-                  setCustomAlertMessage(res.message);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs border border-transparent min-h-[38px] whitespace-nowrap"
-                title="Gửi xác nhận hoặc nhắc hẹn qua Zalo cho khách hàng"
-              >
-                <span>💬</span>
-                <span>Gửi Zalo Khách</span>
-              </button>
-
               <button
                 type="button"
                 className="bg-white hover:bg-gray-100 border border-gray-250 text-gray-750 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"
