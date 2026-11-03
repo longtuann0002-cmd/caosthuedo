@@ -24,6 +24,7 @@ import {
 import { formatDMY } from './utils/dateUtils';
 import { sendOrderCreatedNotification, checkAndTriggerMorningBriefing, showPushNotification, updateAppBadge, clearAppBadge } from './utils/pushNotification';
 import { broadcastToAllDevices, listenToCrossDeviceAlerts, initFirebaseMessaging, syncContractsToCloud, registerDeviceFCMToken, playNotificationSound } from './utils/firebasePush';
+import { registerAppleWebPushSubscription } from './utils/appleWebPush';
 import { matchContract, matchCamera, matchCustomer, smartMatch } from './utils/searchUtils';
 import { compressImageFile } from './utils/imageUtils';
 import { deduplicateContracts, generateNextContractCode } from './utils/contractUtils';
@@ -503,9 +504,10 @@ export default function App() {
   useEffect(() => {
     initFirebaseMessaging();
 
-    // Auto-register device FCM token if permission was already granted
+    // Auto-register device FCM token & Apple WebPush if permission was already granted
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       registerDeviceFCMToken().catch(() => {});
+      registerAppleWebPushSubscription().catch(() => {});
     }
 
     const unsubscribe = listenToCrossDeviceAlerts((alert) => {

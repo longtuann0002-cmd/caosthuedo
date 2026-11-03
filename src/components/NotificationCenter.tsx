@@ -50,6 +50,7 @@ import {
   broadcastToAllDevices,
   FirebaseConfig
 } from '../utils/firebasePush';
+import { registerAppleWebPushSubscription } from '../utils/appleWebPush';
 
 interface NotificationCenterProps {
   contracts: RentalContract[];
@@ -228,6 +229,7 @@ export default function NotificationCenter({
       setPushPermission('granted');
       setShowIPhoneGuide(false);
       await registerDeviceFCMToken().catch(() => {});
+      await registerAppleWebPushSubscription().catch(() => {});
       updateAppBadge(1);
       await sendTestNotification();
     } else {
@@ -288,16 +290,46 @@ export default function NotificationCenter({
   const handleGetFCMToken = async () => {
     setIsGettingToken(true);
     setPushErrorMessage('');
-    const res = await registerDeviceFCMToken();
+    const [res] = await Promise.all([
+      registerDeviceFCMToken(),
+      registerAppleWebPushSubscription().catch(() => {})
+    ]);
     setIsGettingToken(false);
-    if (res.success && res.token) {
+    if (res && res.success && res.token) {
       setFcmToken(res.token);
-      setToastMessage('Đã đăng ký Token thiết bị thành công vào hệ thống thông báo đa máy!');
+      setToastMessage('Đã đăng ký thiết bị thành công vào hệ thống nhận tin màn hình khóa!');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
-    } else if (res.error) {
+    } else if (res && res.error) {
       setPushErrorMessage(res.error);
     }
+  };
+
+  const [isTestingServerPush, setIsTestingServerPush] = useState(false);
+  const handleTestServerPush = async () => {
+    setIsTestingServerPush(true);
+    try {
+      const res = await fetch('/api/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: '🧾 Tiệm Nhà Caos - Thử màn hình khóa',
+          body: 'Thông báo đánh thức iPhone khi tắt màn hình đã hoạt động hoàn hảo! 🎉',
+          data: { type: 'test' }
+        })
+      });
+      const data = await res.json();
+      if (data.delivered > 0) {
+        setToastMessage(`✅ Đã gửi tín hiệu tới ${data.delivered} thiết bị! Bạn có thể khóa màn hình iPhone để xem nhé.`);
+      } else {
+        setToastMessage(data.message || 'Chưa tìm thấy thiết bị nào đăng ký.');
+      }
+    } catch (e: any) {
+      setToastMessage('Lỗi gửi push: ' + e.message);
+    }
+    setShowToast(true);
+    setIsTestingServerPush(false);
+    setTimeout(() => setShowToast(false), 5000);
   };
 
   const handleBroadcastTest = async () => {
@@ -962,6 +994,17 @@ export default function NotificationCenter({
                       <span>{broadcastSent ? 'Đã bắn tín hiệu!' : 'Bắn thử TẤT CẢ máy'}</span>
                     </button>
                   </div>
+
+                  {/* Nút test nảy màn hình khóa trực tiếp từ máy chủ Apple Push */}
+                  <button
+                    type="button"
+                    onClick={handleTestServerPush}
+                    disabled={isTestingServerPush}
+                    className="w-full py-2 px-3 rounded-xl border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800 text-[11px] font-black transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 shadow-3xs"
+                  >
+                    <Smartphone className={`w-3.5 h-3.5 text-emerald-700 ${isTestingServerPush ? 'animate-spin' : ''}`} />
+                    <span>{isTestingServerPush ? 'Đang gửi qua máy chủ...' : '🚀 Bắn thử màn hình khóa iPhone (qua máy chủ Apple)'}</span>
+                  </button>
 
                   {/* App Icon Badge Test Area */}
                   <div className="p-2 bg-rose-50/60 border border-rose-200/80 rounded-xl flex items-center justify-between gap-2">

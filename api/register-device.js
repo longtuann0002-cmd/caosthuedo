@@ -1,4 +1,8 @@
-﻿import { saveRegisteredToken } from './_fcmHelper.js';
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://efiadllfvhsqhditgewd.supabase.co";
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_cr3cMMyKGudQZE3L3lBQMA_62CN0KZ8";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default async function handler(req, res) {
   // CORS
@@ -15,13 +19,42 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { token, deviceType } = req.body || {};
-    if (!token) {
-      return res.status(400).json({ error: 'Token is required' });
+    const { subscription, deviceType } = req.body || {};
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ error: 'Invalid subscription' });
     }
 
-    const saved = await saveRegisteredToken(token, deviceType);
-    return res.status(200).json({ success: saved });
+    const { data: row } = await supabase
+      .from('camlease_store')
+      .select('value')
+      .eq('key', 'apple_webpush_subscriptions')
+      .maybeSingle();
+
+    let list = [];
+    if (row && row.value) {
+      try { list = JSON.parse(row.value); } catch (e) {}
+    }
+
+    const newRecord = {
+      subscription,
+      endpoint: subscription.endpoint,
+      deviceType: deviceType || 'Unknown',
+      updatedAt: new Date().toISOString()
+    };
+
+    const updated = Array.isArray(list) 
+      ? [...list.filter(item => item.endpoint !== subscription.endpoint), newRecord]
+      : [newRecord];
+
+    await supabase
+      .from('camlease_store')
+      .upsert({
+        key: 'apple_webpush_subscriptions',
+        value: JSON.stringify(updated),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+
+    return res.status(200).json({ success: true, total: updated.length });
   } catch (err) {
     console.error('Error in /api/register-device:', err);
     return res.status(500).json({ error: err.message });
