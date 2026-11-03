@@ -212,7 +212,7 @@ async function saveTokenToSharedRegistry(token: string): Promise<void> {
 const CLIENT_SESSION_ID = 'sess_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
 
 // Broadcast notification across all devices
-// (Uses Multi-Channel: Vercel Serverless Push -> Apple APNs + Firestore Cloud broadcast + BroadcastChannel locally)
+// (Uses Multi-Channel: Supabase Cloud Broadcast + BroadcastChannel locally + Server Push)
 export async function broadcastToAllDevices(
   title: string, 
   body: string, 
@@ -220,36 +220,18 @@ export async function broadcastToAllDevices(
 ): Promise<boolean> {
   let anyDelivered = false;
 
-  const config = getFirebaseConfig();
-
-  // 0. Server-Side Push via Vercel (only if dedicated Firebase is configured)
-  if (config) {
-    try {
-      fetch('/api/send-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, body, data })
-      }).catch(err => console.warn('Serverless push call:', err));
-      anyDelivered = true;
-    } catch (e) {}
-  }
-
-  // 1. Firebase Firestore Cloud Broadcast (only if dedicated Firebase is configured)
-  if (config) {
-    try {
-      const app = getApps().length > 0 ? getApp() : initializeApp(config);
-      const db = getFirestore(app);
-      await addDoc(collection(db, 'thuedo_cloud_alerts'), {
-        title,
-        body,
-        data: data || {},
-        senderSessionId: CLIENT_SESSION_ID,
-        timestamp: Date.now()
-      });
-      anyDelivered = true;
-    } catch (e) {
-      console.warn('Firebase Firestore broadcast error:', e);
-    }
+  // 1. SUPABASE CLOUD (ƯU TIÊN SỐ 1 - 100% ĐỒNG BỘ GIỮA CÁC THIẾT BỊ)
+  try {
+    const ok = await syncToSupabase('thuedo_latest_push_event', {
+      title,
+      body,
+      data: data || {},
+      senderSessionId: CLIENT_SESSION_ID,
+      timestamp: Date.now()
+    });
+    if (ok) anyDelivered = true;
+  } catch (e) {
+    console.warn('Supabase broadcast error:', e);
   }
 
   // 2. BroadcastChannel (Delivers instantly to all active tabs/windows on the same machine)
@@ -279,20 +261,16 @@ export async function broadcastToAllDevices(
     anyDelivered = true;
   } catch (e) {}
 
-  // 4. Supabase Realtime broadcast if configured
-  if (isSupabaseConfigured) {
+  // 4. Server-Side Push via Vercel (nếu có cấu hình)
+  const config = getFirebaseConfig();
+  if (config) {
     try {
-      await syncToSupabase('thuedo_latest_push_event', {
-        title,
-        body,
-        data: data || {},
-        senderSessionId: CLIENT_SESSION_ID,
-        timestamp: Date.now()
-      });
-      anyDelivered = true;
-    } catch (e) {
-      console.warn('Supabase push broadcast error:', e);
-    }
+      fetch('/api/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body, data })
+      }).catch(() => {});
+    } catch (e) {}
   }
 
   return anyDelivered;
@@ -386,7 +364,7 @@ export function listenToCrossDeviceAlerts(
         latestEvent &&
         latestEvent.timestamp &&
         latestEvent.timestamp > lastProcessedSupabaseTime &&
-        Math.abs(Date.now() - latestEvent.timestamp) < 60000 &&
+        Math.abs(Date.now() - latestEvent.timestamp) < 180000 &&
         latestEvent.senderSessionId !== CLIENT_SESSION_ID
       ) {
         lastProcessedSupabaseTime = latestEvent.timestamp;

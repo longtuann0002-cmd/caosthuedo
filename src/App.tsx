@@ -515,10 +515,50 @@ export default function App() {
       playNotificationSound();
       // 3. Nảy banner thông báo & rung ra ngoài màn hình thiết bị
       showPushNotification(alert.title, alert.body).catch(() => {});
+      // 4. Tự động đồng bộ ngay hợp đồng mới từ Supabase để lịch tự cập nhật
+      fetchFromSupabase('contracts').then(cloudContracts => {
+        if (Array.isArray(cloudContracts) && cloudContracts.length > 0) {
+          const raw = cloudContracts.map(c => ({ ...c, note: cleanSystemNote(c.note) }));
+          const { deduplicated } = deduplicateContracts(raw);
+          setContracts(deduplicated);
+          saveStoredData('contracts', deduplicated);
+        }
+      }).catch(() => {});
     });
+
+    // Tầng 2 (Bảo hiểm kép): Định kỳ quét hợp đồng mới từ Supabase mỗi 4 giây
+    const contractsCheckInterval = setInterval(async () => {
+      try {
+        const cloud = await fetchFromSupabase('contracts');
+        if (Array.isArray(cloud) && cloud.length > 0) {
+          setContracts(prev => {
+            if (!prev || prev.length === 0) return prev;
+            const prevIds = new Set(prev.map(c => c.id || c.contractCode));
+            const newOrders = cloud.filter(c => !prevIds.has(c.id || c.contractCode));
+            if (newOrders.length > 0) {
+              const newest = newOrders[0];
+              const itemsText = (newest.items || []).map((i: any) => i.cameraName).join(', ') || 'Trang phục thuê';
+              const title = `📋 Đơn đặt mới: ${newest.contractCode}`;
+              const body = `Khách: ${newest.customerName} • ${itemsText} • ${newest.totalPrice?.toLocaleString('vi-VN')}đ`;
+
+              addToast(title, 'info', body);
+              playNotificationSound();
+              showPushNotification(title, body).catch(() => {});
+
+              const raw = cloud.map(c => ({ ...c, note: cleanSystemNote(c.note) }));
+              const { deduplicated } = deduplicateContracts(raw);
+              saveStoredData('contracts', deduplicated);
+              return deduplicated;
+            }
+            return prev;
+          });
+        }
+      } catch (e) {}
+    }, 4000);
 
     return () => {
       unsubscribe();
+      clearInterval(contractsCheckInterval);
     };
   }, []);
 
