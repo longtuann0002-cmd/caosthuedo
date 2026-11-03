@@ -502,6 +502,16 @@ export default function App() {
 
   // Listen to cross-device notification broadcasts from other devices/staff
   useEffect(() => {
+    // Tự động kiểm tra và nâng cấp FCM Token sang hạ tầng chuẩn tiem-anh-nha-caos-d827f
+    try {
+      const fcmVer = localStorage.getItem('thuedo_fcm_version');
+      if (fcmVer !== 'v4_d827f_official') {
+        localStorage.removeItem('thuedo_fcm_device_token');
+        localStorage.removeItem('thuedo_firebase_config');
+        localStorage.setItem('thuedo_fcm_version', 'v4_d827f_official');
+      }
+    } catch (e) {}
+
     initFirebaseMessaging();
 
     // Auto-register device FCM token & Apple WebPush if permission was already granted

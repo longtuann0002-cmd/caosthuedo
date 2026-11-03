@@ -29,7 +29,7 @@ try {
     projectId: "tiem-anh-nha-caos-d827f",
     storageBucket: "tiem-anh-nha-caos-d827f.firebasestorage.app",
     messagingSenderId: "449788423673",
-    appId: "1:449788423673:web:8488b804d60d63a68d2128"
+    appId: "1:449788423673:web:64a2cab6bb9768608d2128"
   });
 
   const messaging = firebase.messaging();

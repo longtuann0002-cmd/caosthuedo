@@ -31,7 +31,7 @@ export const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
   projectId: "tiem-anh-nha-caos-d827f",
   storageBucket: "tiem-anh-nha-caos-d827f.firebasestorage.app",
   messagingSenderId: "449788423673",
-  appId: "1:449788423673:web:8488b804d60d63a68d2128",
+  appId: "1:449788423673:web:64a2cab6bb9768608d2128",
   vapidKey: "BKE-FrK50bX5zz885rkfzoWYKO_Jtun5MR2Qdg_H3KsGcVOesZdIswAIh5wGRYQggbt6sKWCL9ZGOmH-dV4VUp0"
 };
 
@@ -45,6 +45,12 @@ export function getFirebaseConfig(): FirebaseConfig {
     const stored = localStorage.getItem(STORAGE_KEY_CONFIG);
     if (stored) {
       const parsed = JSON.parse(stored);
+      // NẾU CÒN LƯU DỰ ÁN CŨ caos-thue-do THÌ XÓA NGAY VÀ RESET VỀ TIỆM ẢNH NHÀ CAOS
+      if (parsed.projectId === 'caos-thue-do' || parsed.messagingSenderId === '569940659255') {
+        localStorage.removeItem(STORAGE_KEY_CONFIG);
+        localStorage.removeItem(STORAGE_KEY_TOKEN);
+        return DEFAULT_FIREBASE_CONFIG;
+      }
       if (parsed.apiKey && parsed.projectId) {
         return parsed;
       }
