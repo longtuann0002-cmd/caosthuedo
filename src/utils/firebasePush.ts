@@ -377,30 +377,27 @@ export function listenToCrossDeviceAlerts(
 
   // 4. Listen via Supabase Cloud (đảm bảo 100% đồng bộ giữa PC và điện thoại)
   let supabaseInterval: any = null;
-  let lastProcessedSupabaseTime = listenStartTime;
+  let lastProcessedSupabaseTime = Date.now() - 3000;
 
-  if (isSupabaseConfigured) {
-    supabaseInterval = setInterval(async () => {
-      try {
-        const latestEvent = await fetchFromSupabase('thuedo_latest_push_event');
-        if (
-          latestEvent &&
-          latestEvent.timestamp &&
-          latestEvent.timestamp > lastProcessedSupabaseTime &&
-          latestEvent.timestamp > listenStartTime &&
-          Date.now() - latestEvent.timestamp < 120000 &&
-          latestEvent.senderSessionId !== CLIENT_SESSION_ID
-        ) {
-          lastProcessedSupabaseTime = latestEvent.timestamp;
-          onAlert({
-            title: latestEvent.title,
-            body: latestEvent.body,
-            data: latestEvent.data
-          });
-        }
-      } catch (e) {}
-    }, 2500);
-  }
+  supabaseInterval = setInterval(async () => {
+    try {
+      const latestEvent = await fetchFromSupabase('thuedo_latest_push_event');
+      if (
+        latestEvent &&
+        latestEvent.timestamp &&
+        latestEvent.timestamp > lastProcessedSupabaseTime &&
+        Math.abs(Date.now() - latestEvent.timestamp) < 60000 &&
+        latestEvent.senderSessionId !== CLIENT_SESSION_ID
+      ) {
+        lastProcessedSupabaseTime = latestEvent.timestamp;
+        onAlert({
+          title: latestEvent.title,
+          body: latestEvent.body,
+          data: latestEvent.data
+        });
+      }
+    } catch (e) {}
+  }, 2000);
 
   return () => {
     if (unsubscribeFirestore) unsubscribeFirestore();

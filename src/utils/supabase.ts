@@ -1,10 +1,14 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Retrieve credentials safely from Vite env and LocalStorage
+// Default Supabase Cloud credentials for Cao's Closet app
+export const DEFAULT_SUPABASE_URL = "https://efiadllfvhsqhditgewd.supabase.co";
+export const DEFAULT_SUPABASE_KEY = "sb_publishable_cr3cMMyKGudQZE3L3lBQMA_62CN0KZ8";
+
+// Retrieve credentials safely from Vite env, LocalStorage, or fallback to defaults
 export function getSupabaseCredentials() {
   const metaEnv = (import.meta as any).env || {};
-  let url = metaEnv.VITE_SUPABASE_URL || '';
-  let anonKey = metaEnv.VITE_SUPABASE_ANON_KEY || '';
+  let url = metaEnv.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  let anonKey = metaEnv.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
 
   if (typeof window !== 'undefined') {
     const localUrl = localStorage.getItem('custom_supabase_url');
