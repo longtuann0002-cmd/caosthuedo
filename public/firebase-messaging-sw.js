@@ -24,20 +24,20 @@ self.addEventListener('activate', (event) => {
 
 try {
   firebase.initializeApp({
-    apiKey: "AIzaSyDH12pXf1ffyNNQzoEm8SespexL3EM-CXg",
-    authDomain: "caos-thue-do.firebaseapp.com",
-    projectId: "caos-thue-do",
-    storageBucket: "caos-thue-do.firebasestorage.app",
-    messagingSenderId: "569940659255",
-    appId: "1:569940659255:web:a200bc976ed40c901b43b2"
+    apiKey: "AIzaSyA33_97jLHcuEz2TGHBpOeo2RS3y1VAnAE",
+    authDomain: "tiem-anh-nha-caos-d827f.firebaseapp.com",
+    projectId: "tiem-anh-nha-caos-d827f",
+    storageBucket: "tiem-anh-nha-caos-d827f.firebasestorage.app",
+    messagingSenderId: "449788423673",
+    appId: "1:449788423673:web:8488b804d60d63a68d2128"
   });
 
   const messaging = firebase.messaging();
 
   // Handle background FCM push messages (app closed / in background)
   messaging.onBackgroundMessage((payload) => {
-    const title = payload.notification?.title || payload.data?.title || '🔔 Quản Lý Thuê Đồ';
-    const body = payload.notification?.body || payload.data?.body || 'Bạn có thông báo mới!';
+    const title = payload.notification?.title || payload.data?.title || '🧾 Tiệm Nhà Caos';
+    const body = payload.notification?.body || payload.data?.body || 'Bạn có đơn thuê mới cần kiểm tra!';
 
     // Update app icon badge if supported (iOS 16.4+ PWA / Android)
     if ('setAppBadge' in self.navigator) {

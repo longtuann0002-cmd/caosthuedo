@@ -24,15 +24,15 @@ export interface FirebaseConfig {
   vapidKey?: string;
 }
 
-// Dedicated config for Clothing Rental App (caos-thue-do)
+// Dedicated config shared with Tiệm Nhà Caos verified Firebase infrastructure
 export const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
-  apiKey: "AIzaSyDH12pXf1ffyNNQzoEm8SespexL3EM-CXg",
-  authDomain: "caos-thue-do.firebaseapp.com",
-  projectId: "caos-thue-do",
-  storageBucket: "caos-thue-do.firebasestorage.app",
-  messagingSenderId: "569940659255",
-  appId: "1:569940659255:web:a200bc976ed40c901b43b2",
-  vapidKey: "BEzMNNVQyv7IvQii7zEYtXDdEf31xW4251LolhmPY14PtBRZdLxef14vpctQgIWoEgVTldz1kw9AqYBBm4McBGE"
+  apiKey: "AIzaSyA33_97jLHcuEz2TGHBpOeo2RS3y1VAnAE",
+  authDomain: "tiem-anh-nha-caos-d827f.firebaseapp.com",
+  projectId: "tiem-anh-nha-caos-d827f",
+  storageBucket: "tiem-anh-nha-caos-d827f.firebasestorage.app",
+  messagingSenderId: "449788423673",
+  appId: "1:449788423673:web:8488b804d60d63a68d2128",
+  vapidKey: "BKE-FrK50bX5zz885rkfzoWYKO_Jtun5MR2Qdg_H3KsGcVOesZdIswAIh5wGRYQggbt6sKWCL9ZGOmH-dV4VUp0"
 };
 
 const STORAGE_KEY_CONFIG = 'thuedo_firebase_config';

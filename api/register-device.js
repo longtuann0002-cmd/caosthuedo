@@ -1,3 +1,4 @@
+import { saveRegisteredToken } from './_fcmHelper.js';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://efiadllfvhsqhditgewd.supabase.co";
@@ -19,42 +20,47 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { subscription, deviceType } = req.body || {};
-    if (!subscription || !subscription.endpoint) {
-      return res.status(400).json({ error: 'Invalid subscription' });
+    const { token, deviceType } = req.body || {};
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
     }
 
-    const { data: row } = await supabase
-      .from('camlease_store')
-      .select('value')
-      .eq('key', 'apple_webpush_subscriptions')
-      .maybeSingle();
+    // 1. Lưu vào Firestore (hạ tầng giống hệt app máy ảnh)
+    await saveRegisteredToken(token, deviceType).catch(() => {});
 
-    let list = [];
-    if (row && row.value) {
-      try { list = JSON.parse(row.value); } catch (e) {}
-    }
+    // 2. Lưu vào Supabase
+    try {
+      const { data: row } = await supabase
+        .from('camlease_store')
+        .select('value')
+        .eq('key', 'fcm_registered_devices')
+        .maybeSingle();
 
-    const newRecord = {
-      subscription,
-      endpoint: subscription.endpoint,
-      deviceType: deviceType || 'Unknown',
-      updatedAt: new Date().toISOString()
-    };
+      let list = [];
+      if (row && row.value) {
+        try { list = JSON.parse(row.value); } catch (e) {}
+      }
 
-    const updated = Array.isArray(list) 
-      ? [...list.filter(item => item.endpoint !== subscription.endpoint), newRecord]
-      : [newRecord];
+      const newRecord = {
+        token,
+        deviceType: deviceType || 'Unknown',
+        updatedAt: new Date().toISOString()
+      };
 
-    await supabase
-      .from('camlease_store')
-      .upsert({
-        key: 'apple_webpush_subscriptions',
-        value: JSON.stringify(updated),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'key' });
+      const updated = Array.isArray(list) 
+        ? [...list.filter(item => item.token !== token), newRecord]
+        : [newRecord];
 
-    return res.status(200).json({ success: true, total: updated.length });
+      await supabase
+        .from('camlease_store')
+        .upsert({
+          key: 'fcm_registered_devices',
+          value: JSON.stringify(updated),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+    } catch (e) {}
+
+    return res.status(200).json({ success: true });
   } catch (err) {
     console.error('Error in /api/register-device:', err);
     return res.status(500).json({ error: err.message });
