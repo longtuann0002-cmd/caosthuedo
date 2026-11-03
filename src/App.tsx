@@ -23,7 +23,7 @@ import {
 } from './utils/supabase';
 import { formatDMY } from './utils/dateUtils';
 import { sendOrderCreatedNotification, checkAndTriggerMorningBriefing, showPushNotification, updateAppBadge, clearAppBadge } from './utils/pushNotification';
-import { broadcastToAllDevices, listenToCrossDeviceAlerts, initFirebaseMessaging, syncContractsToCloud, registerDeviceFCMToken } from './utils/firebasePush';
+import { broadcastToAllDevices, listenToCrossDeviceAlerts, initFirebaseMessaging, syncContractsToCloud, registerDeviceFCMToken, playNotificationSound } from './utils/firebasePush';
 import { matchContract, matchCamera, matchCustomer, smartMatch } from './utils/searchUtils';
 import { compressImageFile } from './utils/imageUtils';
 import { deduplicateContracts, generateNextContractCode } from './utils/contractUtils';
@@ -511,7 +511,9 @@ export default function App() {
     const unsubscribe = listenToCrossDeviceAlerts((alert) => {
       // 1. Toast trong ứng dụng
       addToast(alert.title, 'info', alert.body);
-      // 2. Nảy banner thông báo & rung ra ngoài màn hình thiết bị
+      // 2. Kêu chuông báo hiệu
+      playNotificationSound();
+      // 3. Nảy banner thông báo & rung ra ngoài màn hình thiết bị
       showPushNotification(alert.title, alert.body).catch(() => {});
     });
 
@@ -1610,6 +1612,7 @@ export default function App() {
     });
 
     // Hiển thị thông báo local ngay lập tức (không phụ thuộc Firebase)
+    playNotificationSound();
     sendOrderCreatedNotification(contractToAdd).catch(() => {});
   };
 
