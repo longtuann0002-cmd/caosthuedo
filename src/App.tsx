@@ -250,6 +250,29 @@ export default function App() {
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState<'synced' | 'syncing' | 'error' | 'offline'>(() => isSupabaseConfigured ? 'synced' : 'offline');
   const lastSyncedCamerasRef = useRef<string>('');
+  const computeCamerasSyncHash = (cams: Camera[]): string => {
+    return JSON.stringify(cams.map(c => [
+      c.id,
+      c.name,
+      c.status,
+      c.cleaningStatus,
+      c.dailyRate || 0,
+      c.price1Day || 0,
+      c.price2Days || 0,
+      c.price3Days || 0,
+      c.price4DaysPlus || 0,
+      c.purchasePrice || 0,
+      c.depositAmount || 0,
+      c.salePrice || 0,
+      c.color || '',
+      c.image || '',
+      c.size || '',
+      c.category || '',
+      c.serialNumber || '',
+      c.shortName || '',
+      (c.availableSizes || []).join(',')
+    ].join('|')));
+  };
   const [copiedSql, setCopiedSql] = useState(false);
 
   // Forgot Password States
@@ -817,7 +840,7 @@ export default function App() {
     saveStoredData('cameras', cameras);
     if (isSupabaseConfigured) {
       // Chỉ đồng bộ lên Cloud khi dữ liệu thực sự có sự thay đổi (tránh vòng lặp tải lên khi vừa kéo về)
-      const currentHash = JSON.stringify(cameras.map(c => c.id + c.name + c.status + c.cleaningStatus + (c.availableSizes || []).join(',')));
+      const currentHash = computeCamerasSyncHash(cameras);
       if (lastSyncedCamerasRef.current && currentHash === lastSyncedCamerasRef.current) {
         setCloudSyncState('synced');
         return;
@@ -1089,7 +1112,7 @@ export default function App() {
           // Always update localStorage cache with the authoritative cloud data
           saveStoredData('cameras', normalized);
           // Đánh dấu hash đã đồng bộ từ Cloud để tránh kích hoạt upload ngược lại
-          lastSyncedCamerasRef.current = JSON.stringify(normalized.map(c => c.id + c.name + c.status + c.cleaningStatus + (c.availableSizes || []).join(',')));
+          lastSyncedCamerasRef.current = computeCamerasSyncHash(normalized);
           setCloudSyncState('synced');
           if (splitCount > 0) {
             console.log(`[Auto-Repair] Đã tự động tách ${splitCount} trang phục có size gộp thành từng size độc lập.`);
@@ -1099,7 +1122,7 @@ export default function App() {
           const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
           const { normalized, splitCount } = normalizeOutfitsBySize(localCams);
           setCameras(normalized);
-          lastSyncedCamerasRef.current = JSON.stringify(normalized.map(c => c.id + c.name + c.status + c.cleaningStatus + (c.availableSizes || []).join(',')));
+          lastSyncedCamerasRef.current = computeCamerasSyncHash(normalized);
           setCloudSyncState('synced');
           if (splitCount > 0) {
             saveStoredData('cameras', normalized);
@@ -2200,7 +2223,11 @@ export default function App() {
       deleteOutfitImageFromStorage(oldCam.image, otherCameras);
     }
 
-    setCameras(prev => prev.map(c => (c.id === updatedCam.id ? updatedCam : c)));
+    setCameras(prev => {
+      const next = prev.map(c => (c.id === updatedCam.id ? updatedCam : c));
+      saveStoredData('cameras', next);
+      return next;
+    });
   };
 
   const handleDeleteCamera = (id: string) => {
@@ -4040,6 +4067,7 @@ export default function App() {
                   initialCleaningFilter={equipmentTrackerCleaningFilter}
                   initialStatusFilter={equipmentTrackerStatusFilter}
                   systemDate={systemDate}
+                  addToast={addToast}
                 />
               </TabErrorBoundary>
             )}

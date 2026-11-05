@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RentalContract } from '../types';
 import { compressImageFile } from '../utils/imageUtils';
 import MoneyInput from './MoneyInput';
 import { DressIcon } from './DressIcon';
-import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List, X, Copy, Loader2, Cloud } from 'lucide-react';
+import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List, X, Copy, Loader2, Cloud, Check, Save, AlertCircle } from 'lucide-react';
 import { getInitialTieredPrices } from '../utils/pricing';
 import { matchCamera } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
@@ -75,6 +75,7 @@ interface EquipmentTrackerProps {
   systemDate?: string;
   onRestoreFromExpenses?: () => void;
   outfitExpensesCount?: number;
+  addToast?: (title: string, type?: 'success' | 'error' | 'info', description?: string) => void;
 }
 
 export default function EquipmentTracker({
@@ -90,7 +91,8 @@ export default function EquipmentTracker({
   initialStatusFilter,
   systemDate = '2026-06-17',
   onRestoreFromExpenses,
-  outfitExpensesCount = 0
+  outfitExpensesCount = 0,
+  addToast
 }: EquipmentTrackerProps) {
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
 
@@ -262,6 +264,21 @@ export default function EquipmentTracker({
     printPrice3To9: 0,
     printPrice10Plus: 0,
   });
+
+  const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false);
+  const initialFormSnapshotRef = useRef<string>('');
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const handleRequestClose = () => {
+    if (editingCamera && initialFormSnapshotRef.current && initialFormSnapshotRef.current !== JSON.stringify(formState)) {
+      setShowUnsavedPrompt(true);
+    } else {
+      setShowAddModal(false);
+      setValidationError(null);
+      setShowUnsavedPrompt(false);
+      setEditingCamera(null);
+    }
+  };
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadingSize, setUploadingSize] = useState<string | null>(null);
@@ -641,6 +658,21 @@ export default function EquipmentTracker({
     });
     setEditingCamera(cam);
     setShowAddModal(true);
+    // Snapshot form state to detect unsaved changes
+    setTimeout(() => {
+      initialFormSnapshotRef.current = JSON.stringify({
+        name: cam.name,
+        shortName: (cam.shortName || cam.serialNumber || '').replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim(),
+        purchasePrice: cam.purchasePrice ?? (cam.depositAmount ? cam.depositAmount : cam.dailyRate * 5),
+        dailyRate: cam.dailyRate,
+        salePrice: cam.salePrice || 0,
+        price1Day: cam.price1Day ?? cam.dailyRate,
+        price2Days: Math.round((cam.price2Days ?? ((cam.price1Day ?? cam.dailyRate) + Math.max(0, (cam.price1Day ?? cam.dailyRate) - 30000)) / 2) * 2),
+        price3Days: Math.round((cam.price3Days ?? ((cam.price1Day ?? cam.dailyRate) + Math.max(0, (cam.price1Day ?? cam.dailyRate) - 30000) + Math.max(0, (cam.price1Day ?? cam.dailyRate) - 40000)) / 3) * 3),
+        price4DaysPlus: cam.price4DaysPlus ?? Math.max(0, (cam.price1Day ?? cam.dailyRate) - 40000),
+        depositAmount: cam.depositAmount ?? (cam.category === 'Printer' ? 1000000 : 1500000),
+      });
+    }, 0);
   };
 
   const handleDuplicateCamera = (cam: Camera, e?: React.MouseEvent) => {
@@ -840,6 +872,8 @@ export default function EquipmentTracker({
     }
     setShowAddModal(false);
     setValidationError(null);
+    setShowUnsavedPrompt(false);
+    initialFormSnapshotRef.current = '';
   };
 
   const toggleMaintenance = (cam: Camera) => {
@@ -2225,14 +2259,35 @@ export default function EquipmentTracker({
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={handleRequestClose}
                 className="text-white hover:text-gray-200 font-bold text-xl cursor-pointer"
               >
                 &times;
               </button>
             </div>
 
+            {/* Unsaved changes warning bar */}
+            {showUnsavedPrompt && (
+              <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0">
+                <span className="text-xs text-amber-800 font-semibold flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                  Bạn có thay đổi chưa được lưu. Bấm &quot;Lưu thay đổi&quot; để lưu, hoặc thoát mà không lưu?
+                </span>
+                <div className="flex gap-2 shrink-0">
+                  <button type="button" onClick={() => { setShowAddModal(false); setShowUnsavedPrompt(false); setValidationError(null); initialFormSnapshotRef.current = ''; }}
+                    className="text-xs font-bold text-amber-700 hover:text-red-700 cursor-pointer px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
+                    Thoát không lưu
+                  </button>
+                  <button type="button" onClick={() => { formRef.current?.requestSubmit(); setShowUnsavedPrompt(false); }}
+                    className="text-xs font-bold bg-orange-600 hover:bg-orange-700 text-white cursor-pointer px-3 py-1 rounded-lg flex items-center gap-1 transition-colors">
+                    <Save className="w-3 h-3" /> Lưu ngay
+                  </button>
+                </div>
+              </div>
+            )}
+
             <form 
+              ref={formRef}
               onSubmit={handleSubmit} 
               className="p-6 space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
               style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
@@ -3275,15 +3330,16 @@ export default function EquipmentTracker({
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={handleRequestClose}
                   className="px-4 py-2 text-sm font-medium text-gray-650 hover:bg-gray-105 rounded-xl transition-colors cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
-                  className="bg-orange-600 text-white font-medium px-5 py-2 rounded-xl text-sm hover:bg-orange-700 transition-all cursor-pointer"
+                  className="bg-orange-600 text-white font-medium px-5 py-2 rounded-xl text-sm hover:bg-orange-700 transition-all cursor-pointer flex items-center gap-1.5"
                 >
+                  <Check className="w-4 h-4" />
                   {editingCamera ? 'Lưu thay đổi' : 'Thêm vào tủ đồ'}
                 </button>
               </div>
