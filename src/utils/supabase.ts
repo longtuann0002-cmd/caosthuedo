@@ -237,7 +237,23 @@ export async function syncToSupabaseChunked(key: string, data: any[], chunkSize 
 
   // If payload is small enough, use regular upsert
   if (sizeMB < 2) {
-    return syncToSupabase(key, data);
+    const ok = await syncToSupabase(key, data);
+    if (ok) {
+      // Xóa manifest & chunks cũ nếu có (tránh lần load sau đọc nhầm chunk cũ thay vì key mới)
+      try {
+        await client.from('camlease_store').delete().eq('key', `${key}_manifest`);
+        // Xóa tối đa 20 chunk cũ (phòng trường hợp trước đó có nhiều chunk)
+        for (let i = 0; i < 20; i++) {
+          const { data: chunkCheck } = await client
+            .from('camlease_store').select('key').eq('key', `${key}_chunk_${i}`).maybeSingle();
+          if (!chunkCheck) break;
+          await client.from('camlease_store').delete().eq('key', `${key}_chunk_${i}`);
+        }
+      } catch {
+        // ignore cleanup errors — data đã được lưu thành công rồi
+      }
+    }
+    return ok;
   }
 
   try {
