@@ -1,5 +1,0 @@
-allowBuilds:
-  '@firebase/util': false
-  '@google/genai': false
-  esbuild: false
-  protobufjs: false
