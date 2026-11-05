@@ -250,6 +250,8 @@ export default function App() {
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState<'synced' | 'syncing' | 'error' | 'offline'>(() => isSupabaseConfigured ? 'synced' : 'offline');
   const lastSyncedCamerasRef = useRef<string>('');
+  // Set lưu danh sách các ID hợp đồng đã từng phát thông báo để tránh thông báo trùng lặp nhiều lần
+  const notifiedContractIdsRef = useRef<Set<string>>(new Set());
   const computeCamerasSyncHash = (cams: Camera[]): string => {
     return JSON.stringify(cams.map(c => [
       c.id,
@@ -544,6 +546,13 @@ export default function App() {
     }
 
     const unsubscribe = listenToCrossDeviceAlerts((alert) => {
+      // Nếu hợp đồng này đã được thông báo trên thiết bị rồi thì bỏ qua để không bị nảy thông báo liên tục
+      const contractId = alert.data?.contractId;
+      if (contractId && notifiedContractIdsRef.current.has(contractId)) {
+        return;
+      }
+      if (contractId) notifiedContractIdsRef.current.add(contractId);
+
       // 1. Toast trong ứng dụng
       addToast(alert.title, 'info', alert.body);
       // 2. Kêu chuông báo hiệu
@@ -572,13 +581,22 @@ export default function App() {
             const newOrders = cloud.filter(c => !prevIds.has(c.id || c.contractCode));
             if (newOrders.length > 0) {
               const newest = newOrders[0];
-              const itemsText = (newest.items || []).map((i: any) => i.cameraName).join(', ') || 'Trang phục thuê';
-              const title = `📋 Đơn đặt mới: ${newest.contractCode}`;
-              const body = `Khách: ${newest.customerName} • ${itemsText} • ${newest.totalPrice?.toLocaleString('vi-VN')}đ`;
+              const uniqueKey = newest.id || newest.contractCode;
 
-              addToast(title, 'info', body);
-              playNotificationSound();
-              showPushNotification(title, body).catch(() => {});
+              // Kiểm tra xem đã thông báo đơn này chưa
+              if (uniqueKey && !notifiedContractIdsRef.current.has(uniqueKey)) {
+                notifiedContractIdsRef.current.add(uniqueKey);
+                if (newest.id) notifiedContractIdsRef.current.add(newest.id);
+                if (newest.contractCode) notifiedContractIdsRef.current.add(newest.contractCode);
+
+                const itemsText = (newest.items || []).map((i: any) => i.cameraName).join(', ') || 'Trang phục thuê';
+                const title = `📋 Đơn đặt mới: ${newest.contractCode}`;
+                const body = `Khách: ${newest.customerName} • ${itemsText} • ${newest.totalPrice?.toLocaleString('vi-VN')}đ`;
+
+                addToast(title, 'info', body);
+                playNotificationSound();
+                showPushNotification(title, body).catch(() => {});
+              }
 
               const raw = cloud.map(c => ({ ...c, note: cleanSystemNote(c.note) }));
               const { deduplicated } = deduplicateContracts(raw);
@@ -1133,6 +1151,11 @@ export default function App() {
           const rawContracts = (cloudContracts as RentalContract[]).map(c => ({ ...c, note: cleanSystemNote(c.note) }));
           const { deduplicated, fixedCount } = deduplicateContracts(rawContracts);
           setContracts(deduplicated);
+          // Đánh dấu tất cả hợp đồng hiện có vào notifiedContractIdsRef để không bắn thông báo lại
+          deduplicated.forEach(c => {
+            if (c.id) notifiedContractIdsRef.current.add(c.id);
+            if (c.contractCode) notifiedContractIdsRef.current.add(c.contractCode);
+          });
           if (fixedCount > 0) {
             console.warn(`[Auto-Repair] Đã phát hiện và tự động sửa ${fixedCount} mã hợp đồng bị trùng lặp.`);
             saveStoredData('contracts', deduplicated);
@@ -1144,6 +1167,10 @@ export default function App() {
           const localContracts = loadStoredData('contracts', INITIAL_CONTRACTS);
           const { deduplicated } = deduplicateContracts(localContracts);
           setContracts(deduplicated);
+          deduplicated.forEach(c => {
+            if (c.id) notifiedContractIdsRef.current.add(c.id);
+            if (c.contractCode) notifiedContractIdsRef.current.add(c.contractCode);
+          });
         }
 
         if (cloudCustomers !== null) {
@@ -1672,7 +1699,11 @@ export default function App() {
       `Mã hợp đồng: ${newContract.contractCode} | Khách hàng: ${newContract.customerName} (Đã lưu vào danh sách khách hàng)`
     );
 
-    // Broadcast to ALL devices (including this one) — single source of notification
+    // Đánh dấu mã này đã được thông báo để không bị trigger trùng lặp ở các tầng lắng nghe khác
+    if (contractToAdd.id) notifiedContractIdsRef.current.add(contractToAdd.id);
+    if (contractToAdd.contractCode) notifiedContractIdsRef.current.add(contractToAdd.contractCode);
+
+    // Broadcast đến các thiết bị khác qua Cloud / Vercel Push
     const itemsText = (newContract.items || []).map(i => i.cameraName).join(' & ') || 'Thiết bị thuê';
     const timeInfo = newContract.is6Hours
       ? `Gói 6h · ${newContract.startTime || '08:00'}–${newContract.returnTime || '14:00'}`
@@ -1686,7 +1717,7 @@ export default function App() {
       console.warn('Broadcast to all devices error:', err);
     });
 
-    // Hiển thị thông báo local ngay lập tức (không phụ thuộc Firebase)
+    // Hiển thị thông báo màn hình duy nhất 1 lần cho thiết bị hiện tại
     playNotificationSound();
     sendOrderCreatedNotification(contractToAdd).catch(() => {});
   };
