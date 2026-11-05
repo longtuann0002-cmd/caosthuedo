@@ -1,0 +1,208 @@
+import { Camera } from '../types';
+
+/**
+ * Lấy đơn giá thuê tương ứng dựa trên số ngày thuê hoặc hình thức thuê 6 tiếng
+ * @param camera Thiết bị camera/lens tương ứng
+ * @param days Số ngày thuê (mặc định lấy ít nhất 1 ngày)
+ * @param is6Hours Có phải hình thức thuê 6 tiếng hay không
+ */
+export function getCameraRateForDuration(camera: Camera, days: number, is6Hours?: boolean): number {
+  if (camera.category === 'Printer' || camera.isPrinter) {
+    // Với máy in ảnh, giá cơ bản lấy theo giá ngày hoặc đơn giá 1 tấm
+    return camera.price1Day ?? camera.dailyRate ?? (camera.printPrice1To2 ?? 40000);
+  }
+
+  const p1 = camera.price1Day ?? camera.dailyRate;
+  if (is6Hours) {
+    return camera.price6Hours ?? (Math.round((p1 * 0.7) / 10000) * 10000); // 70% giá ngày đầu làm tròn chẵn chục nghìn
+  }
+
+  const d = Math.max(1, days);
+  
+  const p2_daily = Math.max(0, p1 - 30000); // Ngày 2 giảm 30k so với ngày 1
+  const p4_daily = Math.max(0, p1 - 40000); // Từ ngày 4 trở đi giảm 40k so với ngày 1
+  const p3_daily = p4_daily; // Ngày 3 bằng ngày 4
+
+  const defaultPrice2DaysAvg = (p1 + p2_daily) / 2;
+  const defaultPrice3DaysAvg = (p1 + p2_daily + p3_daily) / 3;
+
+  const p2 = camera.price2Days ?? defaultPrice2DaysAvg;
+  const p3 = camera.price3Days ?? defaultPrice3DaysAvg;
+  const p4 = camera.price4DaysPlus ?? p4_daily;
+
+  if (d === 1) {
+    return p1;
+  }
+  if (d === 2) {
+    return p2;
+  }
+  if (d === 3) {
+    return p3;
+  }
+  return p4;
+}
+
+/**
+ * Tạo giá trị mặc định cho cấu hình giá thuê đa tầng dựa trên đơn giá mặc định
+ */
+export function getInitialTieredPrices(dailyRate: number) {
+  const p1 = dailyRate;
+  const p2_daily = Math.max(0, p1 - 30000);
+  const p4_daily = Math.max(0, p1 - 40000);
+  const p3_daily = p4_daily;
+
+  return {
+    price1Day: p1,
+    price2Days: (p1 + p2_daily) / 2,
+    price3Days: (p1 + p2_daily + p3_daily) / 3,
+    price4DaysPlus: p4_daily
+  };
+}
+
+/**
+ * Chuyển đổi chuỗi giờ "HH:mm" thành số phút trong ngày
+ */
+export function timeToMinutes(timeStr?: string): number {
+  if (!timeStr) return 8 * 60; // Mặc định 08:00
+  const [h, m] = timeStr.split(':').map(Number);
+  return (isNaN(h) ? 8 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+
+/**
+ * Tự động cộng 6 tiếng từ giờ bắt đầu lấy máy
+ */
+export function add6Hours(timeStr?: string): string {
+  if (!timeStr) return '14:00';
+  const [h, m] = timeStr.split(':').map(Number);
+  if (isNaN(h)) return '14:00';
+  const minutes = isNaN(m) ? 0 : m;
+  const totalMinutes = h * 60 + minutes + 6 * 60;
+  const endH = Math.floor(totalMinutes / 60) % 24;
+  const endM = totalMinutes % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+}
+
+/**
+ * Kiểm tra xung đột đặt lịch giữa 6 tiếng và cả ngày / nhiều ngày
+ */
+export function checkBookingConflict(
+  selectedCameraIds: string[],
+  startDate: string,
+  endDate: string,
+  is6Hours: boolean = false,
+  existingContracts: any[] = [],
+  ignoreContractId?: string,
+  startTime?: string,
+  returnTime?: string
+): { hasConflict: boolean; message: string } {
+  const getDatesInRange = (startStr: string, endStr: string): string[] => {
+    const dates: string[] = [];
+    const start = new Date(startStr + 'T00:00:00');
+    const end = new Date(endStr + 'T00:00:00');
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
+    const loop = new Date(start);
+    while (loop <= end) {
+      const yyyy = loop.getFullYear();
+      const mm = String(loop.getMonth() + 1).padStart(2, '0');
+      const dd = String(loop.getDate()).padStart(2, '0');
+      dates.push(`${yyyy}-${mm}-${dd}`);
+      loop.setDate(loop.getDate() + 1);
+    }
+    return dates;
+  };
+
+  const candidateDates = is6Hours ? [startDate] : getDatesInRange(startDate, endDate);
+
+  for (const cameraId of selectedCameraIds) {
+    for (const contract of existingContracts) {
+      if (contract.status === 'Cancelled') continue;
+      if (ignoreContractId && contract.id === ignoreContractId) continue;
+
+      const hasCamera = contract.items.some((item: any) => item.cameraId === cameraId);
+      if (!hasCamera) continue;
+
+      const existingDates = contract.is6Hours ? [contract.startDate] : getDatesInRange(contract.startDate, contract.endDate);
+      
+      const overlapDate = candidateDates.find(d => existingDates.includes(d));
+      if (overlapDate) {
+        const item = contract.items.find((i: any) => i.cameraId === cameraId);
+        const name = item ? item.cameraName : 'Trang phục';
+        
+        if (is6Hours && !contract.is6Hours) {
+          return {
+            hasConflict: true,
+            message: `Trùng lịch: Trang phục "${name}" đã có hợp đồng thuê cả ngày/nhiều ngày vào ngày ${overlapDate}. Không được phép đặt thêm lịch thuê 6 tiếng!`
+          };
+        }
+        if (!is6Hours && contract.is6Hours) {
+          const exStart = contract.startTime || '08:00';
+          const exEnd = contract.returnTime || '14:00';
+          return {
+            hasConflict: true,
+            message: `Trùng lịch: Trang phục "${name}" đã có hợp đồng thuê 6 tiếng (${exStart} - ${exEnd}) vào ngày ${overlapDate}. Không được phép đặt thêm lịch thuê cả ngày!`
+          };
+        }
+        if (!is6Hours && !contract.is6Hours) {
+          return {
+            hasConflict: true,
+            message: `Trùng lịch: Trang phục "${name}" đã có lịch thuê cả ngày/nhiều ngày vào ngày ${overlapDate}. Không thể đặt trùng!`
+          };
+        }
+        if (is6Hours && contract.is6Hours) {
+          // Tính khung giờ ứng viên
+          const candStart = timeToMinutes(startTime || '08:00');
+          let candEnd = timeToMinutes(returnTime || '14:00');
+          if (candEnd <= candStart) candEnd += 24 * 60; // Xử lý trường hợp qua đêm
+
+          // Tính khung giờ hợp đồng đã có sẵn
+          const existStart = timeToMinutes(contract.startTime || '08:00');
+          let existEnd = timeToMinutes(contract.returnTime || '14:00');
+          if (existEnd <= existStart) existEnd += 24 * 60; // Xử lý trường hợp qua đêm
+
+          // Kiểm tra giao nhau giữa 2 khoảng thời gian: [candStart, candEnd] và [existStart, existEnd]
+          // Giao nhau khi: candStart < existEnd && existStart < candEnd
+          const isOverlapping = candStart < existEnd && existStart < candEnd;
+
+          if (isOverlapping) {
+            const exStart = contract.startTime || '08:00';
+            const exEnd = contract.returnTime || '14:00';
+            const curStart = startTime || '08:00';
+            const curEnd = returnTime || '14:00';
+            return {
+              hasConflict: true,
+              message: `Trùng giờ thuê 6 tiếng: Trang phục "${name}" đã có khách đặt từ ${exStart} đến ${exEnd} vào ngày ${overlapDate}. Khung giờ bạn chọn (${curStart} - ${curEnd}) bị trùng lặp thời gian!`
+            };
+          }
+          // Nếu không trùng giờ (ví dụ: Khách 1 thuê 08:00 - 14:00, Khách 2 thuê 14:00 - 20:00 hoặc 15:00 - 21:00) -> HỢP LỆ! Không báo lỗi.
+        }
+      }
+    }
+  }
+
+  return { hasConflict: false, message: '' };
+}
+
+/**
+ * Tính đơn giá và thành tiền in ảnh theo số lượng tấm:
+ * - 1-2 tấm: 40.000đ/tấm (hoặc theo cấu hình riêng của máy)
+ * - 3-9 tấm: 35.000đ/tấm
+ * - Từ 10 tấm trở lên: 33.000đ/tấm
+ */
+export function getPrintPrice(
+  printer: Camera,
+  count: number
+): { unitPrice: number; totalPrice: number; tierLabel: string } {
+  const c = Math.max(1, count || 1);
+  const p1 = printer.printPrice1To2 ?? 40000;
+  const p2 = printer.printPrice3To9 ?? 35000;
+  const p3 = printer.printPrice10Plus ?? 33000;
+
+  if (c >= 10) {
+    return { unitPrice: p3, totalPrice: p3 * c, tierLabel: 'Từ 10 tấm trở lên' };
+  }
+  if (c >= 3) {
+    return { unitPrice: p2, totalPrice: p2 * c, tierLabel: '3-9 tấm' };
+  }
+  return { unitPrice: p1, totalPrice: p1 * c, tierLabel: '1-2 tấm' };
+}
+
