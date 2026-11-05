@@ -1,9 +1,4 @@
-import { sendFCMMessage, getRegisteredTokens } from './_fcmHelper.js';
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://efiadllfvhsqhditgewd.supabase.co";
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_cr3cMMyKGudQZE3L3lBQMA_62CN0KZ8";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+﻿import { sendFCMMessage, getRegisteredTokens } from './_fcmHelper.js';
 
 export default async function handler(req, res) {
   // CORS
@@ -29,28 +24,7 @@ export default async function handler(req, res) {
     if (targetToken) {
       tokens = [targetToken];
     } else {
-      // 1. Lấy từ Firestore
-      const firestoreTokens = await getRegisteredTokens().catch(() => []);
-      
-      // 2. Lấy thêm từ Supabase để đảm bảo 100% không sót thiết bị nào
-      let supabaseTokens = [];
-      try {
-        const { data: row } = await supabase
-          .from('camlease_store')
-          .select('value')
-          .eq('key', 'fcm_registered_devices')
-          .maybeSingle();
-        if (row && row.value) {
-          const parsed = JSON.parse(row.value);
-          if (Array.isArray(parsed)) {
-            supabaseTokens = parsed.map(item => item.token || item).filter(Boolean);
-          }
-        }
-      } catch (e) {}
-
-      // Gộp và loại trừ trùng lặp
-      const set = new Set([...firestoreTokens, ...supabaseTokens]);
-      tokens = Array.from(set);
+      tokens = await getRegisteredTokens();
     }
 
     if (tokens.length === 0) {
@@ -62,7 +36,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Send push to all tokens in parallel via Google FCM v1 / Apple APNs
+    // Send push to all tokens in parallel
     const results = await Promise.allSettled(
       tokens.map(token => sendFCMMessage(token, title, body, data))
     );
@@ -70,7 +44,7 @@ export default async function handler(req, res) {
     let delivered = 0;
     let failed = 0;
     results.forEach(r => {
-      if (r.status === 'fulfilled' && r.value?.ok) {
+      if (r.status === 'fulfilled' && r.value.ok) {
         delivered++;
       } else {
         failed++;

@@ -66,35 +66,6 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-/* ── Toàn app: ép tất cả chữ lên 500 Medium, không để 400 Regular ── */
-/* Dùng !important để ghi đè Tailwind reset và utility classes */
-*, *::before, *::after {
-  font-weight: 500 !important;
-}
-
-/* Giữ nguyên headings đậm hơn */
-h1, h2, h3, h4, h5, h6,
-.font-semibold, .font-bold, .font-extrabold, .font-black,
-[class*="font-semibold"], [class*="font-bold"] {
-  font-weight: revert !important;
-}
-.font-semibold { font-weight: 600 !important; }
-.font-bold     { font-weight: 700 !important; }
-.font-extrabold{ font-weight: 800 !important; }
-.font-black    { font-weight: 900 !important; }
-.font-medium   { font-weight: 500 !important; }
-.font-normal   { font-weight: 500 !important; }
-.font-light    { font-weight: 500 !important; }
-
-/* Tương phản rõ hơn trên mobile */
-@media (max-width: 768px) {
-  body {
-    font-weight: 500;
-  }
 }
 
 /* iOS Performance and Touch Highlight Customizations */
@@ -136,7 +107,24 @@ input[type="date"].date-picker-overlay::-webkit-calendar-picker-indicator {
   cursor: pointer !important;
 }
 
+/* Prevent iOS & Mobile Safari from automatically zooming into inputs when focused (Apple triggers auto-zoom when font-size < 16px) */
+@media screen and (max-width: 768px) {
+  input:not([type="date"]),
+  select,
+  textarea,
+  input[type="text"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="search"] {
+    font-size: 16px !important;
+  }
 
+  /* Date inputs on mobile: compact, prevent overflow and overlap */
+  input[type="date"] {
+    font-size: 13px !important;
+  }
+}
 
 /* Ensure native datepicker display on iOS WebKit doesn't misalign or overflow */
 input[type="date"]::-webkit-date-and-time-value {
@@ -199,8 +187,3 @@ body.modal-locked {
   touch-action: pan-y !important;
 }
 
-
-@keyframes slideUpSheet {
-  from { transform: translateY(100%); opacity: 0.5; }
-  to   { transform: translateY(0);    opacity: 1; }
-}

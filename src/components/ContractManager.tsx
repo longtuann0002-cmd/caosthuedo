@@ -6,9 +6,9 @@ import {
   Search, Plus, Filter, Calendar, FileText, Check, AlertCircle, RefreshCw, X, 
   ShieldAlert, Phone, Briefcase, Trash2, CreditCard, Settings, Download, 
   Image as ImageIcon, ChevronLeft, ChevronRight, FileSpreadsheet, Copy, Edit2, 
-  Save, Clock, DollarSign, User, AlertTriangle, CheckCircle2, Zap, Printer 
+  Save, Clock, DollarSign, User, AlertTriangle, CheckCircle2, Zap 
 } from 'lucide-react';
-import { getCameraRateForDuration, checkBookingConflict, getPrintPrice } from '../utils/pricing';
+import { getCameraRateForDuration, checkBookingConflict, add6Hours, getPrintPrice } from '../utils/pricing';
 import { loadStoredData, saveStoredData, cleanSystemNote } from '../utils/mockData';
 import { isSupabaseConfigured, syncToSupabase, fetchFromSupabase } from '../utils/supabase';
 import { formatDMY } from '../utils/dateUtils';
@@ -27,9 +27,6 @@ interface ContractManagerProps {
   onDeleteContract?: (id: string) => void;
   onUpdateContractNote?: (id: string, note: string) => void;
   onUpdateContractCustomer?: (id: string, customerName: string, customerPhone: string, customerDocType: RentalContract['customerDocType'], customerDocNote: string) => void;
-  onUpdateContractSurcharge?: (id: string, surchargeAmount: number, surchargeReason: string) => void;
-  onUpdateContractDates?: (id: string, startDate: string, endDate: string, newTotalPrice: number) => void;
-  onUpdateContractItems?: (id: string, items: RentalContract['items'], newTotalPrice: number) => void;
   initialSearchQuery?: string;
   systemDate: string;
   isAdmin?: boolean;
@@ -134,12 +131,6 @@ export function QrDisplay({
 
 export const QrCanvas = QrDisplay;
 
-export const DEFAULT_RENTAL_TERMS = `• Kiểm tra khi nhận: Quý khách vui lòng kiểm tra kỹ trang phục và phụ kiện đi kèm (khóa kéo, đường may, vết bẩn, khuy áo) trước khi nhận rời khỏi cửa hàng.
-• Bảo quản trang phục: Không tự ý cắt may, bóp nới, là/ủi ở nhiệt độ cao hoặc sử dụng hóa chất tẩy rửa mạnh làm hỏng form dáng và chất liệu vải.
-• Thời gian trả đồ: Vui lòng hoàn trả trang phục đúng hạn thỏa thuận. Trường hợp cần gia hạn, xin vui lòng thông báo sớm cho cửa hàng để được hỗ trợ (tránh phát sinh phụ thu quá hạn).
-• Hư hỏng & Bồi hoàn: Nếu trang phục bị rách, cháy, ố bẩn không thể phục hồi hoặc làm mất đồ/phụ kiện, quý khách vui lòng thanh toán phí phục hồi hoặc bồi hoàn theo giá trị sản phẩm.
-• Cọc thế chấp: Tiệm sẽ hoàn trả 100% tiền cọc hoặc giấy tờ tùy thân cho quý khách ngay sau khi kiểm tra nhận lại đầy đủ trang phục.`;
-
 export default function ContractManager({
   contracts,
   cameras,
@@ -149,9 +140,6 @@ export default function ContractManager({
   onDeleteContract,
   onUpdateContractNote,
   onUpdateContractCustomer,
-  onUpdateContractSurcharge,
-  onUpdateContractDates,
-  onUpdateContractItems,
   initialSearchQuery,
   systemDate,
   isAdmin = false,
@@ -175,11 +163,6 @@ export default function ContractManager({
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<string>('');
 
-  // States for surcharge editing in modal
-  const [editingSurcharge, setEditingSurcharge] = useState(false);
-  const [surchargeDraft, setSurchargeDraft] = useState<number>(0);
-  const [surchargeReasonDraft, setSurchargeReasonDraft] = useState<string>('');
-
   // States for editing customer info in modal
   const [editingCustomer, setEditingCustomer] = useState(false);
   const [customerDraft, setCustomerDraft] = useState({
@@ -188,22 +171,6 @@ export default function ContractManager({
     docType: 'CCCD' as RentalContract['customerDocType'],
     docNote: ''
   });
-
-  // States for editing dates in modal
-  const [editingDates, setEditingDates] = useState(false);
-  const [dateDraft, setDateDraft] = useState({ startDate: '', endDate: '' });
-
-  // States for editing items (outfit list) in modal
-  const [editingItems, setEditingItems] = useState(false);
-  const [itemsDraft, setItemsDraft] = useState<RentalContract['items']>([]);
-  const [itemSearchQuery, setItemSearchQuery] = useState('');
-
-  // State for customizable rental terms
-  const [rentalTerms, setRentalTerms] = useState<string>(() => {
-    return localStorage.getItem('shop_rental_terms') || DEFAULT_RENTAL_TERMS;
-  });
-  const [editingTerms, setEditingTerms] = useState(false);
-  const [termsDraft, setTermsDraft] = useState('');
 
   const handleSaveNote = (id: string) => {
     if (onUpdateContractNote) {
@@ -341,9 +308,6 @@ export default function ContractManager({
 
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  // Detect iOS / iPhone / iPad Safari
-  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-
   const handleExportImage = async (elementId: string, filename: string) => {
     const element = document.getElementById(elementId);
     if (!element) {
@@ -353,13 +317,12 @@ export default function ContractManager({
     
     setIsExporting(true);
     setEditingCustomer(false);
-    setEditingTerms(false);
     
     // Wait for isExporting state to remove edit buttons from DOM
-    // iOS Safari needs extra time to render fonts and external assets
-    await new Promise(resolve => setTimeout(resolve, isIOS ? 600 : 250));
+    await new Promise(resolve => setTimeout(resolve, 250));
     
     // Temporarily override inline styles to neutralize margin offset
+    // caused by mx-auto on large screens (web), then restore after capture
     const prevMarginLeft = element.style.marginLeft;
     const prevMarginRight = element.style.marginRight;
     const prevWidth = element.style.width;
@@ -373,55 +336,18 @@ export default function ContractManager({
     element.style.maxWidth = '420px';
     
     try {
-      // iOS Safari "double-render" trick:
-      // First pass warms up the canvas (often blank on iOS),
-      // second pass produces the correct output.
-      const toPngOptions = {
+      const dataUrl = await toPng(element, {
         backgroundColor: '#ffffff',
-        pixelRatio: isIOS ? 1.5 : 2, // lower ratio on iOS to prevent memory crash
+        pixelRatio: 2,
         width: 420,
-        cacheBust: true,             // force reload cross-origin images
-      };
-
-      if (isIOS) {
-        // Warm-up pass (result discarded)
-        await toPng(element, toPngOptions).catch(() => {});
-        // Short pause for Safari to settle
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-
-      const dataUrl = await toPng(element, toPngOptions);
-
-      if (isIOS) {
-        // iOS Safari does NOT support the `download` attribute on <a> tags.
-        // Open image in a new tab — user can long-press → Save Image.
-        const newTab = window.open();
-        if (newTab) {
-          newTab.document.write(
-            `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title></head>` +
-            `<body style="margin:0;background:#111;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding-bottom:80px;">` +
-            `<div style="position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">` +
-            `<span style="color:#fff;font-family:sans-serif;font-size:13px;flex:1;">📥 Nhấn giữ ảnh bên dưới → <b>Lưu vào Ảnh</b></span>` +
-            `<button onclick="window.close()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:14px;font-weight:bold;cursor:pointer;font-family:sans-serif;white-space:nowrap;">✕ Đóng</button>` +
-            `</div>` +
-            `<div style="margin-top:56px;width:100%;display:flex;justify-content:center;padding:16px;box-sizing:border-box;">` +
-            `<img src="${dataUrl}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 4px 32px rgba(0,0,0,.5);" />` +
-            `</div>` +
-            `</body></html>`
-          );
-          newTab.document.close();
-        } else {
-          // Popup blocked fallback
-          setCustomAlertMessage('Trình duyệt đã chặn cửa sổ. Vui lòng cho phép popup và thử lại!');
-        }
-      } else {
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      });
+      
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err) {
       console.error('Lỗi khi xuất ảnh:', err);
       setCustomAlertMessage('Không thể tạo file ảnh. Vui lòng thử lại!');
@@ -434,71 +360,6 @@ export default function ContractManager({
       element.style.maxWidth = prevMaxWidth;
       setIsExporting(false);
     }
-  };
-
-  const handlePrintReceipt = (elementId: string) => {
-    const element = document.getElementById(elementId);
-    if (!element) {
-      setCustomAlertMessage('Không tìm thấy dữ liệu hóa đơn để in!');
-      return;
-    }
-
-    const printFrame = document.createElement('iframe');
-    printFrame.style.position = 'fixed';
-    printFrame.style.right = '0';
-    printFrame.style.bottom = '0';
-    printFrame.style.width = '0';
-    printFrame.style.height = '0';
-    printFrame.style.border = '0';
-    document.body.appendChild(printFrame);
-
-    const frameDoc = printFrame.contentWindow?.document;
-    if (!frameDoc) return;
-
-    const headContent = Array.from(document.head.querySelectorAll('link[rel="stylesheet"], style'))
-      .map(el => el.outerHTML)
-      .join('\n');
-
-    frameDoc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Hóa đơn ${selectedContract?.contractCode || 'hợp đồng'}</title>
-          ${headContent}
-          <style>
-            @page { size: auto; margin: 8mm; }
-            body { 
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-              background: #fff !important; 
-              color: #000 !important;
-              padding: 0;
-              margin: 0;
-            }
-            .no-print, [data-no-export="true"], button { display: none !important; }
-            #${elementId} {
-              box-shadow: none !important;
-              border: none !important;
-              width: 100% !important;
-              max-width: 650px !important;
-              margin: 0 auto !important;
-              padding: 5px !important;
-            }
-          </style>
-        </head>
-        <body>
-          ${element.outerHTML}
-        </body>
-      </html>
-    `);
-    frameDoc.close();
-
-    setTimeout(() => {
-      printFrame.contentWindow?.focus();
-      printFrame.contentWindow?.print();
-      setTimeout(() => {
-        document.body.removeChild(printFrame);
-      }, 1000);
-    }, 400);
   };
 
   const handleExportCSV = () => {
@@ -514,7 +375,7 @@ export default function ContractManager({
       'Số Điện Thoại',
       'Loại Giấy Tờ',
       'Thông Tin Giấy Tờ',
-      'Trang Phục Thuê',
+      'Thiết Bị Thuê',
       'Ngày Bàn Giao',
       'Ngày Trả Dự Kiến',
       'Thời Hạn',
@@ -528,13 +389,12 @@ export default function ContractManager({
 
     const rows = filteredContracts.map(c => {
       const cameraNames = c.items.map(item => item.cameraName).join(' + ');
-      const daysCount = Math.max(1, Math.ceil((new Date(c.endDate).getTime() - new Date(c.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1);
-      const durationText = `${daysCount} ngày`;
+      const durationText = c.is6Hours ? `Trong ngày (về trước ${c.returnTime || '18:00'})` : 'Hàng ngày';
       
       let statusVN = c.status;
       if (c.status === 'Pending') statusVN = 'Chờ bàn giao';
       else if (c.status === 'Active') statusVN = 'Đang thuê';
-      else if (c.status === 'Completed') statusVN = 'Đã trả đồ';
+      else if (c.status === 'Completed') statusVN = 'Đã trả máy';
       else if (c.status === 'Overdue') statusVN = 'Quá hạn trả';
       else if (c.status === 'Cancelled') statusVN = 'Đã hủy';
 
@@ -568,136 +428,77 @@ export default function ContractManager({
     document.body.removeChild(link);
   };
 
-  const [contractOutfitSearch, setContractOutfitSearch] = useState<string>('');
-  const [contractSizeFilter, setContractSizeFilter] = useState<string>('ALL');
-  const [contractAvailabilityFilter, setContractAvailabilityFilter] = useState<'ALL' | 'READY' | 'BUSY'>('ALL');
-  const [contractShowOnlySelected, setContractShowOnlySelected] = useState<boolean>(false);
-
   // New Contract form state
-  const DRAFT_KEY_CONTRACT = 'thuedo_contract_form_draft';
-  const [newContractForm, setNewContractForm] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem('thuedo_contract_form_draft');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && (parsed.customerName || parsed.selectedCameraIds?.length)) {
-          return parsed;
-        }
-      }
-    } catch {}
-    return {
-      customerName: '',
-      customerPhone: '',
-      customerDocType: 'CCCD' as const,
-      customerDocNote: '',
-      selectedCameraIds: [] as string[],
-      printCounts: {} as Record<string, number>,
-      startDate: systemDate,
-      endDate: systemDate,
-      depositAmount: 0,
-      paidAmount: 0,
-      discountPercent: 0, // Tỷ lệ tự giảm giá (%)
-      customFinalPrice: null as number | null,
-      fittingNotes: '', // Số đo khách & Ghi chú fitting/sửa gấu/bóp eo
-      note: ''
-    };
+  const [newContractForm, setNewContractForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    customerDocType: 'CCCD_And_1M' as const,
+    customerDocNote: '',
+    selectedCameraIds: [] as string[],
+    printCounts: {} as Record<string, number>,
+    startDate: systemDate,
+    endDate: systemDate,
+    is6Hours: false,
+    startTime: '08:00',
+    returnTime: '14:00',
+    depositAmount: 1000000,
+    paidAmount: 0,
+    discountPercent: 0, // Tỷ lệ tự giảm giá (%)
+    customFinalPrice: null as number | null,
+    note: ''
   });
 
   const [prevCalculatedTotal, setPrevCalculatedTotal] = useState(0);
   const contractDocNoteInputRef = useRef<HTMLInputElement>(null);
 
-  // Đóng modal tạo hợp đồng và xóa draft + reset form
-  const handleCloseAddModal = () => {
-    try { sessionStorage.removeItem(DRAFT_KEY_CONTRACT); } catch {}
-    setNewContractForm({
-      customerName: '',
-      customerPhone: '',
-      customerDocType: 'CCCD',
-      customerDocNote: '',
-      selectedCameraIds: [],
-      printCounts: {},
-      startDate: systemDate,
-      endDate: systemDate,
-      depositAmount: 0,
-      paidAmount: 0,
-      discountPercent: 0,
-      customFinalPrice: null,
-      fittingNotes: '',
-      note: ''
-    });
-    setShowAddModal(false);
-    setContractShowOnlySelected(false);
-  };
-
-  // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
-  useEffect(() => {
-    if (!showAddModal) return;
-    const hasData = newContractForm.customerName || newContractForm.customerPhone || newContractForm.selectedCameraIds.length > 0 || newContractForm.note;
-    if (hasData) {
-      try { sessionStorage.setItem('thuedo_contract_form_draft', JSON.stringify(newContractForm)); } catch {}
-    }
-  }, [newContractForm, showAddModal]);
-
-  // Predefined Contract/Rental Form templates (Mẫu đơn thuê thời trang sẵn có)
+  // Predefined Contract/Rental Form templates (Mẫu đơn thuê sẵn có)
   const DEFAULT_TEMPLATES: ContractTemplate[] = useMemo(() => [
     {
       id: 'tpl-1',
-      templateName: '👰 Combo Váy Cưới Công Chúa VIP (Kèm Voan + Vương Miện)',
-      customerName: 'Nguyễn Thị Thu Hà',
-      customerPhone: '0982647900',
-      customerDocType: 'CCCD_And_1M',
-      customerDocNote: 'Giữ CCCD gốc + Cọc bảo đảm 1.000.000đ',
-      selectedCameraIds: ['outfit-1', 'outfit-9'], // Váy cưới công chúa + Phụ kiện
-      returnTime: '18:00',
-      depositAmount: 1000000,
-      paidAmountPct: 100,
-      paidAmount: 1470000,
-      note: 'Thử váy vừa vặn, bóp eo nhẹ 2cm. Kèm voan đội đầu 3m, vương miện đá và túi bảo quản chống bụi.',
-      durationDays: 2
+      templateName: '📸 Canon Vlog Sinh Viên (6 tiếng)',
+      customerName: 'Nguyễn Khánh Vy',
+      customerPhone: '0965312389',
+      customerDocType: 'CCCD',
+      customerDocNote: 'Thẻ sinh viên gốc + CCCD đối chiếu chụp ảnh lưu file',
+      selectedCameraIds: ['cam-1', 'cam-5'], // Canon R50 + Sigma 56mm f/1.4
+      is6Hours: true,
+      returnTime: '17:00',
+      depositAmount: 2000000,
+      paidAmountPct: 0,
+      paidAmount: 0,
+      note: 'Học viên câu lạc bộ chụp ảnh thường niên. Hỗ trợ mượn kèm sạc dự phòng + thẻ nhớ 32GB miễn phí.',
+      durationDays: 1
     },
     {
       id: 'tpl-2',
-      templateName: '🤵 Set Vest Chú Rể Tiệc Cưới Hàn Quốc (2 Ngày)',
-      customerName: 'Trần Văn Hoàng (Chú rể)',
-      customerPhone: '0912445889',
-      customerDocType: 'CCCD',
-      customerDocNote: 'Giữ CCCD gốc chính chủ đối chiếu',
-      selectedCameraIds: ['outfit-3'], // Vest be sữa Hàn Quốc
-      returnTime: '19:00',
-      depositAmount: 1000000,
+      templateName: '🎥 Sự Kiện Sony Chuyên Nghiệp (2 ngày)',
+      customerName: 'Phan Anh Đức',
+      customerPhone: '0933441122',
+      customerDocType: 'Other',
+      customerDocNote: 'Giữ xe máy Wave S đỏ biển 29X3-128.91 + Đăng ký xe gốc chính chủ',
+      selectedCameraIds: ['cam-3', 'cam-4'], // Sony A7M4 + Sony 24-70GM II
+      is6Hours: false,
+      returnTime: '18:00',
+      depositAmount: 15000000,
       paidAmountPct: 50,
-      paidAmount: 250000,
-      note: 'Trọn bộ áo vest + quần tây + cà vạt / nơ cổ chú rể. Giữ form phẳng phiu khi trả đồ.',
+      paidAmount: 750000,
+      note: 'Chuẩn bị sẵn 4 pin sạc đầy hơi, dock sạc đôi & thẻ nhớ 128GB chuyên dụng chụp ảnh sự kiện RAW liên tục.',
       durationDays: 2
     },
     {
       id: 'tpl-3',
-      templateName: '🌸 Áo Dài Tơ Tằm Nàng Thơ Chụp Ảnh (1 Ngày)',
-      customerName: 'Lê Mai Anh',
-      customerPhone: '0978332115',
-      customerDocType: 'CCCD',
-      customerDocNote: 'Giữ CCCD gốc',
-      selectedCameraIds: ['outfit-5'], // Áo dài sen
+      templateName: '🎞️ Nghệ Thuật Fujifilm Classic (1 ngày)',
+      customerName: 'Lê Minh Tú',
+      customerPhone: '0988776655',
+      customerDocType: 'Passport',
+      customerDocNote: 'Passport gốc chính chủ',
+      selectedCameraIds: ['cam-2'], // Fuji XS10
+      is6Hours: false,
       returnTime: '18:00',
-      depositAmount: 800000,
-      paidAmountPct: 100,
-      paidAmount: 180000,
-      note: 'Thuê chụp ngoại cảnh áo dài hoa sen. Kèm phụ kiện nón lá và mấn đội đầu tơ tằm.',
-      durationDays: 1
-    },
-    {
-      id: 'tpl-4',
-      templateName: '✨ Đầm Dạ Hội Kim Tuyến Đi Event (Thuê 1 ngày)',
-      customerName: 'Đặng Thanh Hằng',
-      customerPhone: '0904889922',
-      customerDocType: 'CashDeposit',
-      customerDocNote: 'Cọc tiền mặt 1.500.000đ hoàn trả khi nhận đồ',
-      selectedCameraIds: ['outfit-8'], // Đầm dạ hội
-      returnTime: '18:00',
-      depositAmount: 1500000,
+      depositAmount: 5000000,
       paidAmountPct: 100,
       paidAmount: 250000,
-      note: 'Khách mặc dự gala tiệc tối. Kiểm tra kỹ tình trạng vải kim tuyến và phụ kiện đi kèm.',
+      note: 'Hỗ trợ reset thiết bị cài sẵn profile giả lập màu phim Classic Chrome của tiệm.',
       durationDays: 1
     }
   ], []);
@@ -715,19 +516,20 @@ export default function ContractManager({
 
   const handleApplyTemplate = (tpl: ContractTemplate) => {
     // Determine dynamic rate for the items in the template using the right duration
-    const tplDays = tpl.durationDays || 1;
+    const tplDays = tpl.durationDays || (tpl.is6Hours ? 1 : 1);
     const dailyTotal = tpl.selectedCameraIds.reduce((sum, id) => {
       const cam = cameras.find(c => c.id === id);
-      return sum + (cam ? getCameraRateForDuration(cam, tplDays) : 0);
+      return sum + (cam ? getCameraRateForDuration(cam, tplDays, tpl.is6Hours) : 0);
     }, 0);
 
-    const calculatedTotalRate = dailyTotal * tplDays;
+    const calculatedTotalRate = tpl.is6Hours ? dailyTotal : dailyTotal * tplDays;
     let computedPaid = tpl.paidAmount;
     if (tpl.paidAmountPct > 0) {
       computedPaid = Math.round(calculatedTotalRate * (tpl.paidAmountPct / 100));
     }
 
     const calculatedEndDate = () => {
+      if (tpl.is6Hours) return systemDate;
       const d = new Date(systemDate + 'T00:00:00');
       d.setDate(d.getDate() + (tplDays - 1));
       const yyyy = d.getFullYear();
@@ -744,6 +546,8 @@ export default function ContractManager({
       selectedCameraIds: tpl.selectedCameraIds.filter(id => cameras.some(c => c.id === id)),
       startDate: systemDate,
       endDate: calculatedEndDate(), 
+      is6Hours: tpl.is6Hours,
+      returnTime: tpl.returnTime || '18:00',
       depositAmount: tpl.depositAmount,
       paidAmount: computedPaid,
       discountPercent: tpl.discountPercent || 0,
@@ -768,6 +572,7 @@ export default function ContractManager({
       customerDocType: newContractForm.customerDocType,
       customerDocNote: newContractForm.customerDocNote,
       selectedCameraIds: [...newContractForm.selectedCameraIds],
+      is6Hours: newContractForm.is6Hours,
       returnTime: newContractForm.returnTime,
       depositAmount: newContractForm.depositAmount,
       paidAmountPct: 0,
@@ -804,8 +609,7 @@ export default function ContractManager({
         const reqDeposit = Math.round((c.totalPrice || 0) * 0.5);
         matchesStatus = c.status === 'Pending' && (c.paidAmount || 0) < reqDeposit;
       } else if (statusFilter === 'UNPAID') {
-        const fullTotal = (c.totalPrice || 0) + (c.surchargeAmount || 0);
-        matchesStatus = c.status !== 'Cancelled' && (fullTotal - (c.paidAmount || 0) > 0);
+        matchesStatus = c.status !== 'Cancelled' && ((c.totalPrice || 0) - (c.paidAmount || 0) > 0);
       } else if (statusFilter !== 'ALL') {
         matchesStatus = c.status === statusFilter;
       }
@@ -818,18 +622,11 @@ export default function ContractManager({
   const totalContractDebt = useMemo(() => {
     return (contracts || [])
       .filter(c => c && c.status !== 'Cancelled')
-      .reduce((sum, c) => {
-        const fullTotal = (c.totalPrice || 0) + (c.surchargeAmount || 0);
-        return sum + Math.max(0, fullTotal - (c.paidAmount || 0));
-      }, 0);
+      .reduce((sum, c) => sum + Math.max(0, (c.totalPrice || 0) - (c.paidAmount || 0)), 0);
   }, [contracts]);
 
   const unpaidContractsCount = useMemo(() => {
-    return (contracts || []).filter(c => {
-      if (!c || c.status === 'Cancelled') return false;
-      const fullTotal = (c.totalPrice || 0) + (c.surchargeAmount || 0);
-      return fullTotal > (c.paidAmount || 0);
-    }).length;
+    return (contracts || []).filter(c => c && c.status !== 'Cancelled' && ((c.totalPrice || 0) > (c.paidAmount || 0))).length;
   }, [contracts]);
 
   // Pending Deposit (Chỉ tính các đơn Pending CHƯA cọc đủ 50%)
@@ -868,12 +665,13 @@ export default function ContractManager({
 
   // Handle building new contract total rate
   const calculatedDays = useMemo(() => {
+    if (newContractForm.is6Hours) return 1; // 6-hour is considered 1 event
     if (!newContractForm.startDate || !newContractForm.endDate) return 0;
     const start = new Date(newContractForm.startDate);
     const end = new Date(newContractForm.endDate);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
     return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-  }, [newContractForm.startDate, newContractForm.endDate]);
+  }, [newContractForm.startDate, newContractForm.endDate, newContractForm.is6Hours]);
 
   const totalBeforeDiscount = useMemo(() => {
     let regularDailyTotal = 0;
@@ -887,13 +685,13 @@ export default function ContractManager({
         const { totalPrice } = getPrintPrice(cam, prints);
         printerTotal += totalPrice;
       } else {
-        regularDailyTotal += getCameraRateForDuration(cam, calculatedDays);
+        regularDailyTotal += getCameraRateForDuration(cam, calculatedDays, newContractForm.is6Hours);
       }
     });
 
-    const camerasCost = regularDailyTotal * calculatedDays;
+    const camerasCost = newContractForm.is6Hours ? regularDailyTotal : regularDailyTotal * calculatedDays;
     return camerasCost + printerTotal;
-  }, [newContractForm.selectedCameraIds, newContractForm.printCounts, calculatedDays, cameras]);
+  }, [newContractForm.selectedCameraIds, newContractForm.printCounts, calculatedDays, newContractForm.is6Hours, cameras]);
 
   const calculatedTotal = useMemo(() => {
     if (newContractForm.customFinalPrice !== null && newContractForm.customFinalPrice !== undefined) {
@@ -930,21 +728,28 @@ export default function ContractManager({
     }
   }, [calculatedRecommendedDeposit, prevRecommendedDeposit, newContractForm.depositAmount, newContractForm.customerDocType]);
 
-  // Synchronize dynamic reservation deposit tracking
+  // Synchronize dynamic reservation deposit value, defaulting to exactly 50% of calculated total price
   useEffect(() => {
     if (calculatedTotal !== prevCalculatedTotal) {
+      const prevHalfPrice = Math.round(prevCalculatedTotal * 0.5);
+      if (prevCalculatedTotal === 0 || newContractForm.paidAmount === prevHalfPrice) {
+        setNewContractForm(prev => ({
+          ...prev,
+          paidAmount: Math.round(calculatedTotal * 0.5)
+        }));
+      }
       setPrevCalculatedTotal(calculatedTotal);
     }
-  }, [calculatedTotal, prevCalculatedTotal]);
+  }, [calculatedTotal, prevCalculatedTotal, newContractForm.paidAmount]);
 
   const handleCreateContract = (e?: React.FormEvent, exportReceiptAfterSave = false) => {
     if (e) e.preventDefault();
     if (newContractForm.selectedCameraIds.length === 0) {
-      setCustomAlertMessage('Vui lòng chọn ít nhất một trang phục hoặc phụ kiện!');
+      setCustomAlertMessage('Vui lòng chọn ít nhất một máy ảnh/ống kính!');
       return;
     }
 
-    if (newContractForm.endDate < newContractForm.startDate) {
+    if (!newContractForm.is6Hours && newContractForm.endDate < newContractForm.startDate) {
       setCustomAlertMessage('Ngày trả dự kiến không thể nhỏ hơn ngày bàn giao!');
       return;
     }
@@ -952,9 +757,12 @@ export default function ContractManager({
     const conflict = checkBookingConflict(
       newContractForm.selectedCameraIds,
       newContractForm.startDate,
-      newContractForm.endDate,
-      false,
-      contracts
+      newContractForm.is6Hours ? newContractForm.startDate : newContractForm.endDate,
+      newContractForm.is6Hours,
+      contracts,
+      undefined,
+      newContractForm.is6Hours ? (newContractForm.startTime || '08:00') : undefined,
+      newContractForm.is6Hours ? (newContractForm.returnTime || '14:00') : undefined
     );
     if (conflict.hasConflict) {
       setCustomAlertMessage(conflict.message);
@@ -967,16 +775,14 @@ export default function ContractManager({
       const prints = isPrinter ? (newContractForm.printCounts?.[id] || 5) : undefined;
       const rate = isPrinter && cam
         ? getPrintPrice(cam, prints!).totalPrice
-        : (cam ? getCameraRateForDuration(cam, calculatedDays) : 0);
+        : (cam ? getCameraRateForDuration(cam, calculatedDays, newContractForm.is6Hours) : 0);
 
       return {
         cameraId: id,
-        cameraName: isPrinter ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)` : ((cam?.name || 'Trang phục').replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()),
+        cameraName: isPrinter ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)` : (cam?.name || 'Thiết bị'),
         dailyRate: rate,
         quantity: 1,
-        printCount: prints,
-        size: cam?.size,
-        color: cam?.color
+        printCount: prints
       };
     });
 
@@ -992,14 +798,16 @@ export default function ContractManager({
       customerDocNote: newContractForm.customerDocNote,
       items,
       startDate: newContractForm.startDate,
-      endDate: newContractForm.endDate,
+      endDate: newContractForm.is6Hours ? newContractForm.startDate : newContractForm.endDate,
+      is6Hours: newContractForm.is6Hours,
+      startTime: newContractForm.is6Hours ? (newContractForm.startTime || '08:00') : undefined,
+      returnTime: newContractForm.is6Hours ? (newContractForm.returnTime || '14:00') : undefined,
       totalPrice: calculatedTotal,
       discountPercent: newContractForm.discountPercent,
       paidAmount: newContractForm.paidAmount,
       depositAmount: newContractForm.depositAmount,
       status: 'Pending',
       note: newContractForm.note,
-      fittingNotes: newContractForm.fittingNotes,
       createdAt: new Date().toISOString()
     };
 
@@ -1011,22 +819,21 @@ export default function ContractManager({
       setSelectedContract(contract);
     }
 
-    // Reset form and clear draft
-    try { sessionStorage.removeItem('thuedo_contract_form_draft'); } catch {}
+    // Reset form
     setNewContractForm({
       customerName: '',
       customerPhone: '',
-      customerDocType: 'CCCD',
+      customerDocType: 'CCCD_And_1M',
       customerDocNote: '',
       selectedCameraIds: [],
-      printCounts: {},
       startDate: systemDate,
       endDate: systemDate,
-      depositAmount: 0,
+      is6Hours: false,
+      returnTime: '18:00',
+      depositAmount: 1000000,
       paidAmount: 0,
       discountPercent: 0,
       customFinalPrice: null,
-      fittingNotes: '',
       note: ''
     });
   };
@@ -1079,27 +886,27 @@ export default function ContractManager({
   return (
     <div className="space-y-6">
       {/* Search and Filters Header */}
-      <div className="bg-white border border-gray-150 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
-          <div className="space-y-0.5">
-            <h2 className="text-[15px] sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
-              <FileText className="text-orange-600 w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" /> Quản Lý Đơn Thuê & Hợp Đồng Trang Phục
+      <div className="bg-white border border-gray-150 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 sm:space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
+              <FileText className="text-orange-600 w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" /> Quản Lý Hợp Đồng Thuê Máy
             </h2>
-            <p className="text-[11.5px] sm:text-xs text-gray-500 leading-normal">
-              Theo dõi tiến độ đơn thuê váy cưới, vest, áo dài, lưu trữ cọc thế chấp và tình trạng hoàn trả trang phục.
+            <p className="text-xs text-gray-500 leading-normal">
+              Kiểm tra tính trạng hợp đồng, lưu trữ thủ tục hồ sơ thế chấp và thu tiền cọc khách hàng.
             </p>
           </div>
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto shrink-0">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
             <button
               onClick={handleExportCSV}
-              className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"
+              className="bg-slate-50 border border-gray-200 text-gray-700 font-extrabold sm:font-semibold px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-sm flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"
               title="Xuất định dạng CSV danh sách đã lọc"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> Xuất bản CSV
             </button>
             <button
               onClick={() => setShowAddModal(true)}
-              className="bg-orange-600 text-white font-bold px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-2xs"
+              className="bg-orange-600 text-white font-extrabold sm:font-medium px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-sm flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-2xs"
             >
               <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Lập hợp đồng
             </button>
@@ -1163,7 +970,7 @@ export default function ContractManager({
               </div>
             )}
 
-            {/* Card 2: Chưa Thanh Toán Tiền Cọc 50% Giữ Đồ */}
+            {/* Card 2: Chưa Thanh Toán Tiền Cọc 50% Giữ Máy */}
             {pendingContractsCount > 0 && (
               <div className="bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-3xs">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -1171,7 +978,7 @@ export default function ContractManager({
                     <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">Chưa Cọc 50% Giữ Đồ</span>
+                    <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">Chưa Cọc 50% Giữ Máy</span>
                     <span className="font-mono text-base sm:text-lg font-black text-amber-700 block truncate mt-0.5">
                       {pendingDepositTotal.toLocaleString()}đ
                     </span>
@@ -1193,50 +1000,34 @@ export default function ContractManager({
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
           <div className="relative flex-grow">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+            <Search className="absolute left-3 top-2.5 sm:top-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400" />
             <input
               type="text"
               placeholder="Tìm theo mã HĐ, tên khách hàng, SĐT..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-7 py-1.5 sm:py-2 text-[11px] sm:text-xs font-normal border border-gray-250 rounded-lg sm:rounded-xl bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80 shadow-3xs"
+              className="pl-8.5 pr-4 py-1.5 sm:py-2.5 text-xs sm:text-sm w-full border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80"
             />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer"
-                title="Xóa tìm kiếm"
-              >
-                ✕
-              </button>
-            )}
           </div>
 
-          <div className="relative sm:w-64 shrink-0">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
-              <Filter className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            </div>
+          <div className="flex items-center gap-2 min-w-[200px]">
+            <Filter className="h-4 w-4 text-gray-500 shrink-0" />
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="w-full pl-7.5 pr-6 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
-              title="Lọc theo trạng thái hợp đồng"
+              className="text-sm w-full border border-gray-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              <option value="ALL">Trạng thái: Tất cả</option>
-              <option value="UNPAID_DEPOSIT">⏳ Chưa cọc 50% ({pendingContractsCount})</option>
-              <option value="UNPAID">⚠️ Còn dư nợ ({unpaidContractsCount})</option>
-              <option value="Pending">Chờ giao đồ (Pending)</option>
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="UNPAID_DEPOSIT">⏳ Chưa thanh toán cọc 50% giữ máy ({pendingContractsCount})</option>
+              <option value="UNPAID">⚠️ Còn dư nợ chưa thu ({unpaidContractsCount})</option>
+              <option value="Pending">Chờ giao máy (Pending)</option>
               <option value="Active">Đang cho thuê (Active)</option>
-              <option value="Completed">Đã trả đồ (Completed)</option>
+              <option value="Completed">Đã trả máy (Completed)</option>
               <option value="Overdue">Quá hạn trả (Overdue)</option>
               <option value="Cancelled">Đã hủy bỏ (Cancelled)</option>
             </select>
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[9px]">
-              ▼
-            </div>
           </div>
         </div>
       </div>
@@ -1286,20 +1077,13 @@ export default function ContractManager({
 
                   {/* Equipment list */}
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">Trang Phục Thuê:</div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">Thiết bị thuê:</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {c.items.map((i, idx) => {
-                        const matchedCam = cameras.find(cam => cam.id === i.cameraId || cam.name.toLowerCase() === i.cameraName.toLowerCase());
-                        const displayColor = i.color || matchedCam?.color;
-                        const displaySize = i.size || matchedCam?.size;
-                        return (
-                          <span key={idx} className="bg-orange-50/70 text-orange-700 border border-orange-100 text-[10px] sm:text-xs px-2 py-0.5 rounded-lg font-bold inline-flex items-center gap-1">
-                            <Briefcase className="w-3 h-3 text-orange-400" /> {i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
-                            {displaySize && <span className="text-gray-600 font-semibold text-[9px] bg-white/80 px-1 py-0.2 rounded border border-gray-200">Size {displaySize}</span>}
-                            {displayColor && <span className="text-rose-600 font-bold text-[9px] bg-rose-50 px-1 py-0.2 rounded border border-rose-200">🎨 {displayColor}</span>}
-                          </span>
-                        );
-                      })}
+                      {c.items.map((i, idx) => (
+                        <span key={idx} className="bg-orange-50/70 text-orange-700 border border-orange-100 text-[10px] sm:text-xs px-2 py-0.5 rounded-lg font-bold inline-flex items-center gap-1">
+                          <Briefcase className="w-3 h-3 text-orange-400" /> {i.cameraName}
+                        </span>
+                      ))}
                     </div>
                   </div>
 
@@ -1307,127 +1091,105 @@ export default function ContractManager({
                   <div className="bg-gray-50/60 p-3 rounded-xl border border-gray-150/60 space-y-1.5 text-xs">
                     <div className="flex items-center gap-2 font-bold text-gray-700">
                       <Calendar className="w-3.5 h-3.5 text-gray-400 font-semibold" />
-                      <span>{formatDMY(c.startDate)}{c.startDate === c.endDate ? ' (1 ngày)' : ` đến ${formatDMY(c.endDate)}`}</span>
+                      <span>{formatDMY(c.startDate)}{c.is6Hours ? '' : ` đến ${formatDMY(c.endDate)}`}</span>
                     </div>
                     <div className="flex items-center justify-between text-gray-500 border-t border-gray-100 pt-1.5 font-medium">
                       <span>Thời hạn thuê:</span>
-                      <span className="font-bold text-gray-700">{duration} ngày</span>
+                      <span className={c.is6Hours ? 'font-extrabold text-amber-700 bg-amber-50 border border-amber-250 text-[10px] px-2 py-0.5 rounded shadow-3xs inline-block' : 'font-bold text-gray-650'}>{c.is6Hours ? `⚡ 6 Tiếng (${c.startTime || '08:00'} - ${c.returnTime || '14:00'})` : `${duration} ngày`}</span>
                     </div>
                   </div>
 
                   {/* Pricing details */}
                   <div className="bg-slate-50/50 rounded-xl p-3 border border-slate-100 space-y-1.5">
-                    {(() => {
-                      const contractSurcharge = c.surchargeAmount || 0;
-                      const finalTotal = (c.totalPrice || 0) + contractSurcharge;
-                      const remainingDebt = Math.max(0, finalTotal - (c.paidAmount || 0));
-
-                      return (
-                        <>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500 font-medium">Tiền thuê đồ:</span>
-                            <span className="font-mono font-bold text-gray-900 text-sm flex items-center gap-1.5">
-                              {c.discountPercent ? (
-                                <span className="text-[9px] font-sans font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 rounded-sm">
-                                  -{c.discountPercent}%
-                                </span>
-                              ) : null}
-                              {c.totalPrice.toLocaleString()} đ
-                            </span>
-                          </div>
-
-                          {contractSurcharge > 0 && (
-                            <div className="flex items-center justify-between text-xs bg-amber-50/80 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
-                              <span className="font-bold truncate max-w-[70%]" title={c.surchargeReason}>
-                                ⚡ Phụ thu ({c.surchargeReason || 'Phát sinh'}):
-                              </span>
-                              <span className="font-mono font-black shrink-0">
-                                +{contractSurcharge.toLocaleString()} đ
-                              </span>
-                            </div>
-                          )}
-
-                          {c.status === 'Pending' ? (
-                            (c.paidAmount || 0) > 0 ? (
-                              (() => {
-                                const pct = finalTotal > 0 ? Math.round(((c.paidAmount || 0) / finalTotal) * 100) : 0;
-                                return (
-                                  <>
-                                    <div className="flex items-center justify-between text-xs pb-1 border-b border-gray-100">
-                                      <span className="text-emerald-700 font-medium">Đã cọc {pct}% giữ đồ:</span>
-                                      <span className="font-mono font-bold text-emerald-700">
-                                        {c.paidAmount.toLocaleString()} đ
-                                      </span>
-                                    </div>
-                                    <div className="pt-1 select-none flex items-center justify-between gap-2">
-                                      <div className="text-[10px] text-gray-400 font-medium">
-                                        Cọc thế chấp: <strong className="text-gray-750">{c.depositAmount > 0 ? `${c.depositAmount.toLocaleString()} đ` : 'Không có'}</strong>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold shadow-3xs">
-                                          ✓ Đã cọc {pct}%
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </>
-                                );
-                              })()
-                            ) : (
-                              <>
-                                <div className="flex items-center justify-between text-xs text-amber-850 bg-amber-50/40 px-1 rounded-sm">
-                                  <span className="font-medium">Cọc 50% giữ đồ cần đóng:</span>
-                                  <span className="font-mono font-bold">
-                                    {(Math.round((c.totalPrice || 0) * 0.5)).toLocaleString()} đ
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between text-xs pb-1 border-b border-gray-100">
-                                  <span className="text-gray-500 font-medium">Thực tế đã thanh toán:</span>
-                                  <span className="font-mono font-bold text-gray-400">
-                                    0 đ
-                                  </span>
-                                </div>
-                                <div className="pt-1 select-none flex items-center justify-between gap-2">
-                                  <div className="text-[10px] text-gray-400 font-medium">
-                                    Cọc thế chấp: <strong className="text-gray-750">{c.depositAmount > 0 ? `${c.depositAmount.toLocaleString()} đ` : 'Không có'}</strong>
-                                  </div>
-                                  <div>
-                                    <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-md font-bold shadow-3xs">
-                                      ⏳ Chưa cọc 50%: {(Math.round((c.totalPrice || 0) * 0.5)).toLocaleString()} đ
-                                    </span>
-                                  </div>
-                                </div>
-                              </>
-                            )
-                          ) : (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 font-medium">Tổng tiền thuê:</span>
+                      <span className="font-mono font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                        {c.discountPercent ? (
+                          <span className="text-[9px] font-sans font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 rounded-sm">
+                            -{c.discountPercent}%
+                          </span>
+                        ) : null}
+                        {c.totalPrice.toLocaleString()} đ
+                      </span>
+                    </div>
+                    {c.status === 'Pending' ? (
+                      (c.paidAmount || 0) > 0 ? (
+                        (() => {
+                          const pct = c.totalPrice > 0 ? Math.round(((c.paidAmount || 0) / c.totalPrice) * 100) : 0;
+                          return (
                             <>
                               <div className="flex items-center justify-between text-xs pb-1 border-b border-gray-100">
-                                <span className="text-gray-500 font-medium">Đã thanh toán:</span>
-                                <span className="font-mono font-bold text-emerald-600">
+                                <span className="text-emerald-700 font-medium">Đã cọc {pct}% giữ máy:</span>
+                                <span className="font-mono font-bold text-emerald-700">
                                   {c.paidAmount.toLocaleString()} đ
                                 </span>
                               </div>
-                              {/* Remaining debt & deposit details */}
                               <div className="pt-1 select-none flex items-center justify-between gap-2">
                                 <div className="text-[10px] text-gray-400 font-medium">
-                                  Cọc thế chấp: <strong className="text-gray-750">{c.depositAmount > 0 ? `${c.depositAmount.toLocaleString()}đ` : 'Không có'}</strong>
+                                  Cọc thế chấp: <strong className="text-gray-750">{c.depositAmount > 0 ? `${c.depositAmount.toLocaleString()} đ` : 'Không có'}</strong>
                                 </div>
                                 <div>
-                                  {remainingDebt > 0 ? (
-                                    <span className="text-[10px] bg-rose-50 text-rose-800 border border-rose-300 px-2 py-0.5 rounded-md font-bold shadow-3xs">
-                                      Còn nợ: {remainingDebt.toLocaleString()}đ
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-bold shadow-3xs">
-                                      ✓ Đã thanh toán đủ
-                                    </span>
-                                  )}
+                                  <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold shadow-3xs">
+                                    ✓ Đã cọc {pct}%
+                                  </span>
                                 </div>
                               </div>
                             </>
-                          )}
+                          );
+                        })()
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between text-xs text-amber-850 bg-amber-50/40 px-1 rounded-sm">
+                            <span className="font-medium">Cọc 50% giữ máy cần đóng:</span>
+                            <span className="font-mono font-bold">
+                              {(Math.round((c.totalPrice || 0) * 0.5)).toLocaleString()} đ
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs pb-1 border-b border-gray-100">
+                            <span className="text-gray-500 font-medium">Thực tế đã thanh toán:</span>
+                            <span className="font-mono font-bold text-gray-400">
+                              0 đ
+                            </span>
+                          </div>
+                          <div className="pt-1 select-none flex items-center justify-between gap-2">
+                            <div className="text-[10px] text-gray-400 font-medium">
+                              Cọc thế chấp: <strong className="text-gray-750">{c.depositAmount > 0 ? `${c.depositAmount.toLocaleString()} đ` : 'Không có'}</strong>
+                            </div>
+                            <div>
+                              <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-md font-bold shadow-3xs">
+                                ⏳ Chưa cọc 50%: {(Math.round((c.totalPrice || 0) * 0.5)).toLocaleString()} đ
+                              </span>
+                            </div>
+                          </div>
                         </>
-                      );
-                    })()}
+                      )
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between text-xs pb-1 border-b border-gray-100">
+                          <span className="text-gray-500 font-medium">Đã thanh toán:</span>
+                          <span className="font-mono font-bold text-emerald-600">
+                            {c.paidAmount.toLocaleString()} đ
+                          </span>
+                        </div>
+                        {/* Remaining debt & deposit details */}
+                        <div className="pt-1 select-none flex items-center justify-between gap-2">
+                          <div className="text-[10px] text-gray-400 font-medium">
+                            Cọc thế chấp: <strong className="text-gray-750">{c.depositAmount > 0 ? `${c.depositAmount.toLocaleString()}đ` : 'Không có'}</strong>
+                          </div>
+                          <div>
+                            {c.totalPrice - c.paidAmount > 0 ? (
+                              <span className="text-[10px] bg-rose-50 text-rose-800 border border-rose-300 px-2 py-0.5 rounded-md font-bold shadow-3xs">
+                                Còn nợ: {(c.totalPrice - c.paidAmount).toLocaleString()}đ
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-bold shadow-3xs">
+                                ✓ Đã thanh toán đủ
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Ghi chú nhanh (Quick Notes for mobile) */}
@@ -1535,7 +1297,7 @@ export default function ContractManager({
               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-bold text-xs select-none uppercase tracking-wider">
                 <th className="px-6 py-4">Mã Hợp Đồng</th>
                 <th className="px-6 py-4">Khách Hàng</th>
-                <th className="px-6 py-4">Trang Phục Thuê</th>
+                <th className="px-6 py-4">Thiết Bị Thuê</th>
                 <th className="px-6 py-4">Thời Gian Thuê</th>
                 <th className="px-6 py-4 text-right">Tổng Chi Phí</th>
                 <th className="px-6 py-4 text-center">Trạng Thái</th>
@@ -1618,22 +1380,17 @@ export default function ContractManager({
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="max-w-[220px] truncate" title={c.items.map(i => i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()).join(', ')}>
-                          {c.items.map((i, idx) => {
-                            const matchedCam = cameras.find(cam => cam.id === i.cameraId || cam.name.toLowerCase() === i.cameraName.toLowerCase());
-                            const displayColor = i.color || matchedCam?.color;
-                            return (
-                              <span key={idx} className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-100 text-xs px-2 py-0.5 rounded-md font-medium mr-1 mb-1">
-                                <span>{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
-                                {displayColor && <span className="text-rose-600 font-bold text-[10px]">🎨 {displayColor}</span>}
-                              </span>
-                            );
-                          })}
+                        <div className="max-w-[220px] truncate" title={c.items.map(i => i.cameraName).join(', ')}>
+                          {c.items.map((i, idx) => (
+                            <span key={idx} className="inline-block bg-orange-50 text-orange-700 border border-orange-100 text-xs px-2 py-0.5 rounded-md font-medium mr-1 mb-1">
+                              {i.cameraName}
+                            </span>
+                          ))}
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-gray-700 font-medium">{formatDMY(c.startDate)} đến {formatDMY(c.endDate)}</div>
-                        <div className="text-gray-400 text-xs">Thời hạn: <span className="font-bold text-gray-650">{duration} ngày</span></div>
+                        <div className="text-gray-700 font-medium">{formatDMY(c.startDate)}{c.is6Hours ? '' : ` đến ${formatDMY(c.endDate)}`}</div>
+                        <div className="text-gray-400 text-xs">Thời hạn: <span className={c.is6Hours ? 'font-extrabold text-amber-700 bg-amber-50 border border-amber-200 text-[11px] px-1.5 py-0.5 rounded shadow-3xs inline-block' : 'font-bold text-gray-650'}>{c.is6Hours ? `⚡ 6 Tiếng (Trả: ${c.returnTime || '18:00'})` : `${duration} ngày`}</span></div>
                       </td>
                       <td className="px-6 py-4 text-right font-mono font-bold text-gray-900">
                         <div className="flex items-center justify-end gap-1.5">
@@ -1650,14 +1407,14 @@ export default function ContractManager({
                               (() => {
                                 const pct = c.totalPrice > 0 ? Math.round(((c.paidAmount || 0) / c.totalPrice) * 100) : 0;
                                 return (
-                                  <span className="text-emerald-700 font-bold inline-block bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]" title={`Đã nhận ${c.paidAmount.toLocaleString()} đ tiền cọc giữ đồ (${pct}%)`}>
+                                  <span className="text-emerald-700 font-bold inline-block bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]" title={`Đã nhận ${c.paidAmount.toLocaleString()} đ tiền cọc giữ máy (${pct}%)`}>
                                     ✓ Đã cọc {pct}%: {c.paidAmount.toLocaleString()} đ
                                   </span>
                                 );
                               })()
                             ) : (
-                              <span className="text-amber-700 font-bold inline-block bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]" title="Khoản cọc giữ đồ cần chuyển khoản để hoàn thiện duyệt lịch">
-                                ⏳ Chưa cọc giữ đồ
+                              <span className="text-amber-700 font-bold inline-block bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]" title="Khoản cọc giữ máy cần chuyển khoản để hoàn thiện duyệt lịch">
+                                ⏳ Chưa cọc giữ máy
                               </span>
                             )
                           ) : (
@@ -1788,9 +1545,9 @@ export default function ContractManager({
                 <div className="bg-rose-50 border border-rose-200 p-3 sm:p-3.5 rounded-xl flex items-start gap-2 text-rose-800">
                   <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5" />
                   <div>
-                    <h5 className="font-bold text-xs sm:text-sm">Hợp đồng này đang bị QUÁ HẠN TRẢ đồ!</h5>
+                    <h5 className="font-bold text-xs sm:text-sm">Hợp đồng này đang bị QUÁ HẠN TRẢ máy!</h5>
                     <p className="text-[11px] sm:text-xs mt-1">
-                      Hãy gọi điện liên hệ ngay cho khách hàng: <span className="font-bold font-mono text-gray-950 underline">{selectedContract.customerPhone}</span>. Lập biên bản phụ thu nếu đồ trả muộn so với cam kết ban đầu.
+                      Hãy gọi máy liên hệ ngay cho khách hàng: <span className="font-bold font-mono text-gray-950 underline">{selectedContract.customerPhone}</span>. Lập biên bản phụ thu nếu máy trả muộn so với cam kết ban đầu.
                     </p>
                   </div>
                 </div>
@@ -1809,12 +1566,12 @@ export default function ContractManager({
                   </div>
                 </div>
 
-                {/* Section 1: Customer details & Timings in Compact Layout */}
-                <div className="bg-slate-50/80 p-2.5 sm:p-3 border border-slate-200/80 rounded-xl" style={{overflow: 'visible'}}>
-                  {/* Customer Info, Timing & QR Code Row */}
+                {/* Section 1: Customer details & Timings in Mobile Standardized Layout */}
+                <div className="bg-slate-50/80 p-2 sm:p-3.5 border border-slate-200/80 rounded-xl space-y-3" style={{overflow: 'visible'}}>
+                  {/* Customer Info & QR Code Row (Synchronized side-by-side on both mobile and desktop) */}
                   <div className={`flex ${editingCustomer ? 'flex-col sm:flex-row' : 'flex-row'} flex-nowrap gap-2 sm:gap-3 items-start justify-between`}>
-                    {/* Customer Info & Rental Timings */}
-                    <div className="space-y-1.5 min-w-0 flex-1 overflow-hidden">
+                    {/* Customer Info */}
+                    <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
                       <div className="flex items-center justify-between mb-0.5">
                         <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">THÔNG TIN KHÁCH THUÊ</h4>
                         {onUpdateContractCustomer && !editingCustomer && !isExporting && (
@@ -1923,16 +1680,12 @@ export default function ContractManager({
                           </div>
                         </div>
                       ) : (
-                        <div className="space-y-1.5">
-                          <div>
-                            <p className="font-black text-gray-900 text-sm sm:text-base leading-tight truncate">{selectedContract.customerName}</p>
-                            <p className="text-[11px] sm:text-xs text-gray-600 font-mono font-bold mt-0.5">SĐT: {selectedContract.customerPhone}</p>
-                          </div>
-
-                          {/* Thế chấp (ngay dưới SĐT) */}
-                          <div>
+                        <div className="space-y-1">
+                          <p className="font-black text-gray-900 text-sm sm:text-base">{selectedContract.customerName}</p>
+                          <p className="text-xs text-gray-600 font-mono font-bold">SĐT: {selectedContract.customerPhone}</p>
+                          <div className="pt-0.5">
                             <div className="inline-flex items-center gap-1.5 bg-amber-50/90 border border-amber-200/90 px-2 py-0.5 rounded-lg text-amber-950 max-w-full">
-                              <span className="text-[9.5px] font-extrabold text-amber-800 uppercase shrink-0">Thế chấp:</span>
+                              <span className="text-[10px] font-extrabold text-amber-800 uppercase shrink-0">Thế chấp:</span>
                               <span className="text-[10.5px] font-bold font-mono text-gray-800 truncate">
                                 {selectedContract.customerDocType === 'Other'
                                   ? (selectedContract.customerDocNote?.trim() || 'Tài sản khác')
@@ -1945,115 +1698,18 @@ export default function ContractManager({
                               </span>
                             </div>
                           </div>
-
-                          {/* Thời hạn thuê lồng ghép gọn gàng */}
-                          <div className="bg-white/90 border border-slate-200/90 rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs">
-                            {editingDates ? (
-                              <div className="space-y-2 animate-fade-in" data-no-export="true">
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-extrabold text-gray-500 uppercase block">Bắt đầu</label>
-                                  <input
-                                    type="date"
-                                    value={dateDraft.startDate}
-                                    onChange={e => setDateDraft(d => ({ ...d, startDate: e.target.value }))}
-                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-900"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-extrabold text-gray-500 uppercase block">Hạn trả</label>
-                                  <input
-                                    type="date"
-                                    value={dateDraft.endDate}
-                                    min={dateDraft.startDate}
-                                    onChange={e => setDateDraft(d => ({ ...d, endDate: e.target.value }))}
-                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-gray-900"
-                                  />
-                                </div>
-                                {dateDraft.startDate && dateDraft.endDate && (() => {
-                                  const newDays = Math.max(1, Math.ceil((new Date(dateDraft.endDate).getTime() - new Date(dateDraft.startDate).getTime()) / 86400000) + 1);
-                                  const oldDays = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
-                                  const newTotal = oldDays > 0 ? Math.round((selectedContract.totalPrice / oldDays) * newDays) : selectedContract.totalPrice;
-                                  return (
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-[10.5px] space-y-0.5">
-                                      <div className="flex justify-between">
-                                        <span className="text-gray-600">Số ngày mới:</span>
-                                        <b className="font-mono text-blue-700">{newDays} ngày</b>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="text-gray-600">Tổng tiền ước tính:</span>
-                                        <b className="font-mono text-orange-600">{newTotal.toLocaleString()}đ</b>
-                                      </div>
-                                      {newDays !== oldDays && (
-                                        <div className="text-[9.5px] text-amber-700 font-bold pt-0.5">⚠ Tổng tiền sẽ được tính lại theo số ngày mới</div>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                                <div className="flex gap-1.5 pt-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (!dateDraft.startDate || !dateDraft.endDate) return;
-                                      if (dateDraft.endDate < dateDraft.startDate) return;
-                                      const newDays = Math.max(1, Math.ceil((new Date(dateDraft.endDate).getTime() - new Date(dateDraft.startDate).getTime()) / 86400000) + 1);
-                                      const oldDays = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
-                                      const newTotal = oldDays > 0 ? Math.round((selectedContract.totalPrice / oldDays) * newDays) : selectedContract.totalPrice;
-                                      if (onUpdateContractDates) {
-                                        onUpdateContractDates(selectedContract.id, dateDraft.startDate, dateDraft.endDate, newTotal);
-                                      }
-                                      setEditingDates(false);
-                                    }}
-                                    className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition cursor-pointer"
-                                  >
-                                    <Save className="w-3 h-3" /> Lưu ngày
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingDates(false)}
-                                    className="px-3 py-1.5 text-[11px] font-bold text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg transition cursor-pointer"
-                                  >
-                                    Hủy
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="space-y-0.5">
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Bắt đầu:</span>
-                                  <strong className="font-bold font-mono text-gray-900 whitespace-nowrap">{formatDMY(selectedContract.startDate)}</strong>
-                                </div>
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Hạn trả:</span>
-                                  <strong className="font-bold font-mono text-orange-600 whitespace-nowrap">{formatDMY(selectedContract.endDate)}</strong>
-                                </div>
-                                {onUpdateContractDates && !isExporting && (
-                                  <button
-                                    type="button"
-                                    data-no-export="true"
-                                    onClick={() => {
-                                      setDateDraft({ startDate: selectedContract.startDate, endDate: selectedContract.endDate });
-                                      setEditingDates(true);
-                                    }}
-                                    className="no-export-item w-full mt-1 flex items-center justify-center gap-1 text-[10px] font-bold text-blue-600 hover:bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                                  >
-                                    <Edit2 className="w-2.5 h-2.5" /> Sửa ngày
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
                         </div>
                       )}
                     </div>
 
-                    {/* QR Code Block on the Right */}
+                    {/* QR Code Block on the Right (Always side-by-side on both mobile and desktop) */}
                     <div 
-                      className="shrink-0 flex flex-col items-center bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/90 w-[114px] sm:w-[126px]" 
+                      className="shrink-0 flex flex-col items-center bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/90 w-[114px] sm:w-[130px]" 
                       style={{ borderRadius: '12px', boxShadow: 'none' }}
                     >
                       {/* Header row */}
-                      <div className={`w-full flex items-center ${isExporting ? 'justify-center' : 'justify-between'} mb-1 px-0.5`}>
-                        <span className="text-[8.5px] sm:text-[9.5px] font-black uppercase text-gray-700 tracking-wider whitespace-nowrap">
+                      <div className={`w-full flex items-center ${isExporting ? 'justify-center' : 'justify-between'} mb-1.5 px-0.5`}>
+                        <span className="text-[8px] sm:text-[9.5px] font-black uppercase text-gray-700 tracking-wider whitespace-nowrap">
                           QR THANH TOÁN
                         </span>
                         {!isExporting && isAdmin && (
@@ -2073,7 +1729,7 @@ export default function ContractManager({
                       </div>
 
                       <div 
-                        className="w-[82px] h-[82px] sm:w-[94px] sm:h-[94px] bg-white rounded-lg border border-gray-200 flex items-center justify-center p-0.5" 
+                        className="w-[84px] h-[84px] sm:w-[100px] sm:h-[100px] bg-white rounded-lg border border-gray-200 flex items-center justify-center p-0.5" 
                         style={{ overflow: 'hidden', borderRadius: '8px', boxShadow: 'none' }}
                       >
                         <QrDisplay
@@ -2092,13 +1748,13 @@ export default function ContractManager({
                             setShowBankSettings(true);
                           }
                         }}
-                        className={`w-full mt-1 pt-1 border-t border-dashed border-gray-200 flex flex-col items-center justify-center text-center ${!isExporting && isAdmin ? 'cursor-pointer hover:bg-orange-50/70 p-0.5 rounded-lg transition' : ''}`}
+                        className={`w-full mt-1.5 pt-1 border-t border-dashed border-gray-200 flex flex-col items-center justify-center text-center ${!isExporting && isAdmin ? 'cursor-pointer hover:bg-orange-50/70 p-0.5 rounded-lg transition' : ''}`}
                         title={isAdmin ? "Bấm để cài đặt Số tài khoản & Tên tài khoản" : undefined}
                       >
                         <div className="w-full flex items-center justify-center gap-0.5 flex-wrap leading-tight">
-                          <span className="text-[8px] sm:text-[8.5px] font-bold text-gray-400 uppercase tracking-tight">STK:</span>
+                          <span className="text-[8px] sm:text-[9px] font-bold text-gray-400 uppercase tracking-tight">STK:</span>
                           <span 
-                            className="text-[9.5px] sm:text-[10.5px] font-black font-mono text-gray-900 tracking-tight select-all break-all"
+                            className="text-[10px] sm:text-[11px] font-black font-mono text-gray-900 tracking-tight select-all break-all"
                             title="Số tài khoản"
                           >
                             {bankConfig.accountNo?.trim() || (isAdmin ? 'Chưa nhập' : '---')}
@@ -2106,7 +1762,7 @@ export default function ContractManager({
                         </div>
                         <div className="w-full mt-0.5">
                           <span 
-                            className="text-[8px] sm:text-[8.5px] font-extrabold uppercase text-gray-700 tracking-tight leading-tight line-clamp-1 truncate max-w-full block" 
+                            className="text-[8px] sm:text-[9px] font-extrabold uppercase text-gray-700 tracking-tight leading-tight line-clamp-1 truncate max-w-full block" 
                             title={bankConfig.accountName || 'Tên chủ tài khoản'}
                           >
                             {bankConfig.accountName?.trim() || (isAdmin ? '(Bấm thêm tên)' : '')}
@@ -2115,617 +1771,157 @@ export default function ContractManager({
                       </div>
                     </div>
                   </div>
+
+                  {/* Timing Info */}
+                  <div className="space-y-1 pt-2.5 border-t border-gray-200">
+                    <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">THÔNG TIN THỜI HẠN</h4>
+                    <div className="space-y-1.5 text-xs sm:text-[13px]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-500 font-medium whitespace-nowrap">Bắt đầu:</span>
+                        <strong className="text-gray-900 font-bold font-mono whitespace-nowrap">{formatDMY(selectedContract.startDate)}</strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-500 font-medium whitespace-nowrap">Hạn trả máy:</span>
+                        <strong className="text-gray-900 font-bold font-mono whitespace-nowrap">
+                          {selectedContract.is6Hours ? `Gói 6h (${selectedContract.startTime || '08:00'} - ${selectedContract.returnTime || '14:00'})` : formatDMY(selectedContract.endDate)}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Rental Items Detail - ONLY item name, no price */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DANH SÁCH Trang Phục Thuê</h4>
-                    {onUpdateContractItems && !isExporting && !editingItems && (
-                      <button
-                        type="button"
-                        data-no-export="true"
-                        onClick={() => {
-                          setItemsDraft([...selectedContract.items]);
-                          setItemSearchQuery('');
-                          setEditingItems(true);
-                        }}
-                        className="no-export-item flex items-center gap-1 text-[10px] font-bold text-green-700 hover:bg-green-50 border border-green-300 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                      >
-                        <Edit2 className="w-3 h-3" /> Sửa danh sách
-                      </button>
-                    )}
-                  </div>
-
-                  {editingItems ? (
-                    <div className="border border-green-300 rounded-xl overflow-hidden bg-white space-y-0" data-no-export="true">
-                      {/* Current items with remove button */}
-                      <div className="divide-y divide-gray-100">
-                        {itemsDraft.map((i, idx) => {
-                          const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
-                          const displaySize = i.size || matchedCam?.size;
-                          const displayColor = i.color || matchedCam?.color;
-                          return (
-                            <div key={idx} className="p-2.5 px-3 flex items-center text-xs bg-white gap-2">
-                              {matchedCam?.image ? (
-                                <img src={matchedCam.image} alt="" className="w-6 h-7 rounded object-cover border border-gray-200 shrink-0" />
-                              ) : (
-                                <span className="text-orange-500 text-sm shrink-0">👗</span>
-                              )}
-                              <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-gray-900 truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
-                                {displaySize && <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-slate-200">Size {displaySize}</span>}
-                                {displayColor && <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-rose-200">🎨 {displayColor}</span>}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setItemsDraft(prev => prev.filter((_, i2) => i2 !== idx))}
-                                className="shrink-0 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                                title="Xóa khỏi danh sách"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Add outfit search */}
-                      <div className="border-t border-dashed border-green-200 p-2.5 space-y-1.5 bg-green-50/50">
-                        <div className="text-[10px] font-bold text-green-800 uppercase">+ Thêm trang phục</div>
-                        <input
-                          type="text"
-                          value={itemSearchQuery}
-                          onChange={e => setItemSearchQuery(e.target.value)}
-                          placeholder="Tìm theo tên..."
-                          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-green-500 focus:outline-none bg-white"
-                        />
-                        {itemSearchQuery.trim().length >= 1 && (() => {
-                          const q = itemSearchQuery.toLowerCase();
-                          const results = cameras.filter(c =>
-                            !c.isPrinter && c.category !== 'Printer' &&
-                            (c.name.toLowerCase().includes(q) || (c.serialNumber || '').toLowerCase().includes(q))
-                          ).slice(0, 8);
-                          if (results.length === 0) return <div className="text-[11px] text-gray-400 px-1">Không tìm thấy trang phục phù hợp</div>;
-                          return (
-                            <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden bg-white max-h-[220px] overflow-y-auto">
-                              {results.map(cam => {
-                                // Kiểm tra xem trang phục này đã có trong danh sách draft chưa
-                                const isAlreadyInDraft = itemsDraft.some(item => item.cameraId === cam.id);
-                                
-                                // Kiểm tra xung đột lịch thuê với các hợp đồng khác trong cùng khoảng thời gian
-                                const otherContracts = contracts.filter(c => c.id !== selectedContract.id && c.status !== 'Cancelled');
-                                const conflictCheck = checkBookingConflict(
-                                  [cam.id],
-                                  selectedContract.startDate,
-                                  selectedContract.endDate,
-                                  false,
-                                  otherContracts
-                                );
-                                const isConflict = conflictCheck.hasConflict;
-
-                                // Kiểm tra trạng thái bảo dưỡng/giặt ủi
-                                const isMaintenance = cam.status === 'Maintenance';
-                                const isLaundry = cam.cleaningStatus === 'Laundry';
-                                const isMending = cam.cleaningStatus === 'Mending';
-                                const isUnavailable = isAlreadyInDraft || isConflict || isMaintenance || isLaundry || isMending;
-
-                                const reasonText = isAlreadyInDraft
-                                  ? 'Đã có trong đơn'
-                                  : isConflict
-                                  ? 'Trùng lịch thuê!'
-                                  : isMaintenance
-                                  ? 'Đang bảo dưỡng'
-                                  : isLaundry
-                                  ? 'Đang giặt hấp'
-                                  : isMending
-                                  ? 'Đang sửa chữa'
-                                  : null;
-
-                                return (
-                                  <button
-                                    key={cam.id}
-                                    type="button"
-                                    disabled={isUnavailable}
-                                    onClick={() => {
-                                      if (isUnavailable) return;
-                                      const days = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
-                                      const rate = cam.price1Day ?? cam.dailyRate ?? 0;
-                                      setItemsDraft(prev => [...prev, {
-                                        cameraId: cam.id,
-                                        cameraName: cam.name,
-                                        dailyRate: rate,
-                                        quantity: 1,
-                                        size: cam.size,
-                                        color: cam.color
-                                      }]);
-                                      setItemSearchQuery('');
-                                    }}
-                                    className={`w-full flex items-center gap-2 px-2.5 py-2 text-xs text-left transition ${
-                                      isUnavailable
-                                        ? 'bg-gray-100/80 opacity-60 cursor-not-allowed text-gray-500'
-                                        : 'hover:bg-green-50 cursor-pointer text-gray-900'
-                                    }`}
-                                    title={reasonText || 'Bấm để thêm vào đơn'}
-                                  >
-                                    {cam.image ? (
-                                      <img src={cam.image} alt="" className="w-5 h-6 rounded object-cover border border-gray-200 shrink-0" />
-                                    ) : (
-                                      <span className="text-orange-400 shrink-0">👗</span>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <div className="font-bold truncate">{cam.name}</div>
-                                      <div className="text-[10px] text-gray-400 flex items-center gap-1.5 font-mono">
-                                        {cam.size && <span>Size {cam.size}</span>}
-                                        {cam.color && <span>• {cam.color}</span>}
-                                        {cam.serialNumber && <span>• #{cam.serialNumber}</span>}
-                                      </div>
-                                    </div>
-                                    {isUnavailable ? (
-                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 shrink-0">
-                                        🚫 {reasonText}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-md shrink-0">
-                                        + Thêm
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Save / Cancel */}
-                      <div className="border-t border-green-200 p-2.5 flex gap-2 bg-white">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (itemsDraft.length === 0) return;
-                            // Recalculate total based on new items
-                            const days = Math.max(1, Math.ceil((new Date(selectedContract.endDate).getTime() - new Date(selectedContract.startDate).getTime()) / 86400000) + 1);
-                            const newTotal = itemsDraft.reduce((sum, item) => {
-                              const cam = cameras.find(c => c.id === item.cameraId);
-                              const rate = cam ? (cam.price1Day ?? cam.dailyRate ?? item.dailyRate) : item.dailyRate;
-                              return sum + rate * days * (item.quantity || 1);
-                            }, 0);
-                            if (onUpdateContractItems) {
-                              onUpdateContractItems(selectedContract.id, itemsDraft, newTotal);
-                            }
-                            setEditingItems(false);
-                          }}
-                          disabled={itemsDraft.length === 0}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[11px] font-bold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition cursor-pointer"
-                        >
-                          <Save className="w-3 h-3" /> Lưu danh sách
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingItems(false)}
-                          className="px-3 py-1.5 text-[11px] font-bold text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg transition cursor-pointer"
-                        >
-                          Hủy
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-white">
-                      {selectedContract.items.map((i, idx) => {
-                        const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
-                        const displaySize = i.size || matchedCam?.size;
-                        const displayColor = i.color || matchedCam?.color;
-                        return (
-                          <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
-                            <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
-                              {matchedCam?.image ? (
-                                <img src={matchedCam.image} alt="" className="w-6 h-7 rounded object-cover border border-gray-200 shrink-0" />
-                              ) : (
-                                <span className="text-orange-500 text-sm shrink-0">👗</span>
-                              )}
-                              <span className="truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
-                              {displaySize && (
-                                <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
-                                  Size {displaySize}
-                                </span>
-                              )}
-                              {displayColor && (
-                                <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 border border-rose-200">
-                                  🎨 {displayColor}
-                                </span>
-                              )}
-                              {i.discountPercent ? (
-                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 ${
-                                  i.discountPercent === 100
-                                    ? 'bg-rose-600 text-white shadow-3xs'
-                                    : 'bg-orange-100 text-orange-900 border border-orange-200'
-                                }`}>
-                                  {i.discountPercent === 100 ? '🎁 Tặng 0đ (100%)' : `Giảm -${i.discountPercent}%`}
-                                </span>
-                              ) : null}
-                              {i.quantity > 1 && (
-                                <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} chiếc)</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Surcharge Block — chỉ hiển thị khi đang thuê hoặc đã trả (Active/Overdue/Completed) */}
-                {(selectedContract.status === 'Active' || selectedContract.status === 'Overdue' || selectedContract.status === 'Completed') && (
-                <div className="bg-amber-50/70 border border-amber-250 p-3 sm:p-3.5 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-amber-900 font-extrabold text-xs flex items-center gap-1">
-                        <span>⚡ Phụ thu phát sinh:</span>
-                      </span>
-                      {selectedContract.surchargeAmount && selectedContract.surchargeAmount > 0 ? (
-                        <span className="bg-amber-200 text-amber-950 font-mono font-black text-xs px-2 py-0.5 rounded-md border border-amber-300">
-                          +{selectedContract.surchargeAmount.toLocaleString()}đ
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs italic">(Không có phụ thu)</span>
-                      )}
-                    </div>
-
-                    {!editingSurcharge && !isExporting && (
-                      <button
-                        type="button"
-                        data-no-export="true"
-                        onClick={() => {
-                          setSurchargeDraft(selectedContract.surchargeAmount || 0);
-                          setSurchargeReasonDraft(selectedContract.surchargeReason || '');
-                          setEditingSurcharge(true);
-                        }}
-                        className="text-[11px] font-bold text-amber-800 bg-white hover:bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-3xs"
-                      >
-                        <Edit2 className="w-3 h-3 text-amber-700" />
-                        <span>{selectedContract.surchargeAmount ? 'Sửa phụ thu' : '+ Thêm phụ thu'}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {selectedContract.surchargeReason && !editingSurcharge && (
-                    <div className="text-[11px] text-amber-900 bg-white/90 p-2 rounded-lg border border-amber-200/80 font-medium">
-                      <span className="font-bold text-gray-500">Lý do: </span>
-                      {selectedContract.surchargeReason}
-                    </div>
-                  )}
-
-                  {editingSurcharge && (
-                    <div className="space-y-2 pt-1 border-t border-amber-200/80 animate-fade-in" data-no-export="true">
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                          Số tiền phụ thu (VNĐ):
-                        </label>
-                        <MoneyInput
-                          value={surchargeDraft}
-                          onChange={(val) => setSurchargeDraft(val)}
-                          placeholder="Nhập số tiền phụ thu (VD: 100.000)"
-                          className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                          Lý do phụ thu (Bấm chọn nhanh hoặc tự gõ):
-                        </label>
-                        <div className="flex flex-wrap gap-1 mb-1.5">
-                          {[
-                            '🧺 Giặt tẩy vết bẩn',
-                            '🪡 Sửa rách / May vá',
-                            '⏰ Trả trễ hạn',
-                            '🎀 Thuê thêm phụ kiện',
-                            '⏳ Gia hạn thời gian'
-                          ].map(tag => (
-                            <button
-                              key={tag}
-                              type="button"
-                              onClick={() => {
-                                setSurchargeReasonDraft(prev => prev ? `${prev}, ${tag}` : tag);
-                              }}
-                              className="text-[10px] bg-white hover:bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded cursor-pointer transition font-medium active:scale-95 shadow-3xs"
-                            >
-                              + {tag}
-                            </button>
-                          ))}
+                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DANH SÁCH THIẾT BỊ THUÊ</h4>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-white">
+                    {selectedContract.items.map((i, idx) => (
+                      <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
+                        <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
+                          <span className="text-orange-500 text-xs">📷</span>
+                          <span className="truncate">{i.cameraName}</span>
+                          {i.quantity > 1 && (
+                            <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} chiếc)</span>
+                          )}
                         </div>
-                        <input
-                          type="text"
-                          value={surchargeReasonDraft}
-                          onChange={(e) => setSurchargeReasonDraft(e.target.value)}
-                          placeholder="VD: Dính son môi ở cổ áo, trả muộn 3 tiếng..."
-                          className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                        />
                       </div>
-
-                      <div className="flex items-center justify-end gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingSurcharge(false)}
-                          className="px-2.5 py-1 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 cursor-pointer"
-                        >
-                          Hủy
-                        </button>
-                        {selectedContract.surchargeAmount ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onUpdateContractSurcharge) {
-                                onUpdateContractSurcharge(selectedContract.id, 0, '');
-                              }
-                              const oldSurch = selectedContract.surchargeAmount || 0;
-                              const newPaid = Math.max(0, (selectedContract.paidAmount || 0) - oldSurch);
-                              setSelectedContract(prev => prev ? ({ ...prev, surchargeAmount: undefined, surchargeReason: undefined, paidAmount: newPaid }) : null);
-                              setEditingSurcharge(false);
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer"
-                          >
-                            Xóa phụ thu
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (onUpdateContractSurcharge) {
-                              onUpdateContractSurcharge(selectedContract.id, surchargeDraft, surchargeReasonDraft, true);
-                            }
-                            const oldSurch = selectedContract.surchargeAmount || 0;
-                            const diff = surchargeDraft - oldSurch;
-                            const newPaid = Math.max(0, (selectedContract.paidAmount || 0) + diff);
-                            setSelectedContract(prev => prev ? ({
-                              ...prev,
-                              surchargeAmount: surchargeDraft > 0 ? surchargeDraft : undefined,
-                              surchargeReason: surchargeReasonDraft?.trim() || undefined,
-                              paidAmount: newPaid
-                            }) : null);
-                            setEditingSurcharge(false);
-                          }}
-                          className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1 rounded-lg text-xs transition cursor-pointer shadow-xs active:scale-95"
-                        >
-                          Lưu phụ thu & Thu tiền
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
-                )}
 
                 {/* Financial Summary Block */}
-                {(() => {
-                  const contractSurcharge = selectedContract.surchargeAmount || 0;
-                  const finalTotal = selectedContract.totalPrice + contractSurcharge;
-                  const remainingToPay = Math.max(0, finalTotal - selectedContract.paidAmount);
-
-                  return (
-                    <div className="bg-gradient-to-br from-orange-50/60 to-amber-50/40 border border-orange-200/80 p-3.5 sm:p-4 rounded-xl space-y-2">
-                      {selectedContract.discountPercent ? (
-                        <div className="flex justify-between items-center text-xs sm:text-sm">
-                          <span className="text-gray-600 font-medium">Giảm giá tự động:</span>
-                          <span className="font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded text-xs shrink-0">-{selectedContract.discountPercent}%</span>
-                        </div>
-                      ) : null}
-
-                      <div className="flex justify-between items-center text-xs sm:text-sm gap-2">
-                        <span className="text-gray-700 font-semibold">Tiền thuê trang phục:</span>
-                        <span className="font-black text-gray-900 text-sm sm:text-base font-mono shrink-0">{selectedContract.totalPrice.toLocaleString()}đ</span>
-                      </div>
-
-                      {contractSurcharge > 0 && (
-                        <div className="flex justify-between items-center text-xs sm:text-sm gap-2 text-amber-900 bg-amber-100/70 px-2 py-1 rounded-lg border border-amber-250">
-                          <span className="font-bold flex items-center gap-1">
-                            <span>⚡ Phụ thu ({selectedContract.surchargeReason || 'Phát sinh'}):</span>
-                          </span>
-                          <span className="font-black font-mono shrink-0">+{contractSurcharge.toLocaleString()}đ</span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/80 pt-1.5 font-bold text-gray-900 gap-2">
-                        <span>Tổng tiền hợp đồng:</span>
-                        <span className="text-base sm:text-lg font-black text-orange-600 font-mono shrink-0">{finalTotal.toLocaleString()}đ</span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-1.5 text-gray-700 gap-2">
-                        <span>Trị giá cọc thế chấp (VNĐ cọc):</span>
-                        <span className="font-bold text-gray-800 font-mono shrink-0">{selectedContract.depositAmount.toLocaleString()}đ</span>
-                      </div>
-                      
-                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-1.5 text-gray-700 gap-2">
-                        <span>Đã thanh toán / cọc:</span>
-                        <span className="font-bold text-emerald-700 font-mono shrink-0">{selectedContract.paidAmount.toLocaleString()}đ</span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-300 pt-2 font-bold text-gray-900 gap-2 bg-orange-100/50 p-2 rounded-lg">
-                        <span>Còn lại cần thanh toán:</span>
-                        <span className={`text-sm sm:text-base font-black font-mono shrink-0 ${remainingToPay > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          {remainingToPay > 0 ? `${remainingToPay.toLocaleString()}đ` : '✓ Đã thu đủ 100%'}
-                        </span>
-                      </div>
+                <div className="bg-gradient-to-br from-orange-50/60 to-amber-50/40 border border-orange-200/80 p-3.5 sm:p-4 rounded-xl space-y-2.5">
+                  {selectedContract.discountPercent ? (
+                    <div className="flex justify-between items-center text-xs sm:text-sm">
+                      <span className="text-gray-600 font-medium">Giảm giá tự động:</span>
+                      <span className="font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded text-xs shrink-0">-{selectedContract.discountPercent}%</span>
                     </div>
-                  );
-                })()}
+                  ) : null}
 
-                {/* Contract Note if present */}
-                {selectedContract.note && (
-                  <div className="p-2.5 bg-amber-50/80 border border-amber-200/90 rounded-xl text-[11px] text-amber-950 leading-relaxed text-left">
-                    <strong className="text-amber-900 block font-bold mb-0.5">📝 Ghi chú đơn hàng:</strong>
-                    <span>{selectedContract.note}</span>
+                  <div className="flex justify-between items-center text-xs sm:text-sm gap-2">
+                    <span className="text-gray-700 font-semibold">Tổng tiền thuê dự kiến:</span>
+                    <span className="font-black text-gray-900 text-sm sm:text-base font-mono shrink-0">{selectedContract.totalPrice.toLocaleString()}đ</span>
                   </div>
-                )}
 
-                {/* Section: Lưu ý & Quy định thuê trang phục (Có thể chỉnh sửa) */}
-                <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-3 sm:p-3.5 space-y-2 text-left">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
-                    <div className="flex items-center gap-1.5 text-slate-900 font-extrabold text-[11px] sm:text-xs uppercase tracking-wide">
-                      <ShieldAlert className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-                      <span>Lưu ý & Quy định thuê trang phục</span>
-                    </div>
-                    {!isExporting && (
-                      <div>
-                        {editingTerms ? (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setTermsDraft(DEFAULT_RENTAL_TERMS)}
-                              className="text-[10px] text-gray-500 hover:text-gray-800 underline cursor-pointer mr-1"
-                            >
-                              Mặc định
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingTerms(false)}
-                              className="text-[10.5px] font-bold text-gray-600 bg-gray-200/80 hover:bg-gray-300 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                            >
-                              Hủy
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const trimmed = termsDraft.trim() || DEFAULT_RENTAL_TERMS;
-                                setRentalTerms(trimmed);
-                                localStorage.setItem('shop_rental_terms', trimmed);
-                                setEditingTerms(false);
-                              }}
-                              className="text-[10.5px] font-bold text-white bg-orange-600 hover:bg-orange-700 px-2.5 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-3xs"
-                            >
-                              <Save className="w-3 h-3" /> Lưu
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            data-no-export="true"
-                            onClick={() => {
-                              setTermsDraft(rentalTerms);
-                              setEditingTerms(true);
-                            }}
-                            className="no-export-item flex items-center gap-1 text-[10px] font-bold text-orange-600 hover:bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                            title="Sửa nội dung lưu ý quy định thuê"
-                          >
-                            <Edit2 className="w-3 h-3" /> Sửa lưu ý
-                          </button>
-                        )}
-                      </div>
-                    )}
+                  <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-2 text-gray-700 gap-2">
+                    <span>Trị giá cọc thế chấp (VNĐ cọc):</span>
+                    <span className="font-bold text-gray-800 font-mono shrink-0">{selectedContract.depositAmount.toLocaleString()}đ</span>
                   </div>
                   
-                  {editingTerms ? (
-                    <div className="space-y-1.5 pt-1">
-                      <textarea
-                        value={termsDraft}
-                        onChange={e => setTermsDraft(e.target.value)}
-                        rows={7}
-                        className="w-full border border-orange-300 rounded-lg p-2 text-[11px] font-normal focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white text-gray-900 leading-relaxed"
-                        placeholder="Nhập nội dung lưu ý & quy định thuê đồ..."
-                      />
-                      <p className="text-[10px] text-gray-400 italic">
-                        * Nội dung này sẽ được lưu dùng chung cho tất cả các hóa đơn in ra và xuất ảnh.
-                      </p>
-                    </div>
+                  {selectedContract.status === 'Pending' ? (
+                    <>
+                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-2 text-gray-700 gap-2">
+                        <span className="font-medium text-amber-900">Khách cọc đặt giữ máy trước ({selectedContract.totalPrice > 0 ? Math.round((selectedContract.paidAmount / selectedContract.totalPrice) * 100) : 0}%):</span>
+                        <span className="font-bold text-amber-700 font-mono shrink-0">{selectedContract.paidAmount.toLocaleString()}đ</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-2 text-gray-700 gap-2">
+                        <span>Thực tế khách đã thanh toán:</span>
+                        <span className="font-bold text-gray-400 font-mono shrink-0">0đ <span className="text-[10px] font-normal">(Chưa cọc)</span></span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-300 pt-2 font-bold text-gray-900 gap-2">
+                        <span>Còn lại cần thanh toán khi nhận máy:</span>
+                        <span className="text-rose-600 text-sm sm:text-base font-black font-mono shrink-0">{(selectedContract.totalPrice - selectedContract.paidAmount).toLocaleString()}đ</span>
+                      </div>
+                    </>
                   ) : (
-                    <div className="text-[10px] sm:text-[10.5px] text-gray-700 space-y-1 leading-relaxed whitespace-pre-line">
-                      {rentalTerms}
-                    </div>
+                    <>
+                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-2 text-gray-700 gap-2">
+                        <span>Khách cọc đặt giữ máy trước ({selectedContract.totalPrice > 0 ? Math.round((selectedContract.paidAmount / selectedContract.totalPrice) * 100) : 0}%):</span>
+                        <span className="font-bold text-emerald-700 font-mono shrink-0">{selectedContract.paidAmount.toLocaleString()}đ</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-300 pt-2 font-bold text-gray-900 gap-2">
+                        <span>Dư nợ còn lại đã thu / cần thu:</span>
+                        <span className="text-rose-600 text-sm sm:text-base font-black font-mono shrink-0">{(selectedContract.totalPrice - selectedContract.paidAmount).toLocaleString()}đ</span>
+                      </div>
+                    </>
                   )}
                 </div>
 
               </div>
 
               {/* Status Update Quick Controls - Centered */}
-              <div className="border-t border-gray-150 pt-3.5 space-y-2.5 shrink-0">
+              <div className="border-t border-gray-150 pt-3.5 space-y-2.5 shrink-0 text-center">
+                <h4 className="text-[10px] sm:text-xs uppercase font-extrabold text-gray-400 tracking-wider text-center">
+                  VẬN HÀNH TRẠNG THÁI HỢP ĐỒNG & CỌC GIỮ MÁY
+                </h4>
+                
                 <div className="flex flex-wrap gap-2 justify-center items-center">
-                  {selectedContract.status === 'Pending' && (() => {
-                    const deposit50 = Math.round(selectedContract.totalPrice * 0.5);
-                    const deposit100 = selectedContract.totalPrice;
-                    const paid = selectedContract.paidAmount || 0;
-                    const isFullPaid = paid >= deposit100 && deposit100 > 0;
-                    const isHalfPaid = !isFullPaid && paid >= deposit50 && deposit50 > 0;
-                    const isNotPaid = paid === 0;
-                    return (
-                      <div className="w-full space-y-2.5">
-                        {/* Segmented Control for Deposit Status */}
-                        <div className="bg-slate-100/90 p-1 rounded-xl border border-slate-200/80">
-                          <div className="grid grid-cols-3 gap-1">
-                            {/* Chưa cọc */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách hàng chưa thanh toán tiền cọc để giữ đồ.', 0);
-                                setSelectedContract({ ...selectedContract, paidAmount: 0 });
-                              }}
-                              className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                                isNotPaid
-                                  ? 'bg-white text-gray-800 shadow-2xs font-extrabold'
-                                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                              }`}
-                            >
-                              <span>⏳ Chưa cọc</span>
-                            </button>
+                  {selectedContract.status === 'Pending' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const deposit50 = Math.round(selectedContract.totalPrice * 0.5);
+                          onUpdateContractStatus(selectedContract.id, 'Pending', 'Đã nhận đủ 50% tiền cọc giữ máy chuyển khoản từ khách hàng.', deposit50);
+                          setSelectedContract({
+                            ...selectedContract,
+                            paidAmount: deposit50
+                          });
+                        }}
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-black px-3.5 py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                        title="Xác nhận khách đã chuyển khoản 50% tiền cọc"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        <span>✓ Xác nhận ĐÃ thu cọc 50% ({Math.round(selectedContract.totalPrice * 0.5).toLocaleString()}đ)</span>
+                      </button>
 
-                            {/* Cọc 50% */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onUpdateContractStatus(selectedContract.id, 'Pending', 'Đã nhận đủ 50% tiền cọc giữ đồ chuyển khoản từ khách hàng.', deposit50);
-                                setSelectedContract({ ...selectedContract, paidAmount: deposit50 });
-                              }}
-                              className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                                isHalfPaid
-                                  ? 'bg-amber-500 text-white shadow-2xs font-black'
-                                  : 'text-amber-800 hover:text-amber-950 hover:bg-white/50'
-                              }`}
-                            >
-                              <span>Cọc 50% ({deposit50.toLocaleString()}đ)</span>
-                            </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách hàng chưa thanh toán tiền cọc 50% để giữ máy.', 0);
+                          setSelectedContract({
+                            ...selectedContract,
+                            paidAmount: 0
+                          });
+                        }}
+                        className="bg-amber-50 hover:bg-amber-100 text-amber-850 border border-amber-300 font-bold px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                        title="Đánh dấu khách chưa chuyển tiền cọc 50%"
+                      >
+                        <Clock className="w-4 h-4 text-amber-700" />
+                        <span>⏳ Đánh dấu CHƯA cọc 50%</span>
+                      </button>
 
-                            {/* Cọc 100% */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách đã thanh toán đầy đủ 100% tiền thuê ngay khi đặt lịch.', deposit100);
-                                setSelectedContract({ ...selectedContract, paidAmount: deposit100 });
-                              }}
-                              className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                                isFullPaid
-                                  ? 'bg-indigo-600 text-white shadow-2xs font-black'
-                                  : 'text-indigo-800 hover:text-indigo-950 hover:bg-white/50'
-                              }`}
-                            >
-                              <span>Đủ 100% ({deposit100.toLocaleString()}đ)</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Primary Action Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onUpdateContractStatus(selectedContract.id, 'Active', 'Bàn giao trang phục và chụp ảnh lưu hồ sơ.');
-                            setSelectedContract(prev => prev ? ({ ...prev, status: 'Active' }) : null);
-                          }}
-                          className="w-full bg-blue-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 shadow-xs"
-                        >
-                          <Check className="w-4 h-4 text-white" /> Bàn giao trang phục (Bắt đầu thuê)
-                        </button>
-                      </div>
-                    );
-                  })()}
+                      <button
+                        onClick={() => {
+                          onUpdateContractStatus(selectedContract.id, 'Active', 'Bàn giao thiết bị và chụp ảnh lưu hồ sơ cọc.');
+                          setSelectedContract(prev => prev ? ({ ...prev, status: 'Active' }) : null);
+                        }}
+                        className="bg-blue-600 text-white font-bold px-3.5 py-2 rounded-xl text-xs hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                      >
+                        <Check className="w-4 h-4 text-white" /> Bàn giao máy (Bắt đầu thuê)
+                      </button>
+                    </>
+                  )}
 
                   {selectedContract.status === 'Active' && (
                     <>
                       <button
                         onClick={() => {
-                          const totalWithSurcharge = selectedContract.totalPrice + (selectedContract.surchargeAmount || 0);
-                          onUpdateContractStatus(selectedContract.id, 'Completed', 'Trang phục đã được thu hồi đầy đủ, tất toán xong và chuyển sang trạng thái đang giặt hấp.', totalWithSurcharge);
-                          setSelectedContract(prev => prev ? ({ ...prev, status: 'Completed', paidAmount: totalWithSurcharge }) : null);
+                          onUpdateContractStatus(selectedContract.id, 'Completed', 'Mọi thiết bị được thu hồi đầy đủ và thanh toán tất toán toàn bộ.', selectedContract.totalPrice);
+                          setSelectedContract(prev => prev ? ({ ...prev, status: 'Completed' }) : null);
                         }}
                         className="bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
                       >
-                        <Check className="w-4 h-4 text-white" /> Nhận đồ & Tất toán (Chuyển giặt)
+                        <Check className="w-4 h-4 text-white" /> Nhận máy & Tất toán xong
                       </button>
                       <button
                         onClick={() => {
@@ -2742,19 +1938,18 @@ export default function ContractManager({
                   {selectedContract.status === 'Overdue' && (
                     <button
                       onClick={() => {
-                        const totalWithSurcharge = selectedContract.totalPrice + (selectedContract.surchargeAmount || 0);
-                        onUpdateContractStatus(selectedContract.id, 'Completed', 'Đã thu hồi trang phục thành công sau thời gian trễ hạn. Thu thêm phụ thu và chuyển giặt.', totalWithSurcharge);
-                        setSelectedContract(prev => prev ? ({ ...prev, status: 'Completed', paidAmount: totalWithSurcharge }) : null);
+                        onUpdateContractStatus(selectedContract.id, 'Completed', 'Đã thu hồi thành công sau thời gian trễ hạn. Thu thêm phụ thu.', selectedContract.totalPrice);
+                        setSelectedContract(prev => prev ? ({ ...prev, status: 'Completed' }) : null);
                       }}
                       className="bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
                     >
-                      <Check className="w-4 h-4 text-white" /> Tất toán nhận lại đồ (Chuyển giặt)
+                      <Check className="w-4 h-4 text-white" /> Tất toán nhận lại máy (Đã thu hồi)
                     </button>
                   )}
 
                   {selectedContract.status === 'Completed' && (
                     <p className="text-gray-400 text-xs italic flex items-center justify-center gap-2 py-1">
-                      <Check className="w-4 h-4 text-emerald-500 shrink-0" /> Hợp đồng đã hoàn thành tất toán. Đồ thuê đã chuyển sang trạng thái "🧺 Đang giặt hấp" trong kho.
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0" /> Hợp đồng đã hoàn thành chu trình thanh toán & thu hồi thiết bị.
                     </p>
                   )}
 
@@ -2767,24 +1962,24 @@ export default function ContractManager({
                         <button
                           type="button"
                           onClick={() => {
-                            onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách hàng có nhu cầu đặt lại trang phục, đã khôi phục hợp đồng.');
+                            onUpdateContractStatus(selectedContract.id, 'Pending', 'Khách hàng có nhu cầu đặt lại thiết bị, đã khôi phục hợp đồng.');
                             setSelectedContract(prev => prev ? ({ ...prev, status: 'Pending' }) : null);
                           }}
                           className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 whitespace-nowrap"
-                          title="Khôi phục trạng thái về Chờ nhận đồ"
+                          title="Khôi phục trạng thái về Chờ nhận máy"
                         >
                           <RefreshCw className="w-3.5 h-3.5" /> Khôi phục đặt lịch (Chờ nhận)
                         </button>
                         <button
                           type="button"
                           onClick={() => {
-                            onUpdateContractStatus(selectedContract.id, 'Active', 'Bàn giao trang phục và chụp ảnh lưu hồ sơ.');
+                            onUpdateContractStatus(selectedContract.id, 'Active', 'Bàn giao thiết bị và chụp ảnh lưu hồ sơ cọc.');
                             setSelectedContract(prev => prev ? ({ ...prev, status: 'Active' }) : null);
                           }}
                           className="bg-blue-600 text-white font-bold px-3.5 py-2 rounded-xl text-xs hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap"
-                          title="Bàn giao trang phục và bắt đầu tính thời gian thuê"
+                          title="Bàn giao máy và bắt đầu tính thời gian thuê"
                         >
-                          <Check className="w-3.5 h-3.5" /> Bàn giao trang phục ngay (Bắt đầu thuê)
+                          <Check className="w-3.5 h-3.5" /> Bàn giao máy ngay (Bắt đầu thuê)
                         </button>
                       </div>
                     </div>
@@ -2798,11 +1993,9 @@ export default function ContractManager({
               <button
                 type="button"
                 className="bg-white hover:bg-gray-100 border border-gray-250 text-gray-750 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"
-                onClick={() => handlePrintReceipt('contract-receipt-capture')}
-                title="In hóa đơn hợp đồng bản cứng ra máy in"
+                onClick={() => setCustomAlertMessage(`Đang chuẩn bị in hợp đồng ${selectedContract.contractCode}... Vui lòng kết nối máy in để in bản cứng kèm chữ ký.`)}
               >
-                <Printer className="w-4 h-4 text-gray-600" />
-                <span>In Hóa Đơn (Bản cứng)</span>
+                In Hợp Đồng (Bản cứng)
               </button>
 
               <button
@@ -2865,11 +2058,11 @@ export default function ContractManager({
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden self-center border border-gray-100 animate-scale-up flex flex-col max-h-[90vh]">
             <div className="bg-orange-600 px-6 py-4 text-white flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg flex items-center gap-2">
-                <FileText className="w-5 h-5" /> Lập Hợp Đồng Thuê Trang Phục Mới
+                <FileText className="w-5 h-5" /> Lập Hợp Đồng Thuê Máy Mới
               </h3>
               <button
                 type="button"
-                onClick={() => handleCloseAddModal()}
+                onClick={() => setShowAddModal(false)}
                 className="text-white hover:text-gray-200 font-bold text-xl cursor-pointer"
               >
                 &times;
@@ -2878,12 +2071,9 @@ export default function ContractManager({
 
             <form 
               onSubmit={handleCreateContract} 
-              className="flex flex-col flex-1 overflow-hidden min-h-0"
+              className="p-6 space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
+              style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
             >
-              <div 
-                className="p-6 space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
-                style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-              >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="relative">
                   <label className="block text-xs font-bold text-gray-700 mb-1">Họ tên khách hàng *</label>
@@ -3093,298 +2283,36 @@ export default function ContractManager({
                       </svg>
                     </div>
                     <span className="text-xs sm:text-sm font-bold text-gray-800">
-                      Chọn trang phục thuê *
+                      Chọn thiết bị thuê *
                     </span>
                   </div>
                   {newContractForm.selectedCameraIds.length > 0 ? (
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (contractShowOnlySelected) {
-                            setContractShowOnlySelected(false);
-                          } else {
-                            setContractOutfitSearch('');
-                            setContractSizeFilter('ALL');
-                            setContractAvailabilityFilter('ALL');
-                            setContractShowOnlySelected(true);
-                          }
-                        }}
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer shadow-3xs ${
-                          contractShowOnlySelected
-                            ? 'bg-orange-600 text-white shadow-xs ring-2 ring-orange-300'
-                            : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50'
-                        }`}
-                        title="Bấm để lọc chỉ xem những trang phục đã chọn"
-                      >
-                        {contractShowOnlySelected ? '👁️ Xem tất cả' : '📍 Xem đã chọn'}
-                      </button>
-                      <span className="bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-2xs">
-                        Đã chọn: {newContractForm.selectedCameraIds.length} món
-                      </span>
-                    </div>
+                    <span className="bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-2xs">
+                      Đã chọn: {newContractForm.selectedCameraIds.length} máy
+                    </span>
                   ) : (
                     <span className="text-[11px] text-gray-400 font-medium">
-                      Chưa chọn trang phục nào
+                      Chưa chọn máy nào
                     </span>
                   )}
                 </div>
-                {/* Quick Search and Size Filter for Outfits */}
-                <div className="space-y-1.5 mb-2">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={contractOutfitSearch}
-                      onChange={e => {
-                        setContractOutfitSearch(e.target.value);
-                        if (contractShowOnlySelected) setContractShowOnlySelected(false);
-                      }}
-                      placeholder="🔍 Tìm nhanh mẫu đồ, mã số, màu sắc..."
-                      className="w-full bg-white border border-orange-200 rounded-xl px-3 py-1.5 text-xs text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs font-medium"
-                    />
-                    {contractOutfitSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setContractOutfitSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs px-1"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Filter Row: Size and Availability Filters */}
-                  <div className="space-y-1.5 pt-0.5">
-                    {/* Size Filter Pills */}
-                    <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-                      <span className="text-[10px] font-bold text-gray-500 shrink-0 uppercase tracking-tight">Size:</span>
-                      {['ALL', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'].map(sz => {
-                        const isActive = !contractShowOnlySelected && contractSizeFilter === sz;
-                        return (
-                          <button
-                            key={sz}
-                            type="button"
-                            onClick={() => {
-                              setContractShowOnlySelected(false);
-                              setContractSizeFilter(sz);
-                            }}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
-                              isActive
-                                ? 'bg-orange-600 text-white shadow-2xs'
-                                : 'bg-white/90 text-gray-600 hover:bg-orange-100 hover:text-orange-800 border border-orange-200/60'
-                            }`}
-                          >
-                            {sz === 'ALL' ? 'Tất cả' : sz}
-                          </button>
-                        );
-                      })}
-                      {newContractForm.selectedCameraIds.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (contractShowOnlySelected) {
-                              setContractShowOnlySelected(false);
-                            } else {
-                              setContractOutfitSearch('');
-                              setContractSizeFilter('ALL');
-                              setContractAvailabilityFilter('ALL');
-                              setContractShowOnlySelected(true);
-                            }
-                          }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
-                            contractShowOnlySelected
-                              ? 'bg-orange-600 text-white shadow-2xs'
-                              : 'bg-orange-100 text-orange-800 hover:bg-orange-200 border border-orange-300'
-                          }`}
-                        >
-                          ⭐ Đã chọn ({newContractForm.selectedCameraIds.length})
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Availability Status Filter Pills */}
-                    <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-                      <span className="text-[10px] font-bold text-gray-500 shrink-0 uppercase tracking-tight">Tình trạng:</span>
-                      {[
-                        { id: 'ALL', label: 'Tất cả đồ' },
-                        { id: 'READY', label: '✓ Chỉ đồ sẵn sàng' },
-                        { id: 'BUSY', label: '🧺 Đang giặt / sửa' }
-                      ].map(st => {
-                        const isActive = !contractShowOnlySelected && contractAvailabilityFilter === st.id;
-                        return (
-                          <button
-                            key={st.id}
-                            type="button"
-                            onClick={() => {
-                              setContractShowOnlySelected(false);
-                              setContractAvailabilityFilter(st.id as any);
-                            }}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
-                              isActive
-                                ? (st.id === 'READY' ? 'bg-emerald-600 text-white shadow-2xs' : st.id === 'BUSY' ? 'bg-amber-600 text-white shadow-2xs' : 'bg-slate-700 text-white shadow-2xs')
-                                : 'bg-white/90 text-gray-600 hover:bg-orange-100 hover:text-orange-800 border border-orange-200/60'
-                            }`}
-                          >
-                            {st.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hộp ghim danh sách trang phục đã chọn */}
-                {newContractForm.selectedCameraIds.length > 0 && (
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50/90 border-2 border-orange-300 rounded-xl p-2.5 shadow-2xs space-y-1.5 mb-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-black text-orange-950 uppercase tracking-wide flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5 text-orange-600 stroke-[3]" />
-                        Mẫu đã chọn ({newContractForm.selectedCameraIds.length} món):
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (contractShowOnlySelected) {
-                            setContractShowOnlySelected(false);
-                          } else {
-                            setContractOutfitSearch('');
-                            setContractSizeFilter('ALL');
-                            setContractAvailabilityFilter('ALL');
-                            setContractShowOnlySelected(true);
-                          }
-                        }}
-                        className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white transition cursor-pointer shadow-3xs"
-                      >
-                        {contractShowOnlySelected ? '👁️ Hiện tất cả mẫu' : '🔍 Chỉ lọc mẫu đã chọn'}
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 pt-0.5">
-                      {newContractForm.selectedCameraIds.map(camId => {
-                        const cam = cameras.find(c => c.id === camId);
-                        if (!cam) return null;
-                        const baseName = cam.name.replace(/\s*\(Size\s+\S+\)\s*$/i, '').replace(/\s*\(Freesize\)\s*$/i, '').trim();
-                        return (
-                          <div
-                            key={camId}
-                            className="inline-flex items-center gap-1.5 bg-white border border-orange-300 hover:border-orange-500 text-gray-900 pl-1.5 pr-2 py-1 rounded-lg text-xs font-bold shadow-3xs group transition-all"
-                          >
-                            {cam.image && (
-                              <img src={cam.image} alt={baseName} className="w-6 h-6 rounded-md object-cover object-top border border-gray-200 shrink-0" />
-                            )}
-                            <span className="text-orange-950 font-black max-w-[130px] sm:max-w-[180px] truncate">{baseName}</span>
-                            <span className="bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded shrink-0">
-                              Size {cam.size || 'FS'}
-                            </span>
-                            {cam.color && (
-                              <span className="text-[10px] text-gray-500 font-medium truncate max-w-[70px]">({cam.color})</span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setNewContractForm(prev => ({
-                                  ...prev,
-                                  selectedCameraIds: prev.selectedCameraIds.filter(id => id !== camId)
-                                }));
-                              }}
-                              className="text-gray-400 hover:text-rose-600 font-black text-xs ml-0.5 p-0.5 cursor-pointer"
-                              title="Bỏ chọn trang phục này"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
                 {/* Card list */}
                 <div className="border border-gray-250 rounded-xl p-2 bg-white shadow-2xs max-h-[220px] overflow-y-auto space-y-1.5">
-                  {(() => {
-                    const availableOutfits = cameras
-                      .filter(cam => {
-                        if (contractShowOnlySelected) {
-                          return newContractForm.selectedCameraIds.includes(cam.id);
-                        }
-                        const isLaundry = cam.cleaningStatus === 'Laundry';
-                        const isMending = cam.cleaningStatus === 'Mending';
-                        const isRented = cam.status === 'Rented';
-                        const isMaint = cam.status === 'Maintenance';
-                        const isReady = !isLaundry && !isMending && !isRented && !isMaint;
-
-                        if (contractAvailabilityFilter === 'READY' && !isReady) return false;
-                        if (contractAvailabilityFilter === 'BUSY' && isReady) return false;
-
-                        if (contractSizeFilter !== 'ALL') {
-                          if (contractSizeFilter === 'Freesize') {
-                            const isFs = (cam.availableSizes && cam.availableSizes.some(s => /free|fs/i.test(s))) ||
-                              (cam.size && /free|fs/i.test(cam.size));
-                            if (!isFs) return false;
-                          } else {
-                            const hasSize = (cam.availableSizes && cam.availableSizes.some(s => s.toUpperCase() === contractSizeFilter.toUpperCase())) ||
-                              (cam.size && cam.size.toUpperCase().includes(contractSizeFilter.toUpperCase()));
-                            if (!hasSize) return false;
-                          }
-                        }
-                        if (contractOutfitSearch.trim()) {
-                          const q = contractOutfitSearch.trim().toLowerCase();
-                          const matchName = (cam.name || '').toLowerCase().includes(q);
-                          const matchShort = (cam.shortName || '').toLowerCase().includes(q);
-                          const matchSerial = (cam.serialNumber || '').toLowerCase().includes(q);
-                          const matchColor = (cam.color || '').toLowerCase().includes(q);
-                          const matchSize = (cam.size || '').toLowerCase().includes(q);
-                          if (!matchName && !matchShort && !matchSerial && !matchColor && !matchSize) return false;
-                        }
-                        return true;
-                      })
-                      .sort((a, b) => {
-                        const aUnavail = a.cleaningStatus === 'Laundry' || a.cleaningStatus === 'Mending' || a.status === 'Rented' || a.status === 'Maintenance';
-                        const bUnavail = b.cleaningStatus === 'Laundry' || b.cleaningStatus === 'Mending' || b.status === 'Rented' || b.status === 'Maintenance';
-                        if (aUnavail && !bUnavail) return 1;
-                        if (!aUnavail && bUnavail) return -1;
-                        return 0;
-                      });
-
-                    if (availableOutfits.length === 0) {
-                      return (
-                        <p className="text-xs text-gray-400 italic text-center py-4">
-                          {contractOutfitSearch || contractSizeFilter !== 'ALL' || contractAvailabilityFilter !== 'ALL'
-                            ? 'Không tìm thấy trang phục nào phù hợp với bộ lọc.'
-                            : 'Hiện không có trang phục khả dụng trong kho.'}
-                        </p>
-                      );
-                    }
-
-                    return availableOutfits.map(cam => {
+                  {cameras.filter(cam => cam.status !== 'Maintenance').length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-4">
+                      Hiện không có thiết bị khả dụng (toàn bộ thiết bị đang bảo trì).
+                    </p>
+                  ) : (
+                    cameras.filter(cam => cam.status !== 'Maintenance').map(cam => {
                       const isSelected = newContractForm.selectedCameraIds.includes(cam.id);
                       const isPrinter = cam.category === 'Printer' || Boolean(cam.isPrinter);
                       const printCount = newContractForm.printCounts?.[cam.id] || 5;
                       const printPricing = isPrinter ? getPrintPrice(cam, printCount) : null;
 
-                      const isCleaningLaundry = cam.cleaningStatus === 'Laundry';
-                      const isCleaningMending = cam.cleaningStatus === 'Mending';
-                      const isRented = cam.status === 'Rented';
-                      const isMaintenance = cam.status === 'Maintenance';
-                      const isUnavailable = isCleaningLaundry || isCleaningMending || isRented || isMaintenance;
-
                       return (
                         <div
                           key={cam.id}
                           onClick={() => {
-                            if (isUnavailable) {
-                              const reasonMsg = isCleaningLaundry
-                                ? `Trang phục "${cam.name}" (${cam.serialNumber}) ĐANG GIẶT HẤP, chưa sẵn sàng để tạo hợp đồng thuê mới!`
-                                : isCleaningMending
-                                ? `Trang phục "${cam.name}" (${cam.serialNumber}) ĐANG MAY SỬA, chưa sẵn sàng để tạo hợp đồng thuê mới!`
-                                : isRented
-                                ? `Trang phục "${cam.name}" (${cam.serialNumber}) ĐANG CHO THUÊ, chưa trả về cửa hàng!`
-                                : `Trang phục "${cam.name}" (${cam.serialNumber}) đang bảo trì, không thể chọn!`;
-                              setCustomAlertMessage(reasonMsg);
-                              return;
-                            }
-
                             if (isSelected) {
                               setNewContractForm({
                                 ...newContractForm,
@@ -3401,100 +2329,43 @@ export default function ContractManager({
                               });
                             }
                           }}
-                          className={`p-2.5 rounded-xl select-none transition-all duration-150 border ${
-                            isUnavailable
-                              ? 'bg-gray-100/80 border-gray-250 opacity-65 cursor-not-allowed'
-                              : isSelected
-                              ? 'bg-orange-50 border-orange-300 shadow-sm cursor-pointer'
-                              : 'bg-gray-50/60 border-transparent hover:bg-orange-50/40 hover:border-orange-100 cursor-pointer'
+                          className={`p-2.5 rounded-xl cursor-pointer select-none transition-all duration-150 border ${
+                            isSelected
+                              ? 'bg-orange-50 border-orange-300 shadow-sm'
+                              : 'bg-gray-50/60 border-transparent hover:bg-orange-50/40 hover:border-orange-100'
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
                             {/* Custom checkbox */}
                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-150 ${
-                              isUnavailable
-                                ? 'border-gray-300 bg-gray-200 text-gray-500 cursor-not-allowed'
-                                : isSelected
-                                ? 'bg-orange-500 border-orange-500 shadow-sm'
-                                : 'border-gray-300 bg-white'
+                              isSelected ? 'bg-orange-500 border-orange-500 shadow-sm' : 'border-gray-300 bg-white'
                             }`}>
-                              {isUnavailable ? (
-                                <span className="text-[10px] font-black text-gray-500">✕</span>
-                              ) : isSelected ? (
-                                <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                              ) : null}
+                              {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
                             </div>
-
-                            {/* Outfit thumbnail */}
-                            <div style={{ width: '2.5rem', height: '3.25rem' }} className="rounded-lg overflow-hidden bg-slate-100 border border-gray-200 shrink-0 flex items-center justify-center shadow-3xs">
-                              {cam.image ? (
-                                <img src={cam.image} alt={cam.name} className="w-full h-full object-cover object-top" loading="lazy" referrerPolicy="no-referrer" />
-                              ) : (
-                                <span className="text-base">{isPrinter ? '🖨️' : '👗'}</span>
-                              )}
-                            </div>
-
-                            {/* Outfit info */}
+                            {/* Camera info */}
                             <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                                <span className={`text-xs sm:text-sm font-bold truncate ${isUnavailable ? 'text-gray-500' : isSelected ? 'text-orange-700' : 'text-gray-800'}`}>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className={`text-xs sm:text-sm font-bold truncate ${isSelected ? 'text-orange-700' : 'text-gray-800'}`}>
                                   {cam.name}
                                 </span>
                                 <span className="bg-gray-100 text-gray-500 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0">
                                   {cam.serialNumber}
                                 </span>
-                                {cam.size && (
-                                  <span className="bg-slate-100 text-slate-700 text-[9px] font-extrabold px-1.5 py-0.2 rounded shrink-0">
-                                    Size {cam.size}
-                                  </span>
-                                )}
-                                {cam.color && (
-                                  <span className="bg-rose-50 text-rose-700 text-[9px] font-semibold px-1.5 py-0.2 rounded truncate max-w-[90px] shrink-0" title={cam.color}>
-                                    🎨 {cam.color}
-                                  </span>
-                                )}
-
-                                {/* Trạng thái sẵn sàng cho thuê */}
-                                {isCleaningLaundry ? (
-                                  <span className="bg-blue-100 text-blue-800 text-[9px] font-black px-1.5 py-0.5 rounded border border-blue-200 shrink-0 flex items-center gap-0.5 shadow-2xs">
-                                    <span>🧺 Đang giặt hấp</span>
-                                    <span className="text-red-600 font-bold">(Khóa)</span>
-                                  </span>
-                                ) : isCleaningMending ? (
-                                  <span className="bg-amber-100 text-amber-900 text-[9px] font-black px-1.5 py-0.5 rounded border border-amber-300 shrink-0 flex items-center gap-0.5 shadow-2xs">
-                                    <span>🪡 Đang sửa đồ</span>
-                                    <span className="text-red-600 font-bold">(Khóa)</span>
-                                  </span>
-                                ) : isRented ? (
-                                  <span className="bg-purple-100 text-purple-800 text-[9px] font-black px-1.5 py-0.5 rounded border border-purple-200 shrink-0 flex items-center gap-0.5 shadow-2xs">
-                                    <span>⏳ Đang cho thuê</span>
-                                    <span className="text-red-600 font-bold">(Khóa)</span>
-                                  </span>
-                                ) : isMaintenance ? (
-                                  <span className="bg-red-100 text-red-800 text-[9px] font-black px-1.5 py-0.5 rounded border border-red-200 shrink-0">
-                                    🛠️ Bảo trì (Khóa)
-                                  </span>
-                                ) : (
-                                  <span className="bg-emerald-50 text-emerald-700 text-[9px] font-extrabold px-1.5 py-0.2 rounded border border-emerald-200 shrink-0">
-                                    ✓ Sẵn sàng
-                                  </span>
-                                )}
                               </div>
                               <span className={`text-[11px] font-extrabold shrink-0 px-2 py-0.5 rounded-full transition-all ${
-                                isUnavailable
-                                  ? 'bg-gray-200 text-gray-500'
-                                  : isSelected
-                                  ? 'bg-orange-600 text-white'
-                                  : 'bg-orange-50 text-orange-700'
+                                isSelected ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700'
                               }`}>
                                 {isPrinter
                                   ? (isSelected
                                       ? `${printPricing?.totalPrice.toLocaleString()}đ (${printCount} tấm)`
                                       : '40k/tấm (từ 33k)'
                                     )
-                                  : (calculatedDays > 0
-                                      ? `${Math.round(getCameraRateForDuration(cam, calculatedDays, false)).toLocaleString()}đ/ngày`
-                                      : `${(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ/ngày`
+                                  : (newContractForm.is6Hours
+                                      ? `${(cam.price6Hours ?? Math.round((cam.price1Day ?? cam.dailyRate) * 0.6)).toLocaleString()}đ /6h`
+                                      : (calculatedDays > 0
+                                        ? `${Math.round(getCameraRateForDuration(cam, calculatedDays, false)).toLocaleString()}đ/ngày`
+                                        : `${(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ/ngày`
+                                      )
                                     )
                                 }
                               </span>
@@ -3560,126 +2431,282 @@ export default function ContractManager({
                           )}
                         </div>
                       );
-                    });
-                  })()}
+                    })
+                  )}
                 </div>
               </div>
 
-              {/* Fitting & Measurement Notes */}
-              <div className="bg-rose-50/40 border border-rose-200/80 rounded-xl p-3 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
-                    <span>👗 Số đo khách & Yêu cầu chỉnh sửa / Fitting:</span>
-                  </label>
-                  <span className="text-[10px] text-rose-700 font-semibold">Tùy chọn</span>
+              {/* Rental type toggle */}
+              <div className="bg-gradient-to-r from-orange-50/50 via-amber-50/30 to-orange-50/50 p-3 rounded-2xl border-2 border-orange-100 shadow-xs">
+                <label className="block text-xs font-black text-gray-800 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+                  <span>⏱️ Hình thức thuê & thời gian:</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewContractForm(prev => ({ ...prev, is6Hours: false }));
+                    }}
+                    className={`py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer border-2 text-center flex flex-col items-center justify-center gap-1 ${
+                      !newContractForm.is6Hours
+                        ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white border-orange-600 shadow-md ring-2 ring-orange-300/60 scale-[1.01]'
+                        : 'bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-950 border-gray-200 hover:border-orange-300 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-black whitespace-nowrap">
+                      <Calendar className={`w-4 h-4 shrink-0 ${!newContractForm.is6Hours ? 'text-white' : 'text-orange-600'}`} />
+                      <span className={!newContractForm.is6Hours ? 'text-white' : 'text-gray-800'}>Thuê theo ngày</span>
+                    </div>
+                    <span className={`text-[10px] sm:text-[11px] whitespace-nowrap leading-tight ${!newContractForm.is6Hours ? 'text-orange-50 font-semibold' : 'text-gray-500 font-medium'}`}>
+                      Tính theo mốc ngày lũy tiến
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewContractForm(prev => ({
+                        ...prev,
+                        is6Hours: true,
+                        endDate: prev.startDate,
+                        startTime: prev.startTime || '08:00',
+                        returnTime: add6Hours(prev.startTime || '08:00')
+                      }));
+                    }}
+                    className={`py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer border-2 text-center flex flex-col items-center justify-center gap-1 ${
+                      newContractForm.is6Hours
+                        ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-300/60 scale-[1.01]'
+                        : 'bg-white hover:bg-amber-50 text-gray-700 hover:text-amber-950 border-gray-200 hover:border-amber-300 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-black whitespace-nowrap">
+                      <Zap className={`w-4 h-4 shrink-0 ${newContractForm.is6Hours ? 'text-yellow-300 fill-yellow-300 drop-shadow-sm' : 'text-amber-600 fill-amber-500'}`} />
+                      <span className={newContractForm.is6Hours ? 'text-white' : 'text-gray-800'}>Thuê nhanh 6 tiếng</span>
+                    </div>
+                    <span className={`text-[10px] sm:text-[11px] whitespace-nowrap leading-tight ${newContractForm.is6Hours ? 'text-white font-semibold' : 'text-gray-500 font-medium'}`}>
+                      Mức phí ngắn hạn trong ngày
+                    </span>
+                  </button>
                 </div>
-                <input
-                  type="text"
-                  value={newContractForm.fittingNotes || ''}
-                  onChange={e => setNewContractForm({ ...newContractForm, fittingNotes: e.target.value })}
-                  className="w-full bg-white border border-rose-200 rounded-lg p-2 text-xs text-gray-800 focus:ring-2 focus:ring-rose-500 focus:outline-none placeholder-gray-400"
-                  placeholder="VD: Cao 1m62, nặng 48kg, eo 64cm, bóp eo váy 2cm, kèm nơ cài..."
-                />
               </div>
 
-              {/* Khung ngoài thời gian thuê trang phục */}
+              {/* Khung ngoài thời gian thuê máy */}
               <div className="bg-gradient-to-br from-amber-50/40 via-orange-50/20 to-white border-2 border-orange-200/80 rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2.5 overflow-hidden">
                 {/* Header của khung ngoài */}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-gray-800 flex items-center gap-1.5 uppercase tracking-wide">
                     <Calendar className="w-3.5 h-3.5 text-orange-600" />
-                    <span>Thời gian thuê trang phục:</span>
+                    <span>Thời gian thuê máy:</span>
                   </label>
                   <span className="text-[11px] font-extrabold text-orange-700 bg-orange-100/90 px-2.5 py-0.5 rounded-full shadow-3xs">
-                    📅 Thuê {calculatedDays > 0 ? calculatedDays : 1} ngày
+                    {newContractForm.is6Hours 
+                      ? `⚡ Thuê 6h (${newContractForm.startTime || '08:00'} - ${newContractForm.returnTime || '14:00'})` 
+                      : `📅 Thuê ${calculatedDays > 0 ? calculatedDays : 1} ngày`}
                   </span>
                 </div>
 
-                {/* Chọn ngày bắt đầu và ngày trả */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 w-full min-w-0">
-                  <div className="w-full min-w-0">
-                    <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
-                      Ngày bắt đầu bàn giao *
-                    </label>
-                    <div className="relative w-full cursor-pointer group">
-                      <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
-                          <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
-                            {newContractForm.startDate ? formatDMY(newContractForm.startDate) : 'Chọn ngày'}
+                {/* Nội dung chọn ngày/giờ */}
+                {newContractForm.is6Hours ? (
+                  <div className="space-y-2 w-full min-w-0">
+                    <div className="w-full min-w-0">
+                      <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
+                        Ngày thuê máy *
+                      </label>
+                      <div className="relative w-full cursor-pointer group">
+                        <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
+                              {newContractForm.startDate ? formatDMY(newContractForm.startDate) : 'Chọn ngày'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
+                            Đổi
                           </span>
                         </div>
-                        <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
-                          Đổi
-                        </span>
-                      </div>
-                      <input
-                        type="date"
-                        required
-                        value={newContractForm.startDate}
-                        onChange={e => {
-                          const d = e.target.value;
-                          setNewContractForm(prev => ({
-                            ...prev,
-                            startDate: d,
-                            endDate: prev.endDate < d ? d : prev.endDate
-                          }));
-                        }}
-                        onClick={e => {
-                          try {
-                            (e.target as HTMLInputElement).showPicker?.();
-                          } catch {}
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
+                        <input
+                          type="date"
+                          required
+                          value={newContractForm.startDate}
+                          onChange={e => {
+                            const d = e.target.value;
+                            setNewContractForm(prev => ({
+                              ...prev,
+                              startDate: d,
+                              endDate: d
+                            }));
+                          }}
+                          onClick={e => {
                             try {
                               (e.target as HTMLInputElement).showPicker?.();
                             } catch {}
-                          }
-                        }}
-                        className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      />
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              try {
+                                (e.target as HTMLInputElement).showPicker?.();
+                              } catch {}
+                            }
+                          }}
+                          className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                      </div>
                     </div>
+
+                    <div className="grid grid-cols-2 gap-2 w-full min-w-0">
+                      <div className="min-w-0">
+                        <label className="block text-[11px] sm:text-xs font-bold text-amber-900 mb-1 truncate" title="Giờ lấy máy (HH:MM 24h)">
+                          Giờ lấy máy *
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          required
+                          maxLength={5}
+                          placeholder="08:00"
+                          pattern="^([01]\d|2[0-3]):[0-5]\d$"
+                          value={newContractForm.startTime || '08:00'}
+                          onChange={e => {
+                            let t = e.target.value;
+                            if (/^\d{2}$/.test(t) && (newContractForm.startTime || '').length === 1) {
+                              t = t + ':';
+                            }
+                            setNewContractForm(prev => ({
+                              ...prev,
+                              startTime: t,
+                              returnTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? add6Hours(t) : prev.returnTime
+                            }));
+                          }}
+                          onBlur={e => {
+                            const t = e.target.value;
+                            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) {
+                              setNewContractForm(prev => ({ ...prev, startTime: '08:00', returnTime: add6Hours('08:00') }));
+                            }
+                          }}
+                          className="block w-full max-w-full box-border h-10 border border-amber-300 bg-amber-50/50 rounded-xl px-2 py-1 text-xs sm:text-sm font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 focus:outline-none text-center tracking-wider shadow-2xs"
+                          title="Nhập giờ lấy máy theo định dạng 24h (VD: 08:00, 13:30)"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="block text-[11px] sm:text-xs font-bold text-amber-900 mb-1 truncate" title="Giờ trả máy (Tự +6h, định dạng 24h)">
+                          Giờ trả (+6h) *
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          required
+                          maxLength={5}
+                          placeholder="14:00"
+                          pattern="^([01]\d|2[0-3]):[0-5]\d$"
+                          value={newContractForm.returnTime || '14:00'}
+                          onChange={e => {
+                            let t = e.target.value;
+                            if (/^\d{2}$/.test(t) && (newContractForm.returnTime || '').length === 1) {
+                              t = t + ':';
+                            }
+                            setNewContractForm(prev => ({ ...prev, returnTime: t }));
+                          }}
+                          onBlur={e => {
+                            const t = e.target.value;
+                            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) {
+                              setNewContractForm(prev => ({ ...prev, returnTime: add6Hours(prev.startTime || '08:00') }));
+                            }
+                          }}
+                          className="block w-full max-w-full box-border h-10 border border-amber-300 bg-amber-50/50 rounded-xl px-2 py-1 text-xs sm:text-sm font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 focus:outline-none text-center tracking-wider shadow-2xs"
+                          title="Giờ trả máy (định dạng 24h, tự động cộng 6 tiếng từ giờ lấy)"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-amber-800 font-semibold bg-amber-100/50 px-2.5 py-1 rounded-lg">
+                      ⏱️ Tự động tính: {newContractForm.startTime || '08:00'} ➔ {newContractForm.returnTime || '14:00'} (đủ 6 tiếng)
+                    </p>
                   </div>
-                  <div className="w-full min-w-0">
-                    <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
-                      Ngày trả dự kiến *
-                    </label>
-                    <div className="relative w-full cursor-pointer group">
-                      <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
-                          <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
-                            {newContractForm.endDate ? formatDMY(newContractForm.endDate) : 'Chọn ngày'}
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 w-full min-w-0">
+                    <div className="w-full min-w-0">
+                      <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
+                        Ngày bắt đầu bàn giao *
+                      </label>
+                      <div className="relative w-full cursor-pointer group">
+                        <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
+                              {newContractForm.startDate ? formatDMY(newContractForm.startDate) : 'Chọn ngày'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
+                            Đổi
                           </span>
                         </div>
-                        <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
-                          Đổi
-                        </span>
-                      </div>
-                      <input
-                        type="date"
-                        required
-                        min={newContractForm.startDate}
-                        value={newContractForm.endDate}
-                        onChange={e => setNewContractForm({ ...newContractForm, endDate: e.target.value })}
-                        onClick={e => {
-                          try {
-                            (e.target as HTMLInputElement).showPicker?.();
-                          } catch {}
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' || e.key === ' ') {
+                        <input
+                          type="date"
+                          required
+                          value={newContractForm.startDate}
+                          onChange={e => {
+                            const d = e.target.value;
+                            setNewContractForm(prev => ({
+                              ...prev,
+                              startDate: d,
+                              endDate: prev.is6Hours ? d : prev.endDate
+                            }));
+                          }}
+                          onClick={e => {
                             try {
                               (e.target as HTMLInputElement).showPicker?.();
                             } catch {}
-                          }
-                        }}
-                        className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      />
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              try {
+                                (e.target as HTMLInputElement).showPicker?.();
+                              } catch {}
+                            }
+                          }}
+                          className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="w-full min-w-0">
+                      <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
+                        Ngày trả dự kiến *
+                      </label>
+                      <div className="relative w-full cursor-pointer group">
+                        <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-4 h-4 text-orange-600 shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
+                              {newContractForm.endDate ? formatDMY(newContractForm.endDate) : 'Chọn ngày'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
+                            Đổi
+                          </span>
+                        </div>
+                        <input
+                          type="date"
+                          required
+                          min={newContractForm.startDate}
+                          value={newContractForm.endDate}
+                          onChange={e => setNewContractForm({ ...newContractForm, endDate: e.target.value })}
+                          onClick={e => {
+                            try {
+                              (e.target as HTMLInputElement).showPicker?.();
+                            } catch {}
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              try {
+                                (e.target as HTMLInputElement).showPicker?.();
+                              } catch {}
+                            }
+                          }}
+                          className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Money & Deposit section */}
@@ -3711,10 +2738,10 @@ export default function ContractManager({
                     )}
                   </div>
 
-                  {/* Cột 2: Cọc giữ đồ trước */}
+                  {/* Cột 2: Cọc giữ máy trước */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-1">
-                      <label className="text-xs font-bold text-gray-750 whitespace-nowrap">Cọc giữ đồ (VND)</label>
+                      <label className="text-xs font-bold text-gray-750 whitespace-nowrap">Cọc giữ máy (VND)</label>
                       {newContractForm.paidAmount > 0 && calculatedTotal > 0 && (
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                           newContractForm.paidAmount === Math.round(calculatedTotal * 0.5)
@@ -3755,7 +2782,7 @@ export default function ContractManager({
                             ? 'bg-gray-700 border-gray-800 text-white shadow-xs font-black'
                             : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-250'
                         }`}
-                        title="Không thu cọc giữ đồ (0 đ)"
+                        title="Không thu cọc giữ máy (0 đ)"
                       >
                         Không cọc (0đ)
                       </button>
@@ -3855,8 +2882,8 @@ export default function ContractManager({
                     </div>
                   </div>
 
-                  {/* 6 nút chọn nhanh: 3 cột trên mobile, 6 cột trên PC để không bị tràn viền */}
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 mt-2">
+                  {/* 6 nút chọn nhanh trải đều 100% bằng grid grid-cols-6, không bị tràn hay scrollbar */}
+                  <div className="grid grid-cols-6 gap-1 mt-2">
                     {[0, 5, 10, 15, 20, 50].map((pct) => (
                       <button
                         key={pct}
@@ -3892,7 +2919,7 @@ export default function ContractManager({
                     value={newContractForm.note}
                     onChange={e => setNewContractForm({ ...newContractForm, note: e.target.value })}
                     className="w-full bg-white border border-gray-250 rounded-xl p-2.5 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none resize-none flex-1 min-h-[68px]"
-                    placeholder="Ghi chú thêm: giờ lấy đồ, phụ kiện mượn thêm, thỏa thuận giặt hấp riêng..."
+                    placeholder="Nhu cầu lấy máy sớm, lens lọc, phụ kiện kèm theo..."
                   />
                 </div>
               </div>
@@ -3903,8 +2930,8 @@ export default function ContractManager({
                   <div className="min-w-0 flex-1 leading-snug">
                     <span className="font-extrabold text-orange-900">Chi tiết tạm tính:</span>{' '}
                     <span>
-                      {newContractForm.selectedCameraIds.length} món trang phục &times;{' '}
-                      {calculatedDays} ngày
+                      {newContractForm.selectedCameraIds.length} thiết bị &times;{' '}
+                      {newContractForm.is6Hours ? 'Gói thuê 6 tiếng' : `${calculatedDays} ngày`}
                     </span>
                   </div>
                   <div className="font-mono font-black text-sm sm:text-base text-orange-700 shrink-0 whitespace-nowrap text-right">
@@ -3913,14 +2940,11 @@ export default function ContractManager({
                 </div>
               )}
 
-              </div>
-
-              {/* Fixed Footer - Luôn cố định ở đáy, không bị cuộn mất */}
-              <div className="bg-gray-50/95 px-6 py-3.5 border-t border-gray-200 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0 shadow-xs">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => handleCloseAddModal()}
-                  className="px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-105 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
                 >
                   Hủy bỏ
                 </button>
@@ -3934,7 +2958,7 @@ export default function ContractManager({
                 </button>
                 <button
                   type="submit"
-                  className="bg-orange-600 text-white font-bold px-5 sm:px-6 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap shadow-md shadow-orange-500/20 active:scale-[0.98]"
+                  className="bg-orange-600 text-white font-bold px-4 sm:px-5 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap"
                 >
                   Tạo hợp đồng
                 </button>
@@ -3956,7 +2980,7 @@ export default function ContractManager({
             </div>
             
             <p className="text-sm text-gray-500">
-              Bạn có chắc chắn muốn xóa vĩnh viễn hợp đồng này? Hành động này sẽ cập nhật lại trạng thái trang phục và tự động xóa hồ sơ khách hàng tương ứng (nếu khách không còn đơn thuê nào khác).
+              Bạn có chắc chắn muốn xóa vĩnh viễn hợp đồng này? Hành động này sẽ cập nhật lại trạng thái thiết bị và tự động xóa hồ sơ khách hàng tương ứng (nếu khách không còn đơn thuê nào khác).
             </p>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -4131,6 +3155,3 @@ export default function ContractManager({
     </div>
   );
 }
-
-
-

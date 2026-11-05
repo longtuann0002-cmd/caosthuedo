@@ -108,14 +108,7 @@ export async function showPushNotification(
   const notificationTag = tag || `caos-${Date.now()}`;
 
   try {
-    let reg: ServiceWorkerRegistration | null = null;
-    try {
-      reg = await Promise.race([
-        navigator.serviceWorker.ready,
-        new Promise<null>(resolve => setTimeout(() => resolve(null), 1200))
-      ]);
-    } catch (e) {}
-
+    const reg = await navigator.serviceWorker.ready;
     if (reg && reg.showNotification) {
       await reg.showNotification(title, {
         body,
@@ -148,7 +141,7 @@ export async function showPushNotification(
 export async function sendTestNotification(): Promise<boolean> {
   updateAppBadge(1);
   return showPushNotification(
-    '🧾 Tiệm Nhà Caos - Trợ lý vận hành',
+    '📷 Tiệm Ảnh Nhà Caos - Trợ lý vận hành',
     'Thông báo trên iPhone của bạn đã hoạt động hoàn hảo! 🎉',
     `test-${Date.now()}`
   );
@@ -156,9 +149,11 @@ export async function sendTestNotification(): Promise<boolean> {
 
 // Send an instant notification EVERY TIME an order is created (No blocking!)
 export async function sendOrderCreatedNotification(contract: RentalContract): Promise<boolean> {
-  const itemsText = (contract.items || []).map(i => i.cameraName).join(', ') || 'Trang phục thuê';
+  const itemsText = (contract.items || []).map(i => i.cameraName).join(', ') || 'Thiết bị thuê';
   const title = `📋 Đơn đặt mới: ${contract.contractCode}`;
-  const timeInfo = `${formatDMY(contract.startDate)} - ${formatDMY(contract.endDate)}`;
+  const timeInfo = contract.is6Hours 
+    ? `Gói 6h (${contract.startTime || '08:00'} - ${contract.returnTime || '14:00'})` 
+    : `${formatDMY(contract.startDate)} - ${formatDMY(contract.endDate)}`;
   const body = `Khách: ${contract.customerName} • ${itemsText} • ${timeInfo} • ${contract.totalPrice.toLocaleString()}đ`;
   
   return showPushNotification(title, body, `order-${contract.id}-${Date.now()}`);
@@ -296,5 +291,4 @@ export function clearAppBadge() {
     // Ignore unsupported
   }
 }
-
 

@@ -7,9 +7,8 @@ import {
   Calendar, FileText, Activity, Info, PieChart, ShoppingBag, 
   User, ChevronLeft, ChevronRight, BarChart3, CalendarDays, Filter,
   Camera as CameraIcon, Search, X, Clock, Layers, ArrowUpRight, CheckCircle2,
-  AlertTriangle, Phone, Sparkles
+  AlertTriangle, Phone
 } from 'lucide-react';
-import { DressIcon } from './DressIcon';
 import { useScrollLock } from '../utils/useScrollLock';
 
 interface RevenueDashboardProps {
@@ -238,25 +237,18 @@ export default function RevenueDashboard({
     });
   }, [expenses, dateRange]);
 
-  // Contracts that currently have uncollected debt (totalPrice + surcharge > paidAmount)
+  // Contracts that currently have uncollected debt (totalPrice > paidAmount)
   const receivableContracts = useMemo(() => {
     return filteredContracts
-      .filter(c => {
-        if (!c || c.status === 'Cancelled') return false;
-        const fullTotal = (c.totalPrice || 0) + (c.surchargeAmount || 0);
-        return fullTotal - (c.paidAmount || 0) > 0;
-      })
-      .map(c => {
-        const fullTotal = (c.totalPrice || 0) + (c.surchargeAmount || 0);
-        return {
-          ...c,
-          remainingDebt: fullTotal - (c.paidAmount || 0)
-        };
-      })
+      .filter(c => c.status !== 'Cancelled' && ((c.totalPrice || 0) - (c.paidAmount || 0) > 0))
+      .map(c => ({
+        ...c,
+        remainingDebt: (c.totalPrice || 0) - (c.paidAmount || 0)
+      }))
       .sort((a, b) => b.remainingDebt - a.remainingDebt);
   }, [filteredContracts]);
 
-  // Contracts waiting for reservation deposit (Chưa thanh toán cọc 50% để giữ đồ - chỉ tính đơn chưa cọc đủ 50%)
+  // Contracts waiting for reservation deposit (Chưa thanh toán cọc 50% để giữ máy - chỉ tính đơn chưa cọc đủ 50%)
   const pendingDepositContracts = useMemo(() => {
     return filteredContracts
       .filter(c => {
@@ -286,42 +278,20 @@ export default function RevenueDashboard({
 
     const totalReceivables = filteredContracts
       .filter(c => c.status !== 'Cancelled')
-      .reduce((sum, c) => {
-        const fullTotal = (c.totalPrice || 0) + (c.surchargeAmount || 0);
-        return sum + Math.max(0, fullTotal - (c.paidAmount || 0));
-      }, 0);
+      .reduce((sum, c) => sum + Math.max(0, (c.totalPrice || 0) - (c.paidAmount || 0)), 0);
 
     const activeRentalsCount = filteredContracts.filter(c => c.status === 'Active' || c.status === 'Overdue').length;
-    
-    // Chi phí vận hành (bảo dưỡng, giặt là, mặt bằng, điện nước...)
-    const operationalExpenses = filteredExpenses
-      .filter(e => !e.id?.startsWith('exp-outfit-'))
-      .reduce((sum, e) => sum + e.amount, 0);
-
-    // Tổng vốn nhập toàn bộ kho đồ
-    const totalInventoryCapital = cameras.reduce((sum, c) => sum + (c.purchasePrice || 0), 0);
-
-    // Gộp luôn Tổng vốn kho đồ vào Tổng chi phí kho
-    const totalExpenses = totalInventoryCapital + operationalExpenses;
-
-    // Lợi nhuận thuần = Doanh thu - Tổng chi phí (đã gồm vốn kho đồ)
+    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
     const netProfit = totalRevenue - totalExpenses;
-
-    const totalSurcharges = filteredContracts
-      .filter(c => c.status !== 'Cancelled')
-      .reduce((sum, c) => sum + (c.surchargeAmount || 0), 0);
 
     return {
       totalRevenue,
       totalReceivables,
       activeRentalsCount,
       totalExpenses,
-      operationalExpenses,
-      netProfit,
-      totalInventoryCapital,
-      totalSurcharges
+      netProfit
     };
-  }, [filteredContracts, filteredExpenses, cameras]);
+  }, [filteredContracts, filteredExpenses]);
 
   // Comprehensive Equipment Revenue & Specific Rental Dates Computation
   const equipmentRentalAnalytics = useMemo(() => {
@@ -332,7 +302,6 @@ export default function RevenueDashboard({
       category: string;
       serialNumber: string;
       dailyRate: number;
-      purchasePrice?: number;
       image?: string;
       totalRevenue: number;
       totalDays: number;
@@ -379,7 +348,6 @@ export default function RevenueDashboard({
         category: cam.category,
         serialNumber: cam.serialNumber,
         dailyRate: cam.dailyRate,
-        purchasePrice: cam.purchasePrice || 0,
         image: cam.image,
         totalRevenue: 0,
         totalDays: 0,
@@ -577,8 +545,8 @@ export default function RevenueDashboard({
       contracts.forEach(c => {
         if (c.status === 'Cancelled') return;
         if (c.startDate && c.startDate.startsWith(prefix)) {
-          revenue += (c.paidAmount || 0);
-          expectedRevenue += (c.totalPrice || 0) + (c.surchargeAmount || 0);
+          revenue += c.paidAmount;
+          expectedRevenue += c.totalPrice;
           monthContracts.push(c);
         }
       });
@@ -743,10 +711,10 @@ export default function RevenueDashboard({
               <Calendar className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
             </span>
             <div className="min-w-0">
-              <h3 className="text-sm sm:text-base font-extrabold text-gray-900 tracking-tight truncate">
+              <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight truncate">
                 Bộ Lọc Khoảng Thời Gian Báo Cáo
               </h3>
-              <p className="text-[11px] sm:text-xs text-gray-500 truncate leading-normal">
+              <p className="text-xs text-gray-500 truncate leading-normal">
                 Xem thống kê thu chi theo tuần, tháng, quý, cả năm hoặc tùy chọn.
               </p>
             </div>
@@ -849,37 +817,35 @@ export default function RevenueDashboard({
         )}
       </div>
 
-      {/* Financial KPIs Cards Grid - Highly optimized for Mobile & Desktop (4 Cards) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
+      {/* Financial KPIs Cards Grid - Highly optimized for Mobile */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         {/* Card 1: Total Revenue */}
-        <div className="bg-white border border-gray-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md transition-all">
-          <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-orange-50 text-orange-600 shrink-0">
-            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
+        <div className="bg-white border border-gray-200 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-4 hover:shadow-md transition-all">
+          <div className="p-2 sm:p-3.5 rounded-lg sm:rounded-xl bg-orange-50 text-orange-600 shrink-0">
+            <DollarSign className="w-4 h-4 sm:w-6 sm:h-6" />
           </div>
           <div className="min-w-0 flex-1">
             <span className="text-gray-500 text-[9px] sm:text-xs font-bold block uppercase tracking-wider truncate">Tổng Doanh Thu</span>
-            <span className="font-mono text-xs sm:text-lg font-black text-gray-900 block truncate mt-0.5">{financials.totalRevenue.toLocaleString()} đ</span>
-            <span className="text-[9px] sm:text-[10px] text-green-600 font-bold block mt-0.5 truncate">
-              {financials.totalSurcharges > 0 ? `(Gồm +${financials.totalSurcharges.toLocaleString()}đ phụ thu)` : 'Thực thu'}
-            </span>
+            <span className="font-mono text-xs sm:text-xl font-black text-gray-900 block truncate mt-0.5">{financials.totalRevenue.toLocaleString()} đ</span>
+            <span className="text-[9px] sm:text-[10px] text-green-600 font-bold block mt-0.5 truncate">Thực thu</span>
           </div>
         </div>
 
         {/* Card 2: Total Outstanding Receivables (Clickable to view debt details) */}
         <div 
           onClick={() => setShowReceivablesModal(true)}
-          className="bg-white border border-gray-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md hover:border-rose-300 hover:ring-2 hover:ring-rose-200/50 transition-all cursor-pointer group"
+          className="bg-white border border-gray-200 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-4 hover:shadow-md hover:border-rose-300 hover:ring-2 hover:ring-rose-200/50 transition-all cursor-pointer group"
           title="Bấm để xem danh sách khách hàng và đơn thuê còn nợ tiền"
         >
-          <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-rose-50 text-rose-600 shrink-0 group-hover:scale-105 transition-transform">
-            <Landmark className="w-4 h-4 sm:w-5 sm:h-5" />
+          <div className="p-2 sm:p-3.5 rounded-lg sm:rounded-xl bg-rose-50 text-rose-600 shrink-0 group-hover:scale-105 transition-transform">
+            <Landmark className="w-4 h-4 sm:w-6 sm:h-6" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
               <span className="text-gray-500 text-[9px] sm:text-xs font-bold block uppercase tracking-wider truncate">Dư Nợ Chưa Thu</span>
               <span className="text-[8px] sm:text-[9px] text-rose-600 bg-rose-50 px-1 py-0.2 rounded font-black hidden sm:inline-block">Chi tiết ➔</span>
             </div>
-            <span className="font-mono text-xs sm:text-lg font-black text-rose-700 block truncate mt-0.5">{financials.totalReceivables.toLocaleString()} đ</span>
+            <span className="font-mono text-xs sm:text-xl font-black text-rose-700 block truncate mt-0.5">{financials.totalReceivables.toLocaleString()} đ</span>
             <span className="text-[9px] sm:text-[10px] text-rose-600 font-bold block mt-0.5 truncate flex items-center gap-1">
               <span>{receivableContracts.length} đơn nợ</span>
               <span className="text-gray-400 font-normal sm:hidden">• Xem ➔</span>
@@ -887,33 +853,27 @@ export default function RevenueDashboard({
           </div>
         </div>
 
-        {/* Card 3: Combined Total Expenses (Inventory Capital + Operational Expenses) */}
-        <div className="bg-white border border-gray-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md transition-all">
-          <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-rose-50 text-rose-600 shrink-0">
-            <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
+        {/* Card 3: Total Expenses */}
+        <div className="bg-white border border-gray-200 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-4 hover:shadow-md transition-all">
+          <div className="p-2 sm:p-3.5 rounded-lg sm:rounded-xl bg-rose-50 text-rose-600 shrink-0">
+            <TrendingDown className="w-4 h-4 sm:w-6 sm:h-6" />
           </div>
           <div className="min-w-0 flex-1">
             <span className="text-gray-500 text-[9px] sm:text-xs font-bold block uppercase tracking-wider truncate">Tổng Chi Phí Kho</span>
-            <span className="font-mono text-xs sm:text-lg font-black text-rose-700 block truncate mt-0.5">{financials.totalExpenses.toLocaleString()} đ</span>
-            <span className="text-[9px] sm:text-[10px] text-gray-500 block font-medium mt-0.5 truncate" title={`Vốn đồ: ${financials.totalInventoryCapital.toLocaleString()}đ • Vận hành: ${financials.operationalExpenses.toLocaleString()}đ`}>
-              Vốn đồ: <b>{financials.totalInventoryCapital.toLocaleString()}đ</b>
-            </span>
+            <span className="font-mono text-xs sm:text-xl font-black text-gray-900 block truncate mt-0.5">{financials.totalExpenses.toLocaleString()} đ</span>
+            <span className="text-[9px] sm:text-[10px] text-rose-600 block font-bold mt-0.5 truncate">Bảo dưỡng & máy</span>
           </div>
         </div>
 
-        {/* Card 4: Net Profits (Revenue - Total Expenses including inventory capital) */}
-        <div className="bg-white border border-gray-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-3 hover:shadow-md transition-all">
-          <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl shrink-0 ${financials.netProfit >= 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'}`}>
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+        {/* Card 4: Net Profits */}
+        <div className="bg-white border border-gray-200 p-2.5 sm:p-5 rounded-xl sm:rounded-2xl shadow-xs flex items-center gap-2 sm:gap-4 hover:shadow-md transition-all">
+          <div className={`p-2 sm:p-3.5 rounded-lg sm:rounded-xl shrink-0 ${financials.netProfit >= 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'}`}>
+            <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6" />
           </div>
           <div className="min-w-0 flex-1">
             <span className="text-gray-500 text-[9px] sm:text-xs font-bold block uppercase tracking-wider truncate font-sans">Lợi Nhuận Thuần</span>
-            <span className={`font-mono text-xs sm:text-lg font-black block truncate mt-0.5 ${financials.netProfit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-              {(financials.netProfit).toLocaleString()} đ
-            </span>
-            <span className="text-[9px] sm:text-[10px] font-bold block mt-0.5 truncate text-gray-500">
-              {financials.netProfit >= 0 ? '🎉 Đã hoàn vốn & có lãi' : '⏳ Đang hoàn vốn'}
-            </span>
+            <span className="font-mono text-xs sm:text-xl font-black text-gray-900 block truncate mt-0.5">{(financials.netProfit).toLocaleString()} đ</span>
+            <span className="text-[9px] sm:text-[10px] text-indigo-600 font-bold block mt-0.5 truncate">Tạm tính ròng</span>
           </div>
         </div>
       </div>
@@ -1082,11 +1042,11 @@ export default function RevenueDashboard({
         <div className="bg-white border border-gray-200 p-3.5 sm:p-6 rounded-xl sm:rounded-2xl shadow-xs space-y-3 sm:space-y-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">Top Trang Phục Cho Thuê Tốt Nhất</h3>
+              <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">Top Thiết Bị Sinh Lời</h3>
               <p className="text-xs text-gray-500 leading-normal">Nhấp để xem cụ thể các ngày cho thuê.</p>
             </div>
             <span className="text-[10px] sm:text-xs bg-orange-100 text-orange-900 border border-orange-300 px-2 py-0.5 rounded-full font-black">
-              {topRentedComponents.length} mẫu
+              {topRentedComponents.length} máy
             </span>
           </div>
 
@@ -1101,7 +1061,7 @@ export default function RevenueDashboard({
                 >
                   <div className="space-y-0.5 sm:space-y-1 max-w-[170px] min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <DressIcon className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                      <CameraIcon className="w-3.5 h-3.5 text-orange-600 shrink-0" />
                       <h4 className="font-bold text-gray-900 text-xs truncate group-hover:text-orange-900" title={item.cameraName}>
                         {item.cameraName}
                       </h4>
@@ -1127,7 +1087,7 @@ export default function RevenueDashboard({
           </div>
 
           <div className="bg-amber-50 border border-amber-200 p-2.5 sm:p-3 rounded-xl text-[11px] sm:text-xs text-amber-900 font-medium leading-relaxed">
-            <span>💡 <b>Mẹo:</b> Chạm vào trang phục để tra cứu ngày bàn giao, ngày trả và khách thuê tương ứng.</span>
+            <span>💡 <b>Mẹo:</b> Chạm vào thiết bị để tra cứu ngày bàn giao, ngày trả và khách thuê tương ứng.</span>
           </div>
         </div>
       </div>
@@ -1137,13 +1097,13 @@ export default function RevenueDashboard({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100">
           <div>
             <div className="flex items-center gap-2">
-              <DressIcon className="w-5 h-5 text-indigo-600 shrink-0" />
+              <CameraIcon className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-indigo-600 shrink-0" />
               <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">
-                Chi Tiết Doanh Thu & Ngày Thuê Từng Trang Phục
+                Chi Tiết Doanh Thu & Ngày Thuê Từng Thiết Bị
               </h3>
             </div>
             <p className="text-xs text-gray-500 leading-normal mt-0.5">
-              Doanh thu thực thu, tổng số ngày khai thác và nhật ký ngày thuê chi tiết của từng mẫu váy, vest, áo dài, phụ kiện.
+              Doanh thu thực thu, tổng số ngày khai thác và nhật ký ngày thuê chi tiết của từng máy/lens.
             </p>
           </div>
 
@@ -1153,21 +1113,18 @@ export default function RevenueDashboard({
               <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Tìm tên trang phục, tag..."
+                placeholder="Tìm tên máy, mã serial..."
                 value={equipmentSearch}
                 onChange={(e) => setEquipmentSearch(e.target.value)}
                 className="w-full pl-8 pr-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-orange-500 focus:bg-white transition text-gray-800"
               />
             </div>
 
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg text-xs select-none shrink-0 overflow-x-auto">
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg text-xs select-none shrink-0 justify-between sm:justify-start">
               {[
                 { id: 'all', label: 'Tất cả' },
-                { id: 'Áo dài', label: 'Áo dài' },
-                { id: 'Concept', label: 'Concept' },
-                { id: 'Dạ hội', label: 'Dạ hội' },
-                { id: 'Chụp ảnh', label: 'Chụp ảnh' },
-                { id: 'Phụ kiện', label: 'Phụ kiện' }
+                { id: 'Body', label: 'Body Máy' },
+                { id: 'Lens', label: 'Ống kính' }
               ].map((cat) => {
                 const isCatActive = equipmentCategoryFilter === cat.id;
                 return (
@@ -1175,7 +1132,7 @@ export default function RevenueDashboard({
                     key={cat.id}
                     type="button"
                     onClick={() => setEquipmentCategoryFilter(cat.id)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer shadow-xs whitespace-nowrap text-center ${
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer shadow-xs flex-1 sm:flex-initial text-center ${
                       isCatActive
                         ? 'bg-orange-600 text-white font-black'
                         : 'text-gray-700 hover:text-gray-950 hover:bg-gray-200'
@@ -1210,7 +1167,7 @@ export default function RevenueDashboard({
                       <img src={item.image} alt={item.cameraName} className="w-10 h-10 rounded-lg object-cover border border-gray-200 shrink-0" />
                     ) : (
                       <div className="w-10 h-10 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-sm shrink-0">
-                        👗
+                        📷
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
@@ -1219,11 +1176,8 @@ export default function RevenueDashboard({
                           {item.cameraName}
                         </h4>
                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-black shrink-0 ${
-                          item.category === 'Váy cưới' ? 'bg-pink-100 text-pink-800 border border-pink-200' :
-                          item.category === 'Vest' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                          item.category === 'Áo dài' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                          item.category === 'Concept' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                          item.category === 'Dạ hội' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                          item.category === 'Body' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                          item.category === 'Lens' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
                           'bg-gray-200 text-gray-800'
                         }`}>
                           {item.category}
@@ -1237,36 +1191,20 @@ export default function RevenueDashboard({
                   </div>
 
                   {/* Card Middle: Metrics Row */}
-                  <div className="bg-slate-50 p-2 rounded-lg border border-gray-150 grid grid-cols-4 gap-1 text-center">
+                  <div className="bg-slate-50 p-2 rounded-lg border border-gray-150 grid grid-cols-3 gap-1 text-center">
                     <div>
                       <span className="text-[9px] text-gray-400 uppercase font-bold block">Lượt thuê</span>
                       <span className="font-mono text-xs font-black text-gray-800">{item.rentalCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-gray-400 uppercase font-bold block">Tổng ngày</span>
+                      <span className="font-mono text-xs font-black text-gray-800">{item.totalDays}n</span>
                     </div>
                     <div>
                       <span className="text-[9px] text-gray-400 uppercase font-bold block">Doanh thu</span>
                       <span className="font-mono text-xs font-black text-orange-600 truncate block">
                         {item.totalRevenue.toLocaleString()}đ
                       </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-gray-400 uppercase font-bold block">Giá gốc</span>
-                      <span className="font-mono text-xs font-bold text-gray-700 truncate block">
-                        {item.purchasePrice ? `${item.purchasePrice.toLocaleString()}đ` : '-'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-gray-400 uppercase font-bold block">Hoàn vốn</span>
-                      {(() => {
-                        const p = item.purchasePrice || 0;
-                        if (!p) return <span className="text-[10px] text-gray-400">-</span>;
-                        const roi = Math.round((item.totalRevenue / p) * 100);
-                        const isDone = roi >= 100;
-                        return (
-                          <span className={`text-[10px] font-black font-mono block ${isDone ? 'text-emerald-700' : 'text-amber-800'}`}>
-                            {roi}%
-                          </span>
-                        );
-                      })()}
                     </div>
                   </div>
 
@@ -1304,23 +1242,21 @@ export default function RevenueDashboard({
           <table className="w-full text-left text-xs">
             <thead className="bg-gray-100 text-gray-600 font-black uppercase text-[10px] tracking-wider border-b border-gray-200">
               <tr>
-                <th className="py-3 px-4">Trang phục</th>
+                <th className="py-3 px-4">Thiết bị</th>
                 <th className="py-3 px-3 text-center">Phân loại</th>
                 <th className="py-3 px-3 text-right">Đơn giá thuê</th>
-                <th className="py-3 px-3 text-right">Giá vốn</th>
                 <th className="py-3 px-3 text-center">Lượt thuê</th>
-                <th className="py-3 px-3 text-center">Tổng ngày</th>
-                <th className="py-3 px-3 text-right">Doanh thu</th>
-                <th className="py-3 px-3 text-center">Hoàn vốn (ROI)</th>
-                <th className="py-3 px-3">Lần thuê gần nhất</th>
-                <th className="py-3 px-4 text-center">Chi tiết</th>
+                <th className="py-3 px-3 text-center">Tổng ngày phục vụ</th>
+                <th className="py-3 px-3 text-right">Doanh thu thiết bị</th>
+                <th className="py-3 px-3">Lần thuê gần nhất (Ngày thuê)</th>
+                <th className="py-3 px-4 text-center">Chi tiết ngày</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 font-medium">
               {displayEquipmentList.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-8 text-gray-400 italic">
-                    Không tìm thấy trang phục nào phù hợp với bộ lọc tìm kiếm.
+                  <td colSpan={8} className="text-center py-8 text-gray-400 italic">
+                    Không tìm thấy thiết bị nào phù hợp với bộ lọc tìm kiếm.
                   </td>
                 </tr>
               ) : (
@@ -1339,7 +1275,7 @@ export default function RevenueDashboard({
                             <img src={item.image} alt={item.cameraName} className="w-8 h-8 rounded-lg object-cover border border-gray-200 shrink-0" />
                           ) : (
                             <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-xs shrink-0">
-                              👗
+                              📷
                             </div>
                           )}
                           <div className="min-w-0">
@@ -1356,25 +1292,17 @@ export default function RevenueDashboard({
                       {/* Category */}
                       <td className="py-3 px-3 text-center">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                          item.category === 'Váy cưới' ? 'bg-pink-100 text-pink-800 border border-pink-200' :
-                          item.category === 'Vest' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                          item.category === 'Áo dài' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                          item.category === 'Concept' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                          item.category === 'Dạ hội' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                          item.category === 'Body' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                          item.category === 'Lens' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
                           'bg-gray-200 text-gray-800'
                         }`}>
-                          {item.category}
+                          {item.category === 'Body' ? 'Body' : item.category === 'Lens' ? 'Lens' : item.category}
                         </span>
                       </td>
 
                       {/* Daily Rate */}
                       <td className="py-3 px-3 text-right font-mono text-gray-800 font-bold">
                         {item.dailyRate ? `${item.dailyRate.toLocaleString()}đ/ng` : '-'}
-                      </td>
-
-                      {/* Purchase Price (Giá vốn) */}
-                      <td className="py-3 px-3 text-right font-mono text-gray-700 font-bold">
-                        {item.purchasePrice ? `${item.purchasePrice.toLocaleString()}đ` : '-'}
                       </td>
 
                       {/* Rental Count */}
@@ -1394,33 +1322,6 @@ export default function RevenueDashboard({
                       {/* Total Revenue */}
                       <td className="py-3 px-3 text-right font-mono text-xs font-black text-orange-600">
                         {item.totalRevenue.toLocaleString()}đ
-                      </td>
-
-                      {/* Hoàn vốn (ROI) */}
-                      <td className="py-3 px-3 text-center">
-                        {(() => {
-                          const p = item.purchasePrice || 0;
-                          if (!p) return <span className="text-gray-400 font-medium">-</span>;
-                          const roi = Math.round((item.totalRevenue / p) * 100);
-                          const isBreakeven = roi >= 100;
-                          return (
-                            <div className="inline-flex flex-col items-center gap-0.5">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black font-mono ${
-                                isBreakeven 
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
-                                  : 'bg-amber-100 text-amber-900 border border-amber-200'
-                              }`}>
-                                {roi}% {isBreakeven ? '✓' : ''}
-                              </span>
-                              <div className="w-14 bg-gray-200 rounded-full h-1 overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${isBreakeven ? 'bg-emerald-500' : 'bg-orange-500'}`}
-                                  style={{ width: `${Math.min(roi, 100)}%` }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })()}
                       </td>
 
                       {/* Latest Booking Dates */}
@@ -1467,13 +1368,13 @@ export default function RevenueDashboard({
       <div id="monthly-details-section" className="bg-white border border-gray-200 rounded-xl sm:rounded-2xl p-3.5 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3 sm:pb-5">
           <div className="space-y-0.5 sm:space-y-1">
-            <h3 className="text-sm sm:text-base font-extrabold text-gray-900 flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2">
               <PieChart className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 shrink-0" />
               <span>
                 Chi Tiết Hoạt Động Doanh Thu - <span className="text-orange-600 font-black">{activeDetailData.title}</span>
               </span>
             </h3>
-            <p className="text-[11px] sm:text-xs text-gray-500 leading-normal">
+            <p className="text-xs text-gray-500 leading-normal">
               Danh sách chi tiết các hợp đồng cọc thuê và các khoản chi thực thu trong kỳ.
             </p>
           </div>
@@ -1588,7 +1489,7 @@ export default function RevenueDashboard({
             <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-0.5 sm:pr-1">
               {activeDetailData.contracts.length === 0 ? (
                 <div className="bg-slate-50 border border-gray-200 rounded-xl p-6 sm:p-8 text-center text-gray-400 italic text-xs font-medium">
-                  Không phát sinh giao dịch cho thuê trang phục nào trong {activeDetailData.title}.
+                  Không phát sinh giao dịch cho thuê máy nào trong {activeDetailData.title}.
                 </div>
               ) : (
                 activeDetailData.contracts.map((c) => {
@@ -1641,7 +1542,7 @@ export default function RevenueDashboard({
                         {c.items.map((it, idx) => (
                            <div key={idx} className="flex justify-between items-center text-[10.5px] sm:text-[11px] gap-2">
                              <span className="text-gray-800 font-bold flex items-center gap-1 truncate">
-                               <span>👗</span>
+                               <span>📷</span>
                                <span className="truncate">{it.cameraName}</span>
                              </span>
                              <span className="text-gray-600 font-mono shrink-0 font-bold">
@@ -1748,7 +1649,7 @@ export default function RevenueDashboard({
                   />
                 ) : (
                   <span className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
-                    👗
+                    📷
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
@@ -1780,7 +1681,7 @@ export default function RevenueDashboard({
             </div>
 
             {/* Modal Summary KPI Cards */}
-            <div className="p-3 sm:p-6 bg-slate-50 border-b border-gray-200 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 shrink-0">
+            <div className="p-3 sm:p-6 bg-slate-50 border-b border-gray-200 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 shrink-0">
               <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-gray-200 shadow-xs space-y-0.5">
                 <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
                   {modalCameraDetail.isPrinter ? 'Doanh thu in ảnh' : 'Doanh thu tạo ra'}
@@ -1788,7 +1689,7 @@ export default function RevenueDashboard({
                 <span className="font-mono text-xs sm:text-base font-black text-orange-600 block truncate">
                   {modalCameraDetail.totalRevenue.toLocaleString()}đ
                 </span>
-                <span className="text-[9px] text-green-700 font-bold block">Thực thu tích luỹ</span>
+                <span className="text-[9px] text-green-700 font-bold block">Thực thu</span>
               </div>
 
               <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-gray-200 shadow-xs space-y-0.5">
@@ -1826,27 +1727,6 @@ export default function RevenueDashboard({
                   {modalCameraDetail.isPrinter ? '1-2: 40k · 3-9: 35k · ≥10: 33k' : 'Giá thuê 1 ngày'}
                 </span>
               </div>
-
-              {/* Card 5: Vốn nhập & Tỷ lệ hoàn vốn */}
-              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-emerald-200 shadow-xs space-y-0.5 col-span-2 sm:col-span-1 bg-emerald-50/20">
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-800 block truncate">
-                  Giá vốn & Hoàn vốn
-                </span>
-                <span className="font-mono text-xs sm:text-base font-black text-emerald-850 block truncate">
-                  {modalCameraDetail.purchasePrice ? `${modalCameraDetail.purchasePrice.toLocaleString()}đ` : 'Chưa nhập'}
-                </span>
-                {(() => {
-                  const p = modalCameraDetail.purchasePrice || 0;
-                  if (!p) return <span className="text-[9px] text-gray-400 block">Chưa có giá vốn</span>;
-                  const roi = Math.round((modalCameraDetail.totalRevenue / p) * 100);
-                  const isDone = roi >= 100;
-                  return (
-                    <span className={`text-[9.5px] font-bold block truncate ${isDone ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {isDone ? `✓ Đã hoàn vốn (${roi}%)` : `Hoàn ${roi}% vốn (${modalCameraDetail.totalRevenue.toLocaleString()}đ)`}
-                    </span>
-                  );
-                })()}
-              </div>
             </div>
 
             {/* Modal Body: Specific Rental Dates List */}
@@ -1870,7 +1750,7 @@ export default function RevenueDashboard({
                 <div className="p-6 sm:p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500 text-xs italic font-medium">
                   {modalCameraDetail.isPrinter 
                     ? `Chưa có lịch sử in ảnh nào trong khoảng thời gian (${dateRange.label}).`
-                    : `Chưa có lịch sử cho thuê trang phục nào trong khoảng thời gian (${dateRange.label}).`}
+                    : `Chưa có lịch sử cho thuê máy nào trong khoảng thời gian (${dateRange.label}).`}
                 </div>
               ) : (
                 <div className="space-y-2.5">
@@ -1905,7 +1785,7 @@ export default function RevenueDashboard({
                                 </span>
                               ) : (
                                 <span className="text-[9.5px] sm:text-[10px] font-black text-orange-900 bg-orange-100 border border-orange-300 px-1.5 py-0.5 rounded-md">
-                                  ⏱️ {booking.durationDays} ngày
+                                  {booking.is6Hours ? '⚡ 6 tiếng' : `⏱️ ${booking.durationDays} ngày`}
                                 </span>
                               )}
                               {booking.quantity > 1 && (
@@ -2021,7 +1901,7 @@ export default function RevenueDashboard({
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-extrabold text-sm sm:text-lg flex items-center gap-2 truncate">
-                    <span>{receivablesModalTab === 'debt' ? 'Danh Sách Dư Nợ Chưa Thu' : 'Danh Sách Chưa Cọc 50% giữ đồ'}</span>
+                    <span>{receivablesModalTab === 'debt' ? 'Danh Sách Dư Nợ Chưa Thu' : 'Danh Sách Chưa Cọc 50% Giữ Máy'}</span>
                     <span className="text-xs bg-white text-gray-900 px-2 py-0.5 rounded-full font-black">
                       {receivablesModalTab === 'debt' ? `${receivableContracts.length} đơn` : `${pendingDepositContracts.length} đơn`}
                     </span>
@@ -2068,7 +1948,7 @@ export default function RevenueDashboard({
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
                 }`}
               >
-                <span>⏳ Chưa Cọc 50% giữ đồ</span>
+                <span>⏳ Chưa Cọc 50% Giữ Máy</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
                   receivablesModalTab === 'deposit' ? 'bg-amber-100 text-amber-900' : 'bg-gray-200 text-gray-700'
                 }`}>
@@ -2096,7 +1976,7 @@ export default function RevenueDashboard({
             ) : (
               <div className="bg-amber-50 border-b border-amber-100 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0">
                 <div>
-                  <span className="text-[10px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider block">Tổng Tiền Cọc 50% giữ đồ Cần Thu</span>
+                  <span className="text-[10px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider block">Tổng Tiền Cọc 50% Giữ Máy Cần Thu</span>
                   <span className="font-mono text-base sm:text-xl font-black text-amber-700 block">
                     {totalPendingDeposit.toLocaleString()}đ
                   </span>
@@ -2128,7 +2008,7 @@ export default function RevenueDashboard({
                       statusText = 'Đang thuê';
                       statusClass = 'bg-blue-50 text-blue-800 border-blue-200';
                     } else if (c.status === 'Completed') {
-                      statusText = 'Đã trả đồ';
+                      statusText = 'Đã trả máy';
                       statusClass = 'bg-emerald-50 text-emerald-800 border-emerald-200';
                     } else if (c.status === 'Overdue') {
                       statusText = 'Quá hạn';
@@ -2193,7 +2073,7 @@ export default function RevenueDashboard({
 
                         {/* Equipment items summary */}
                         <div className="flex flex-wrap items-center gap-1">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Trang phục:</span>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Thiết bị:</span>
                           {(c.items || []).map((item, idx) => (
                             <span
                               key={idx}
@@ -2256,11 +2136,11 @@ export default function RevenueDashboard({
                           <span className="font-mono font-bold text-gray-800">{c.totalPrice.toLocaleString()}đ</span>
                         </div>
                         <div>
-                          <span className="text-[9.5px] text-amber-800 font-bold uppercase block">Tiền cọc giữ đồ</span>
+                          <span className="text-[9.5px] text-amber-800 font-bold uppercase block">Tiền cọc giữ máy</span>
                           <span className="font-mono font-bold text-amber-700">{c.paidAmount.toLocaleString()}đ</span>
                         </div>
                         <div>
-                          <span className="text-[9.5px] text-gray-400 font-bold uppercase block">Ngày nhận đồ</span>
+                          <span className="text-[9.5px] text-gray-400 font-bold uppercase block">Ngày nhận máy</span>
                           <span className="font-mono text-gray-700 text-[11px]">{c.startDate ? new Date(c.startDate).toLocaleDateString('vi-VN') : '---'}</span>
                         </div>
                         <div>
@@ -2277,7 +2157,7 @@ export default function RevenueDashboard({
 
                       {/* Equipment items summary */}
                       <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Trang phục:</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Thiết bị:</span>
                         {(c.items || []).map((item, idx) => (
                           <span
                             key={idx}
@@ -2324,4 +2204,3 @@ export default function RevenueDashboard({
     </div>
   );
 }
-

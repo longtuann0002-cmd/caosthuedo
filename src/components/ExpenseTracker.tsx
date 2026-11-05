@@ -10,20 +10,15 @@ interface ExpenseTrackerProps {
   expenses: Expense[];
   onAddExpense: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
-  onRestoreToInventory?: () => void;
 }
 
 export default function ExpenseTracker({
   expenses,
   onAddExpense,
-  onDeleteExpense,
-  onRestoreToInventory
+  onDeleteExpense
 }: ExpenseTrackerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
-  const [dateFilterMode, setDateFilterMode] = useState<'ALL' | 'TODAY' | 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM'>('ALL');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -40,38 +35,17 @@ export default function ExpenseTracker({
   });
 
   const filteredExpenses = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const now = new Date();
-    const thisMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
-
     return expenses.filter(e => {
       const query = searchQuery.toLowerCase().trim();
-      const dateDMY = formatDMY(e.date).toLowerCase();
       const matchesSearch =
         e.description.toLowerCase().includes(query) ||
-        e.operator.toLowerCase().includes(query) ||
-        (e.date && e.date.toLowerCase().includes(query)) ||
-        dateDMY.includes(query);
+        e.operator.toLowerCase().includes(query);
 
       const matchesCategory = categoryFilter === 'ALL' || e.category === categoryFilter;
 
-      let matchesDate = true;
-      if (dateFilterMode === 'TODAY') {
-        matchesDate = e.date === todayStr;
-      } else if (dateFilterMode === 'THIS_MONTH') {
-        matchesDate = !!e.date && e.date.startsWith(thisMonthPrefix);
-      } else if (dateFilterMode === 'LAST_MONTH') {
-        matchesDate = !!e.date && e.date.startsWith(lastMonthPrefix);
-      } else if (dateFilterMode === 'CUSTOM') {
-        if (startDate && e.date < startDate) matchesDate = false;
-        if (endDate && e.date > endDate) matchesDate = false;
-      }
-
-      return matchesSearch && matchesCategory && matchesDate;
+      return matchesSearch && matchesCategory;
     });
-  }, [expenses, searchQuery, categoryFilter, dateFilterMode, startDate, endDate]);
+  }, [expenses, searchQuery, categoryFilter]);
 
   // Pagination Configuration
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,7 +54,7 @@ export default function ExpenseTracker({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, dateFilterMode, startDate, endDate]);
+  }, [searchQuery, categoryFilter]);
 
   const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage) || 1;
   const paginatedExpenses = useMemo(() => {
@@ -134,11 +108,11 @@ export default function ExpenseTracker({
 
     const rows = filteredExpenses.map(e => {
       let catVN = e.category;
-      if (e.category === 'Maintenance') catVN = 'Giặt hấp & Sửa may';
-      else if (e.category === 'Equipment') catVN = 'Nhập trang phục & Phụ kiện';
+      if (e.category === 'Maintenance') catVN = 'Bảo dưỡng vệ sinh';
+      else if (e.category === 'Equipment') catVN = 'Mua sắm thiết bị';
       else if (e.category === 'Marketing') catVN = 'Quảng cáo marketing';
-      else if (e.category === 'Utilities') catVN = 'Điện nước & Showroom';
-      else if (e.category === 'Rent') catVN = 'Mặt bằng showroom';
+      else if (e.category === 'Utilities') catVN = 'Điện nước tiện ích';
+      else if (e.category === 'Rent') catVN = 'Thuê cửa hàng';
       else if (e.category === 'Other') catVN = 'Khoản chi khác';
 
       return [
@@ -164,11 +138,11 @@ export default function ExpenseTracker({
 
   const getCategoryLabel = (cat: Expense['category']) => {
     switch (cat) {
-      case 'Maintenance': return 'Giặt hấp & Sửa may';
-      case 'Equipment': return 'Nhập trang phục mới';
+      case 'Maintenance': return 'Bảo dưỡng vệ sinh';
+      case 'Equipment': return 'Mua sắm thiết bị';
       case 'Marketing': return 'Quảng cáo marketing';
-      case 'Utilities': return 'Điện nước & Showroom';
-      case 'Rent': return 'Mặt bằng showroom';
+      case 'Utilities': return 'Điện nước máy móc';
+      case 'Rent': return 'Cửa hàng mặt bằng';
       case 'Other': return 'Chi phí khác';
     }
   };
@@ -190,134 +164,59 @@ export default function ExpenseTracker({
       <div className="bg-white border border-gray-150 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 sm:space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h2 className="text-[15px] sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
+            <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
               <ListCollapse className="text-orange-600 w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" /> Quản Lý Khoản Chi Vận Hành
             </h2>
-            <p className="text-[11.5px] sm:text-xs text-gray-500 leading-normal">
-              Kê khai các mục chi tiêu nhập mẫu váy/vest mới, phí giặt hấp bảo dưỡng định kỳ và vận hành tiệm.
+            <p className="text-xs text-gray-500 leading-normal">
+              Kê khai các mục chi tiêu mua thêm thiết bị, tiền bảo dưỡng định kỳ và các chi phí phát sinh khác của cửa hàng.
             </p>
           </div>
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
             <button
               onClick={handleExportCSV}
-              className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"
+              className="bg-slate-50 border border-gray-200 text-gray-700 font-extrabold sm:font-semibold px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-sm flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"
               title="Xuất định dạng CSV tải về"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> Xuất bản CSV
             </button>
             <button
               onClick={() => setShowAddModal(true)}
-              className="bg-orange-600 text-white font-bold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-2xs"
+              className="bg-orange-600 text-white font-extrabold sm:font-medium px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-sm flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-2xs"
             >
               <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Ghi chi tiêu
             </button>
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-2 sm:gap-2.5">
+        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
           <div className="relative flex-grow">
-            <Search className="absolute left-2.5 sm:left-3 top-2 sm:top-2.5 h-3.5 w-3.5 text-gray-400" />
+            <Search className="absolute left-3 top-2.5 sm:top-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Tìm theo nội dung chi, người thanh toán, ngày (VD: 27/10)..."
+              placeholder="Tìm theo nội dung chi, người thanh lý chi..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="pl-8 sm:pl-9 pr-8 py-1.5 sm:py-2 text-[11px] sm:text-xs font-normal w-full border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80 bg-gray-50/60 hover:bg-white"
+              className="pl-8.5 pr-4 py-1.5 sm:py-2.5 text-xs sm:text-sm w-full border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80"
             />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer text-xs"
-              >
-                ✕
-              </button>
-            )}
           </div>
 
-          <div className="relative min-w-[170px] sm:w-56">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
-              <Tag className="w-3.5 h-3.5 shrink-0" />
-            </div>
+          <div className="flex items-center gap-2 min-w-[200px]">
+            <Tag className="h-4 w-4 text-gray-450 shrink-0" />
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full pl-8 pr-6 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-200 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+              className="text-sm w-full border border-gray-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="ALL">Tất cả định mục</option>
-              <option value="Maintenance">Giặt hấp & Sửa may</option>
-              <option value="Equipment">Nhập trang phục mới</option>
-              <option value="Marketing">Chi phí quảng cáo</option>
-              <option value="Utilities">Điện nước Showroom</option>
-              <option value="Rent">Mặt bằng Showroom</option>
-              <option value="Other">Các dòng chi phí khác</option>
+              <option value="Maintenance">Hao mòn bảo dưỡng (Maintenance)</option>
+              <option value="Equipment">Mua sắm thiết bị mới (Equipment)</option>
+              <option value="Marketing">Chi phí quảng cáo (Marketing)</option>
+              <option value="Utilities">Hệ thống & Tiện ích (Utilities)</option>
+              <option value="Rent">Tiền địa điểm/Tủ máy (Rent)</option>
+              <option value="Other">Các dòng chi phí khác (Other)</option>
             </select>
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">▼</div>
-          </div>
-
-          <div className="relative min-w-[170px] sm:w-52">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
-              <Calendar className="w-3.5 h-3.5 shrink-0" />
-            </div>
-            <select
-              value={dateFilterMode}
-              onChange={e => {
-                const val = e.target.value as any;
-                setDateFilterMode(val);
-                if (val !== 'CUSTOM') {
-                  setStartDate('');
-                  setEndDate('');
-                }
-              }}
-              className="w-full pl-8 pr-6 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-200 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
-            >
-              <option value="ALL">Tất cả thời gian</option>
-              <option value="TODAY">Hôm nay</option>
-              <option value="THIS_MONTH">Tháng này</option>
-              <option value="LAST_MONTH">Tháng trước</option>
-              <option value="CUSTOM">Tùy chọn khoảng ngày...</option>
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">▼</div>
           </div>
         </div>
-
-        {dateFilterMode === 'CUSTOM' && (
-          <div className="flex items-center gap-2 pt-1 pb-0.5 text-xs animate-fade-in flex-wrap bg-orange-50/60 p-2.5 rounded-xl border border-orange-200/80">
-            <span className="text-[11.5px] font-bold text-orange-900 flex items-center gap-1.5 shrink-0">
-              <Calendar className="w-3.5 h-3.5 text-orange-600" /> Chọn khoảng ngày:
-            </span>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <div className="flex items-center gap-1">
-                <span className="text-[11px] text-gray-500">Từ</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-800 shadow-3xs"
-                />
-              </div>
-              <span className="text-gray-400 font-bold">➔</span>
-              <div className="flex items-center gap-1">
-                <span className="text-[11px] text-gray-500">Đến</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-800 shadow-3xs"
-                />
-              </div>
-              {(startDate || endDate) && (
-                <button
-                  type="button"
-                  onClick={() => { setStartDate(''); setEndDate(''); }}
-                  className="text-[11px] text-rose-600 hover:text-rose-800 font-bold px-2.5 py-1 rounded-lg bg-white border border-rose-200 transition cursor-pointer shadow-3xs"
-                >
-                  ✕ Xóa khoảng ngày
-                </button>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Aggregate metrics box */}
@@ -535,7 +434,7 @@ export default function ExpenseTracker({
                   value={formState.description}
                   onChange={e => setFormState({ ...formState, description: e.target.value })}
                   className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                  placeholder="VD: Giặt hấp 5 váy cưới cô dâu tại tiệm Hà Thành"
+                  placeholder="VD: Thuê tủ sấy chống ẩm máy ảnh 300L"
                 />
               </div>
 
@@ -572,11 +471,11 @@ export default function ExpenseTracker({
                     onChange={e => setFormState({ ...formState, category: e.target.value as any })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-750"
                   >
-                    <option value="Maintenance">Giặt hấp & Sửa may</option>
-                    <option value="Equipment">Nhập trang phục & Phụ kiện mới</option>
+                    <option value="Maintenance">Hao mòn bảo dưỡng</option>
+                    <option value="Equipment">Mua sắm thiết bị mới</option>
                     <option value="Marketing">Chi phí marketing</option>
-                    <option value="Utilities">Điện nước & Showroom</option>
-                    <option value="Rent">Mặt bằng showroom</option>
+                    <option value="Utilities">Điện nước/Hạ tầng</option>
+                    <option value="Rent">Địa điểm tủ máy</option>
                     <option value="Other">Các dòng chi phí khác</option>
                   </select>
                 </div>

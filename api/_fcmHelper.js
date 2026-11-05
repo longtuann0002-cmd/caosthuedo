@@ -53,7 +53,7 @@ export async function sendFCMMessage(targetToken, title, body, dataPayload = {})
   const url = 'https://fcm.googleapis.com/v1/projects/' + SERVICE_ACCOUNT.project_id + '/messages:send';
 
   const stringData = {};
-  for (const [k, v] of Object.entries(dataPayload || {})) {
+  for (const [k, v] of Object.entries(dataPayload)) {
     stringData[k] = typeof v === 'string' ? v : JSON.stringify(v);
   }
 
@@ -80,7 +80,7 @@ export async function sendFCMMessage(targetToken, title, body, dataPayload = {})
           icon: '/logocaosdt.png',
           badge: '/logocaosdt.png',
           vibrate: [200, 100, 200],
-          tag: dataPayload?.tag || 'thuedo-push',
+          tag: dataPayload?.tag || 'caos-push',
           renotify: false,
           requireInteraction: false
         }
@@ -88,7 +88,7 @@ export async function sendFCMMessage(targetToken, title, body, dataPayload = {})
       apns: {
         headers: {
           'apns-priority': '10',
-          'apns-collapse-id': dataPayload?.tag || 'thuedo-push'
+          'apns-collapse-id': dataPayload?.tag || 'caos-push'
         },
         payload: {
           aps: {
@@ -105,54 +105,47 @@ export async function sendFCMMessage(targetToken, title, body, dataPayload = {})
     }
   };
 
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(message)
-    });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + accessToken,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(message)
+  });
 
-    const result = await res.json();
-    return { ok: res.ok, status: res.status, result };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
+  const result = await res.json();
+  return { ok: res.ok, status: res.status, result };
 }
 
 export async function getRegisteredTokens() {
   const accessToken = await getGoogleAccessToken();
-  const url = 'https://firestore.googleapis.com/v1/projects/' + SERVICE_ACCOUNT.project_id + '/databases/(default)/documents/thuedo_device_tokens';
+  const url = 'https://firestore.googleapis.com/v1/projects/' + SERVICE_ACCOUNT.project_id + '/databases/(default)/documents/caos_device_tokens';
   
-  try {
-    const res = await fetch(url, {
-      headers: { 'Authorization': 'Bearer ' + accessToken }
-    });
-    
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!data.documents) return [];
+  const res = await fetch(url, {
+    headers: { 'Authorization': 'Bearer ' + accessToken }
+  });
+  
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (!data.documents) return [];
 
-    const tokens = [];
-    for (const doc of data.documents) {
-      const fields = doc.fields || {};
-      const token = fields.token?.stringValue;
-      if (token) {
-        tokens.push(token);
-      }
+  const tokens = [];
+  for (const doc of data.documents) {
+    const fields = doc.fields || {};
+    const token = fields.token?.stringValue;
+    if (token) {
+      tokens.push(token);
     }
-    return tokens;
-  } catch (err) {
-    return [];
   }
+  return tokens;
 }
 
 export async function saveRegisteredToken(token, deviceType = 'Unknown') {
   const accessToken = await getGoogleAccessToken();
+  // Document ID can be encoded or hash
   const docId = Buffer.from(token).toString('base64url').slice(0, 60);
-  const url = 'https://firestore.googleapis.com/v1/projects/' + SERVICE_ACCOUNT.project_id + '/databases/(default)/documents/thuedo_device_tokens/' + docId;
+  const url = 'https://firestore.googleapis.com/v1/projects/' + SERVICE_ACCOUNT.project_id + '/databases/(default)/documents/caos_device_tokens/' + docId;
 
   const body = {
     fields: {
@@ -162,17 +155,14 @@ export async function saveRegisteredToken(token, deviceType = 'Unknown') {
     }
   };
 
-  try {
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
-    return res.ok;
-  } catch (err) {
-    return false;
-  }
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': 'Bearer ' + accessToken,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  return res.ok;
 }

@@ -141,26 +141,17 @@ export function matchCamera(cam: any, query: string): { matched: boolean; score:
   if (!cam) return { matched: false, score: 0 };
 
   const q = query.trim();
-  const fullText = `${cam.name || ''} ${cam.shortName || ''} ${cam.serialNumber || ''} ${cam.category || ''} ${cam.size || ''} ${cam.color || ''} ${cam.gender || ''} ${cam.brand || ''} ${cam.description || ''}`;
+  const fullText = `${cam.name || ''} ${cam.shortName || ''} ${cam.serialNumber || ''} ${cam.category || ''}`;
 
-  const cleanQuery = q.toLowerCase().replace(/[\s\-_.]/g, '');
-  const cleanSerial = (cam.serialNumber || '').toLowerCase().replace(/[\s\-_.]/g, '');
-  const cleanShort = (cam.shortName || '').toLowerCase().replace(/[\s\-_.]/g, '');
-
-  // Exact code match without dashes/spaces (e.g., "ad01" matches "AD-01", "cp02" matches "CP-02")
-  const isExactCode = (cleanSerial && cleanSerial === cleanQuery) || (cleanShort && cleanShort === cleanQuery);
-  const isCodePrefix = (cleanSerial && cleanSerial.startsWith(cleanQuery)) || (cleanShort && cleanShort.startsWith(cleanQuery));
-
-  if (!smartMatch(fullText, q) && !cleanSerial.includes(cleanQuery) && !cleanShort.includes(cleanQuery)) {
+  if (!smartMatch(fullText, q)) {
     return { matched: false, score: 0 };
   }
 
   const nameScore = getMatchScore(cam.name || '', q) + 10;
   const shortScore = getMatchScore(cam.shortName || '', q) + 10;
-  const serialScore = getMatchScore(cam.serialNumber || '', q) + (isExactCode ? 150 : isCodePrefix ? 100 : 25);
-  const tagScore = getMatchScore(`${cam.size || ''} ${cam.color || ''}`, q) + 5;
+  const serialScore = getMatchScore(cam.serialNumber || '', q) + 15;
 
-  return { matched: true, score: Math.max(nameScore, shortScore, serialScore, tagScore) };
+  return { matched: true, score: Math.max(nameScore, shortScore, serialScore) };
 }
 
 /**

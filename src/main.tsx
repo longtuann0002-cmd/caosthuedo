@@ -45,13 +45,6 @@ class GlobalErrorBoundary extends React.Component<Props, State> {
             <p className="text-xs text-slate-500">
               Đã xảy ra lỗi không mong muốn. Dữ liệu của bạn vẫn an toàn. Vui lòng tải lại ứng dụng.
             </p>
-            {this.state.error && (
-              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-left">
-                <p className="text-[11px] font-mono font-bold text-rose-700 break-words">
-                  {this.state.error.toString()}
-                </p>
-              </div>
-            )}
             <div className="pt-2">
               <button
                 type="button"

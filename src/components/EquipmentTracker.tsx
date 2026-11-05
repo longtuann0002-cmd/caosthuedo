@@ -1,65 +1,12 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RentalContract } from '../types';
-import { compressImageFile } from '../utils/imageUtils';
 import MoneyInput from './MoneyInput';
-import { DressIcon } from './DressIcon';
-import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, Clock, ArrowLeft, ArrowRight, GripVertical, Layers, LayoutGrid, List, X, Copy, Loader2, Cloud, Check, Save, AlertCircle } from 'lucide-react';
+import { Search, Plus, Filter, Camera as CameraIcon, CheckCircle, Flame, Server, ShieldCheck, RefreshCw, Trash2, Edit2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, ArrowLeft, ArrowRight, GripVertical } from 'lucide-react';
 import { getInitialTieredPrices } from '../utils/pricing';
+import RentalFrequencyChart from './RentalFrequencyChart';
 import { matchCamera } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
-import { uploadOutfitImageToStorage, deleteOutfitImageFromStorage } from '../utils/supabase';
-
-export interface OutfitGroupItem {
-  groupKey: string;
-  representativeCam: Camera;
-  cleanName: string;
-  baseSerial: string;
-  shortName: string;
-  category: Camera['category'];
-  gender: string;
-  image: string;
-  description: string;
-  items: Camera[];
-  totalPurchase: number;
-  totalRevenue: number;
-  overallRoiPercent: number | null;
-  isBreakeven: boolean;
-  readyCount: number;
-  laundryCount: number;
-  mendingCount: number;
-  rentedCount: number;
-  maintenanceCount: number;
-}
-
-export const getOutfitGroupKey = (cam: Camera): string => {
-  if (cam.category === 'Printer' || cam.isPrinter) return `printer-${cam.id}`;
-
-  // 1. Chuẩn hóa mã mẫu từ shortName (loại bỏ hậu tố size nếu có: -S, -M, _L, .XL, v.v.)
-  const baseShort = cam.shortName
-    ? cam.shortName.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().toLowerCase()
-    : '';
-
-  // 2. Chuẩn hóa mã mẫu từ serialNumber (loại bỏ hậu tố size)
-  const baseSerial = cam.serialNumber
-    ? cam.serialNumber.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().toLowerCase()
-    : '';
-
-  // 3. Chuẩn hóa tên sạch (loại bỏ hậu tố (Size ...) hoặc - Size ...)
-  const cleanName = cam.name
-    ? cam.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').replace(/[-_.\s]+(Size\s+[^)]+|Freesize|FS)$/i, '').trim().toLowerCase()
-    : '';
-
-  // Ưu tiên gom theo mã mẫu (nếu có baseShort hoặc baseSerial trùng nhau)
-  if (baseShort && baseSerial && baseShort === baseSerial) {
-    return `mod-${baseShort}`;
-  }
-  if (baseShort) return `sn-${baseShort}`;
-  if (baseSerial) return `ser-${baseSerial}`;
-  if (cleanName) return `name-${cleanName}`;
-
-  return cam.id;
-};
 
 interface EquipmentTrackerProps {
   cameras: Camera[];
@@ -70,12 +17,7 @@ interface EquipmentTrackerProps {
   currentUserRole?: string;
   contracts?: RentalContract[];
   initialSearchQuery?: string;
-  initialCleaningFilter?: string;
-  initialStatusFilter?: string;
   systemDate?: string;
-  onRestoreFromExpenses?: () => void;
-  outfitExpensesCount?: number;
-  addToast?: (title: string, type?: 'success' | 'error' | 'info', description?: string) => void;
 }
 
 export default function EquipmentTracker({
@@ -87,12 +29,7 @@ export default function EquipmentTracker({
   currentUserRole,
   contracts = [],
   initialSearchQuery,
-  initialCleaningFilter,
-  initialStatusFilter,
-  systemDate = '2026-06-17',
-  onRestoreFromExpenses,
-  outfitExpensesCount = 0,
-  addToast
+  systemDate = '2026-06-17'
 }: EquipmentTrackerProps) {
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
 
@@ -101,59 +38,16 @@ export default function EquipmentTracker({
       setSearchQuery(initialSearchQuery);
     }
   }, [initialSearchQuery]);
-
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
-  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'ALL');
-  const [sizeFilter, setSizeFilter] = useState<string>('ALL');
-  const [cleaningFilter, setCleaningFilter] = useState<string>(initialCleaningFilter || 'ALL');
-
-  useEffect(() => {
-    if (initialCleaningFilter !== undefined) {
-      setCleaningFilter(initialCleaningFilter);
-    }
-  }, [initialCleaningFilter]);
-
-  useEffect(() => {
-    if (initialStatusFilter !== undefined) {
-      setStatusFilter(initialStatusFilter);
-    }
-  }, [initialStatusFilter]);
-  const [viewMode, setViewMode] = useState<'grouped' | 'individual'>(() => {
-    return (localStorage.getItem('outfit_inventory_view_mode') as 'grouped' | 'individual') || 'grouped';
-  });
-
-  const handleSetViewMode = (mode: 'grouped' | 'individual') => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem('outfit_inventory_view_mode', mode);
-    } catch {}
-  };
-
-  const [mobileLayout, setMobileLayout] = useState<'1-col' | '2-col'>(() => {
-    return (localStorage.getItem('outfit_mobile_layout') as '1-col' | '2-col') || '2-col';
-  });
-
-  const handleSetMobileLayout = (layout: '1-col' | '2-col') => {
-    setMobileLayout(layout);
-    try {
-      localStorage.setItem('outfit_mobile_layout', layout);
-    } catch {}
-  };
-
-  const [selectedGroupSizes, setSelectedGroupSizes] = useState<Record<string, string>>({});
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
   const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Detail Bottom Sheet Modal state
-  const [detailGroupKey, setDetailGroupKey] = useState<string | null>(null);
-  const [detailCameraId, setDetailCameraId] = useState<string | null>(null);
-  const [roiViewMode, setRoiViewMode] = useState<'single' | 'group'>('single');
-
   // Lock body scroll whenever modal is open
-  useScrollLock(Boolean(showAddModal || cameraToDelete || detailGroupKey || detailCameraId));
+  useScrollLock(Boolean(showAddModal || cameraToDelete));
   const [expandedPrices, setExpandedPrices] = useState<Record<string, boolean>>({});
 
   const togglePricingExpanded = (id: string) => {
@@ -228,338 +122,84 @@ export default function EquipmentTracker({
     setDragOverCamId(null);
   };
 
-  // Form states including tiered pricing fields & fashion attributes
+  // Form states including tiered pricing fields
   const [formState, setFormState] = useState({
     name: '',
     shortName: '',
-    category: 'Váy' as Camera['category'],
+    category: 'Body' as Camera['category'],
     isPrinter: false,
-    purchasePrice: 0,
-    dailyRate: 0,
-    salePrice: 0,
-    price1Day: 0,
-    price2Days: 0,
-    price3Days: 0,
-    price4DaysPlus: 0,
-    depositAmount: 0,
+    dailyRate: 290000,
+    price6Hours: 200000,
+    price1Day: 290000,
+    price2Days: 550000,
+    price3Days: 800000,
+    price4DaysPlus: 250000,
+    depositAmount: 5000000,
     status: 'Available' as Camera['status'],
     serialNumber: '',
     description: '',
     image: '',
-    size: 'M',
-    selectedSizes: ['M'] as string[],
-    splitBySize: false,
-    sizeColorMap: {} as Record<string, string>, // màu riêng cho từng size khi tách
-    sizeImageMap: {} as Record<string, string>, // ảnh riêng cho từng size khi tách
-    sizeQtyMap: {} as Record<string, number>, // số lượng chiếc cho từng size
-    sizeColorVariants: {} as Record<string, string[]>, // màu riêng cho từng chiếc trong cùng size
-    color: '',
-    gender: 'Nữ' as 'Nữ' | 'Nam' | 'Unisex',
-    cleaningStatus: 'Clean' as 'Clean' | 'Laundry' | 'Mending',
-    measurements: '',
-    includedAccessories: '',
-    brand: '',
-    type: '',
-    printPrice1To2: 0,
-    printPrice3To9: 0,
-    printPrice10Plus: 0,
+    printPrice1To2: 40000,
+    printPrice3To9: 35000,
+    printPrice10Plus: 33000,
   });
 
-  const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false);
-  const initialFormSnapshotRef = useRef<string>('');
-  const formRef = useRef<HTMLFormElement>(null);
-
-  const handleRequestClose = () => {
-    if (editingCamera && initialFormSnapshotRef.current && initialFormSnapshotRef.current !== JSON.stringify(formState)) {
-      setShowUnsavedPrompt(true);
-    } else {
-      setShowAddModal(false);
-      setValidationError(null);
-      setShowUnsavedPrompt(false);
-      setEditingCamera(null);
-    }
-  };
-
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [uploadingSize, setUploadingSize] = useState<string | null>(null);
-
   const filteredCameras = useMemo(() => {
-    const result = cameras.filter(c => {
+    return cameras.filter(c => {
       const query = searchQuery.trim();
       const matchesSearch = matchCamera(c, query).matched;
 
-      const matchesCategory = categoryFilter === 'ALL' || c.category === categoryFilter || (categoryFilter === 'Váy' && (c.category === 'Váy' || c.category === 'Váy cưới' || c.category === 'Đầm'));
-      const matchesStatus = statusFilter === 'ALL' || (
-        statusFilter === 'Available'
-          ? (c.status === 'Available' && (c.cleaningStatus === 'Clean' || !c.cleaningStatus))
-          : statusFilter === 'Maintenance'
-          ? (c.status === 'Maintenance' || c.cleaningStatus === 'Laundry' || c.cleaningStatus === 'Mending')
-          : c.status === statusFilter
-      );
-      const matchesSize = sizeFilter === 'ALL' || (
-        sizeFilter === 'Freesize'
-          ? (c.availableSizes?.some(s => /free|fs/i.test(s)) || (c.size && /free|fs/i.test(c.size)))
-          : (c.availableSizes?.some(s => s.toUpperCase() === sizeFilter.toUpperCase()) || (c.size && c.size.toUpperCase().includes(sizeFilter.toUpperCase())))
-      );
-      const matchesCleaning = cleaningFilter === 'ALL' || c.cleaningStatus === cleaningFilter;
+      const matchesCategory = categoryFilter === 'ALL' || c.category === categoryFilter;
+      const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
 
-      return matchesSearch && matchesCategory && matchesStatus && matchesSize && matchesCleaning;
+      return matchesSearch && matchesCategory && matchesStatus;
     });
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim();
-      return result.sort((a, b) => matchCamera(b, q).score - matchCamera(a, q).score);
-    }
-
-    return result;
-  }, [cameras, searchQuery, categoryFilter, statusFilter, sizeFilter, cleaningFilter]);
+  }, [cameras, searchQuery, categoryFilter, statusFilter]);
 
   // Calculate dynamic device count for each category
-  // Gợi ý những giá trị đã từng nhập trước đó cho 4 trường chi tiết
-  const detailSuggestions = useMemo(() => {
-    const measurementsSet = new Set<string>();
-    const accessoriesSet = new Set<string>();
-    const typeSet = new Set<string>();
-    const brandSet = new Set<string>();
-
-    // 1. Trích xuất từ toàn bộ danh sách trang phục hiện có trong kho
-    cameras.forEach(cam => {
-      if (cam.measurements?.trim()) measurementsSet.add(cam.measurements.trim());
-      if (cam.includedAccessories?.trim()) {
-        accessoriesSet.add(cam.includedAccessories.trim());
-        cam.includedAccessories.split(/[,+]/).forEach(item => {
-          const t = item.trim();
-          if (t.length > 1) accessoriesSet.add(t);
-        });
-      }
-      if (cam.type?.trim()) {
-        typeSet.add(cam.type.trim());
-        cam.type.split(/[,+]/).forEach(item => {
-          const t = item.trim();
-          if (t.length > 1) typeSet.add(t);
-        });
-      }
-      if (cam.brand?.trim()) brandSet.add(cam.brand.trim());
-    });
-
-    // 2. Lấy thêm từ lịch sử localStorage
-    try {
-      const getLocal = (key: string): string[] => {
-        const val = localStorage.getItem(key);
-        return val ? JSON.parse(val) : [];
-      };
-      getLocal('caos_history_measurements').forEach(x => { if (x?.trim()) measurementsSet.add(x.trim()); });
-      getLocal('caos_history_accessories').forEach(x => { if (x?.trim()) accessoriesSet.add(x.trim()); });
-      getLocal('caos_history_types').forEach(x => { if (x?.trim()) typeSet.add(x.trim()); });
-      getLocal('caos_history_brands').forEach(x => { if (x?.trim()) brandSet.add(x.trim()); });
-    } catch {
-      // ignore
-    }
-
-    return {
-      measurements: Array.from(measurementsSet).filter(Boolean),
-      includedAccessories: Array.from(accessoriesSet).filter(Boolean),
-      type: Array.from(typeSet).filter(Boolean),
-      brand: Array.from(brandSet).filter(Boolean),
-    };
-  }, [cameras]);
-
   const categoryCounts = useMemo(() => {
     return {
       ALL: cameras.length,
-      'Váy': cameras.filter(c => c.category === 'Váy' || c.category === 'Váy cưới' || c.category === 'Đầm').length,
-      'Áo dài': cameras.filter(c => c.category === 'Áo dài').length,
-      'Dạ hội': cameras.filter(c => c.category === 'Dạ hội').length,
-      'Concept': cameras.filter(c => c.category === 'Concept').length,
-      'Phụ kiện': cameras.filter(c => c.category === 'Phụ kiện').length,
-      'Chụp ảnh': cameras.filter(c => c.category === 'Chụp ảnh').length,
-      'Khác': cameras.filter(c => c.category === 'Khác').length,
-    } as Record<string, number>;
+      Body: cameras.filter(c => c.category === 'Body').length,
+      Lens: cameras.filter(c => c.category === 'Lens').length,
+      Combo: cameras.filter(c => c.category === 'Combo').length,
+      Accessory: cameras.filter(c => c.category === 'Accessory').length,
+      Printer: cameras.filter(c => c.category === 'Printer').length,
+    };
   }, [cameras]);
-
-  // Tính tổng doanh thu tích luỹ của từng camera từ contracts
-  const cameraRevenueMap = useMemo(() => {
-    const revMap: Record<string, number> = {};
-    contracts.forEach(contract => {
-      if (contract.status === 'Cancelled') return;
-      contract.items.forEach(item => {
-        const estPrice = (item.dailyRate || 0) * (item.quantity || 1);
-        const discountPct = contract.discountPercent || 0;
-        const discountedEst = Math.round(estPrice * (1 - discountPct / 100));
-        let revenue = discountedEst;
-        if (contract.totalPrice > 0 && contract.paidAmount !== undefined) {
-          revenue = Math.round((discountedEst / contract.totalPrice) * contract.paidAmount);
-        }
-        revMap[item.cameraId] = (revMap[item.cameraId] || 0) + revenue;
-      });
-    });
-    return revMap;
-  }, [contracts]);
-
-  const filteredOutfitGroups = useMemo<OutfitGroupItem[]>(() => {
-    const groupsMap = new Map<string, OutfitGroupItem>();
-    const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Freesize', 'FS'];
-
-    filteredCameras.forEach(cam => {
-      const key = getOutfitGroupKey(cam);
-      if (!groupsMap.has(key)) {
-        const cleanName = cam.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || cam.name;
-        const baseSerial = cam.serialNumber.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim() || cam.serialNumber;
-
-        groupsMap.set(key, {
-          groupKey: key,
-          representativeCam: cam,
-          cleanName,
-          baseSerial,
-          shortName: cam.shortName || '',
-          category: cam.category,
-          gender: cam.gender || 'Nữ',
-          image: cam.image,
-          description: cam.description || '',
-          items: [],
-          totalPurchase: 0,
-          totalRevenue: 0,
-          overallRoiPercent: null,
-          isBreakeven: false,
-          readyCount: 0,
-          laundryCount: 0,
-          mendingCount: 0,
-          rentedCount: 0,
-          maintenanceCount: 0,
-        });
-      }
-
-      groupsMap.get(key)!.items.push(cam);
-    });
-
-    return Array.from(groupsMap.values()).map(group => {
-      // Sort items by size
-      group.items.sort((a, b) => {
-        const sA = (a.size || 'FS').toUpperCase();
-        const sB = (b.size || 'FS').toUpperCase();
-        const iA = SIZE_ORDER.indexOf(sA);
-        const iB = SIZE_ORDER.indexOf(sB);
-        return (iA < 0 ? 99 : iA) - (iB < 0 ? 99 : iB);
-      });
-
-      const first = group.items[0];
-      if (first) {
-        group.image = first.image || group.image;
-        group.gender = first.gender || group.gender;
-      }
-
-      group.readyCount = group.items.filter(c => c.status === 'Available' && (!c.cleaningStatus || c.cleaningStatus === 'Clean')).length;
-      group.laundryCount = group.items.filter(c => c.cleaningStatus === 'Laundry').length;
-      group.mendingCount = group.items.filter(c => c.cleaningStatus === 'Mending').length;
-      group.rentedCount = group.items.filter(c => c.status === 'Rented').length;
-      group.maintenanceCount = group.items.filter(c => c.status === 'Maintenance').length;
-
-      group.totalPurchase = group.items.reduce((sum, c) => sum + (c.purchasePrice || 0), 0);
-      group.totalRevenue = group.items.reduce((sum, c) => sum + (cameraRevenueMap[c.id] || 0), 0);
-      group.overallRoiPercent = group.totalPurchase > 0 ? Math.round((group.totalRevenue / group.totalPurchase) * 100) : null;
-      group.isBreakeven = group.overallRoiPercent !== null && group.overallRoiPercent >= 100;
-
-      return group;
-    });
-  }, [filteredCameras, cameraRevenueMap]);
 
   // Pagination Configuration
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10); // default 10 outfits per page (optimizes 2-col mobile & 5-col desktop)
+  const itemsPerPage = 6; // 6 equipment items per page
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, categoryFilter, statusFilter, sizeFilter, cleaningFilter, viewMode]);
+  }, [searchQuery, categoryFilter, statusFilter]);
 
-  const totalPages = viewMode === 'grouped'
-    ? (Math.ceil(filteredOutfitGroups.length / itemsPerPage) || 1)
-    : (Math.ceil(filteredCameras.length / itemsPerPage) || 1);
-
+  const totalPages = Math.ceil(filteredCameras.length / itemsPerPage) || 1;
   const paginatedCameras = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredCameras.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredCameras, currentPage, itemsPerPage]);
 
-  const paginatedOutfitGroups = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredOutfitGroups.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredOutfitGroups, currentPage, itemsPerPage]);
-
-  const detailGroup = useMemo(() => {
-    if (!detailGroupKey) return null;
-    return filteredOutfitGroups.find(g => g.groupKey === detailGroupKey) || null;
-  }, [detailGroupKey, filteredOutfitGroups]);
-
-  const detailCamera = useMemo(() => {
-    if (!detailCameraId) return null;
-    return cameras.find(c => c.id === detailCameraId) || null;
-  }, [detailCameraId, cameras]);
-
-  const handleMoveGroup = (groupIndex: number, direction: 'left' | 'right') => {
-    const targetIndex = direction === 'left' ? groupIndex - 1 : groupIndex + 1;
-    if (targetIndex < 0 || targetIndex >= filteredOutfitGroups.length) return;
-
-    const currentGroup = filteredOutfitGroups[groupIndex];
-    const targetGroup = filteredOutfitGroups[targetIndex];
-
-    const currentCamIds = currentGroup.items.map(c => c.id);
-    const targetCamIds = targetGroup.items.map(c => c.id);
-
-    const targetFirstIndex = cameras.findIndex(c => targetCamIds.includes(c.id));
-    if (targetFirstIndex === -1) return;
-
-    const newCameras = cameras.filter(c => !currentCamIds.includes(c.id));
-    newCameras.splice(targetFirstIndex, 0, ...currentGroup.items);
-
-    if (onReorderCameras) {
-      onReorderCameras(newCameras);
-    }
-  };
-
-  const handleAddSizeToGroup = (group: OutfitGroupItem) => {
-    const rep = group.representativeCam;
-    const existingSizes = group.items.map(i => (i.size || '').toUpperCase()).filter(Boolean);
-    
-    const candidateSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Freesize'];
-    const nextSize = candidateSizes.find(s => !existingSizes.includes(s.toUpperCase())) || 'XL';
-    
-    const p1 = rep.price1Day ?? rep.dailyRate;
-    const p2_daily = Math.max(0, p1 - 30000);
-    const p4_daily = Math.max(0, p1 - 40000);
-    const p3_daily = p4_daily;
-
+  const handleOpenAddModal = () => {
     setFormState({
-      name: group.cleanName,
-      shortName: group.shortName,
-      category: group.category,
+      name: '',
+      shortName: '',
+      category: 'Body',
       isPrinter: false,
-      purchasePrice: rep.purchasePrice || 500000,
-      dailyRate: rep.dailyRate,
-      salePrice: rep.salePrice || 0,
-      price1Day: p1,
-      price2Days: Math.round((rep.price2Days ?? ((p1 + p2_daily) / 2)) * 2),
-      price3Days: Math.round((rep.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3),
-      price4DaysPlus: rep.price4DaysPlus ?? p4_daily,
-      depositAmount: rep.depositAmount || 1500000,
+      dailyRate: 290000,
+      price6Hours: 200000,
+      price1Day: 290000,
+      price2Days: 550000,
+      price3Days: 800000,
+      price4DaysPlus: 250000,
+      depositAmount: 5000000,
       status: 'Available',
-      serialNumber: `${group.baseSerial}-${nextSize === 'Freesize' ? 'FS' : nextSize}`,
-      description: rep.description || '',
-      image: rep.image || '',
-      size: nextSize,
-      selectedSizes: [nextSize],
-      splitBySize: false,
-      sizeColorMap: { [nextSize]: rep.color || '' },
-      sizeImageMap: {},
-      sizeQtyMap: {},
-      sizeColorVariants: {},
-      color: rep.color || '',
-      gender: (rep.gender as any) || 'Nữ',
-      cleaningStatus: 'Clean',
-      measurements: rep.measurements || '',
-      includedAccessories: rep.includedAccessories || '',
-      brand: rep.brand || '',
-      type: rep.type || '',
+      serialNumber: '',
+      description: '',
+      image: '',
       printPrice1To2: 40000,
       printPrice3To9: 35000,
       printPrice10Plus: 33000,
@@ -568,312 +208,72 @@ export default function EquipmentTracker({
     setShowAddModal(true);
   };
 
-  const handleOpenAddModal = () => {
-    setFormState({
-      name: '',
-      shortName: '',
-      category: 'Váy',
-      isPrinter: false,
-      purchasePrice: 0,
-      dailyRate: 0,
-      price1Day: 0,
-      price2Days: 0,
-      price3Days: 0,
-      price4DaysPlus: 0,
-      depositAmount: 0,
-      status: 'Available',
-      serialNumber: '',
-      description: '',
-      image: '',
-      size: 'M',
-      selectedSizes: ['M'],
-      splitBySize: false,
-      sizeColorMap: {},
-      sizeImageMap: {},
-      sizeQtyMap: {},
-      sizeColorVariants: {},
-      color: '',
-      gender: 'Nữ',
-      cleaningStatus: 'Clean',
-      measurements: '',
-      includedAccessories: '',
-      brand: '',
-      type: '',
-      printPrice1To2: 0,
-      printPrice3To9: 0,
-      printPrice10Plus: 0,
-    });
-    setEditingCamera(null);
-    setShowAddModal(true);
-  };
-
   const handleOpenEditModal = (cam: Camera) => {
     const p1 = cam.price1Day ?? cam.dailyRate;
+    const p6hFallback = Math.round((p1 * 0.7) / 10000) * 10000;
     const p2_daily = Math.max(0, p1 - 30000);
     const p4_daily = Math.max(0, p1 - 40000);
     const p3_daily = p4_daily;
 
-    const rawSizes = cam.availableSizes && cam.availableSizes.length > 0
-      ? cam.availableSizes
-      : (cam.size ? cam.size.split(',').map(s => s.trim()).filter(Boolean) : ['M']);
-
-    const baseModelCode = (cam.shortName || cam.serialNumber || '')
-      .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
-      .trim();
-
     setFormState({
       name: cam.name,
-      shortName: baseModelCode || cam.shortName || cam.serialNumber || '',
+      shortName: cam.shortName,
       category: cam.category,
       isPrinter: cam.category === 'Printer' || Boolean(cam.isPrinter),
-      purchasePrice: cam.purchasePrice ?? (cam.depositAmount ? cam.depositAmount : cam.dailyRate * 5),
       dailyRate: cam.dailyRate,
-      salePrice: cam.salePrice || 0,
+      price6Hours: cam.price6Hours ?? p6hFallback,
       price1Day: p1,
       price2Days: Math.round((cam.price2Days ?? ((p1 + p2_daily) / 2)) * 2),
       price3Days: Math.round((cam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3),
       price4DaysPlus: cam.price4DaysPlus ?? p4_daily,
-      depositAmount: cam.depositAmount ?? (cam.category === 'Printer' ? 1000000 : 1500000),
+      depositAmount: cam.depositAmount ?? (cam.category === 'Printer' ? 1000000 : 5000000),
       status: cam.status,
       serialNumber: cam.serialNumber,
       description: cam.description || '',
       image: cam.image || '',
-      size: cam.size || 'M',
-      selectedSizes: rawSizes.length > 0 ? rawSizes : ['M'],
-      splitBySize: false,
-      sizeColorMap: (rawSizes.length > 0 ? rawSizes : ['M']).reduce((acc, s) => ({ ...acc, [s]: cam.color || '' }), {}),
-      sizeImageMap: {},
-      sizeQtyMap: {},
-      sizeColorVariants: {},
-      color: cam.color || '',
-      gender: (cam.gender as any) || 'Nữ',
-      cleaningStatus: (cam.cleaningStatus as any) || 'Clean',
-      measurements: cam.measurements || '',
-      includedAccessories: cam.includedAccessories || '',
-      brand: cam.brand || '',
-      type: cam.type || '',
       printPrice1To2: cam.printPrice1To2 ?? 40000,
       printPrice3To9: cam.printPrice3To9 ?? 35000,
       printPrice10Plus: cam.printPrice10Plus ?? 33000,
     });
     setEditingCamera(cam);
     setShowAddModal(true);
-    // Snapshot form state to detect unsaved changes
-    setTimeout(() => {
-      initialFormSnapshotRef.current = JSON.stringify({
-        name: cam.name,
-        shortName: (cam.shortName || cam.serialNumber || '').replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim(),
-        purchasePrice: cam.purchasePrice ?? (cam.depositAmount ? cam.depositAmount : cam.dailyRate * 5),
-        dailyRate: cam.dailyRate,
-        salePrice: cam.salePrice || 0,
-        price1Day: cam.price1Day ?? cam.dailyRate,
-        price2Days: Math.round((cam.price2Days ?? ((cam.price1Day ?? cam.dailyRate) + Math.max(0, (cam.price1Day ?? cam.dailyRate) - 30000)) / 2) * 2),
-        price3Days: Math.round((cam.price3Days ?? ((cam.price1Day ?? cam.dailyRate) + Math.max(0, (cam.price1Day ?? cam.dailyRate) - 30000) + Math.max(0, (cam.price1Day ?? cam.dailyRate) - 40000)) / 3) * 3),
-        price4DaysPlus: cam.price4DaysPlus ?? Math.max(0, (cam.price1Day ?? cam.dailyRate) - 40000),
-        depositAmount: cam.depositAmount ?? (cam.category === 'Printer' ? 1000000 : 1500000),
-      });
-    }, 0);
-  };
-
-  const handleDuplicateCamera = (cam: Camera, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    handleOpenEditModal(cam);
-    setEditingCamera(null); // Tạo mới chứ không phải cập nhật
-    setFormState(prev => ({
-      ...prev,
-      name: `${prev.name} (Bản sao)`,
-      shortName: prev.shortName ? `${prev.shortName}-2` : '',
-      serialNumber: prev.serialNumber ? `${prev.serialNumber}-2` : ''
-    }));
-  };
-
-  const handleCycleCleaningStatus = (cam: Camera, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const cycleMap: Record<string, Camera['cleaningStatus']> = {
-      'Clean': 'Laundry',
-      'Laundry': 'Mending',
-      'Mending': 'Clean'
-    };
-    const current = cam.cleaningStatus || 'Clean';
-    const nextCleaning = cycleMap[current] || 'Clean';
-    onUpdateCamera({
-      ...cam,
-      cleaningStatus: nextCleaning
-    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
-    const baseFromSerial = rawSerial.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/[-_.\s]+$/, '');
-    const baseFromShort = (formState.shortName || '').replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/[-_.\s]+$/, '');
-    const effectiveShortName = baseFromShort || baseFromSerial || rawSerial;
-
-    if (!formState.name || !formState.serialNumber) {
+    if (!formState.name || !formState.shortName || !formState.serialNumber) {
       setValidationError('Vui lòng điền đầy đủ các trường thông tin bắt buộc (*)!');
       return;
     }
 
-    // Default image fallback based on category for fashion
-    const categoryDefaultImages: Record<string, string> = {
-      'Áo dài': 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=600',
-      'Concept': 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=80&w=600',
-      'Dạ hội': 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&fit=crop&q=80&w=600',
-      'Chụp ảnh': 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=600',
-      'Phụ kiện': 'https://images.unsplash.com/photo-1535295972055-1c762f4483e5?auto=format&fit=crop&q=80&w=600',
-      'Khác': 'https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&q=80&w=600',
-    };
-    // Lưu lịch sử các giá trị đã nhập để gợi ý lần sau
-    try {
-      const saveHistory = (key: string, val?: string) => {
-        if (!val || !val.trim()) return;
-        const current: string[] = JSON.parse(localStorage.getItem(key) || '[]');
-        const updated = [val.trim(), ...current.filter(item => item !== val.trim())].slice(0, 30);
-        localStorage.setItem(key, JSON.stringify(updated));
-      };
-      saveHistory('caos_history_measurements', formState.measurements);
-      saveHistory('caos_history_accessories', formState.includedAccessories);
-      saveHistory('caos_history_types', formState.type);
-      saveHistory('caos_history_brands', formState.brand);
-    } catch {
-      // ignore
-    }
-
-    const imageRef = formState.image || categoryDefaultImages[formState.category] || 'https://images.unsplash.com/photo-1562157873-818bc0726f68?auto=format&fit=crop&q=80&w=600';
+    const imageRef = formState.image || 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=400';
     
-    const sizesToSave = formState.selectedSizes.length > 0 ? formState.selectedSizes : ['M'];
-    const sizeString = sizesToSave.join(', ');
-
-    // Chia 2 cho giá ngày thứ 2, chia 3 cho ngày thứ 3 để có đơn giá/ngày đúng
+    // Chia 2 cho giá ngày thứ 2, chia 3 cho ngày thứ 3 để có đơn giá/ngày đúng (giữ số thập phân chính xác tuyệt đối thay vì làm tròn)
     const savedFormState = {
       ...formState,
-      salePrice: formState.salePrice > 0 ? formState.salePrice : undefined,
-      shortName: effectiveShortName,
-      size: sizeString,
-      availableSizes: sizesToSave,
       isPrinter: formState.category === 'Printer',
       price2Days: formState.price2Days / 2,
       price3Days: formState.price3Days / 3
     };
 
     if (editingCamera) {
-      if (sizesToSave.length > 1) {
-        // Người dùng chọn nhiều size khi sửa -> Cập nhật chiếc hiện tại với size đầu tiên và tự động tạo thêm sản phẩm mới cho các size còn lại
-        const firstSize = sizesToSave[0];
-        const firstSizeCode = firstSize === 'Freesize' ? 'FS' : firstSize;
-        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
-        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || rawSerial;
-        const cleanName = savedFormState.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || savedFormState.name;
-        const firstColor = (formState.sizeColorMap[firstSize] && formState.sizeColorMap[firstSize].trim()) || savedFormState.color || '';
-        const firstImg = (formState.sizeImageMap[firstSize] && formState.sizeImageMap[firstSize].trim()) || imageRef;
-
-        onUpdateCamera({
-          ...editingCamera,
-          ...savedFormState,
-          name: `${cleanName} (${firstSize === 'Freesize' ? 'Freesize' : `Size ${firstSize}`})`,
-          serialNumber: `${baseSerial}-${firstSizeCode}`,
-          size: firstSize,
-          availableSizes: [firstSize],
-          color: firstColor,
-          image: firstImg
-        });
-
-        // Tạo sản phẩm riêng cho các size còn lại
-        sizesToSave.slice(1).forEach((sz, idx) => {
-          const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-          const sizeColor = (formState.sizeColorMap[sz] && formState.sizeColorMap[sz].trim()) || savedFormState.color || '';
-          const sizeImg = (formState.sizeImageMap[sz] && formState.sizeImageMap[sz].trim()) || imageRef;
-          onAddCamera({
-            ...savedFormState,
-            id: `outfit-${Date.now()}-${idx + 1}`,
-            name: `${cleanName} (${sz === 'Freesize' ? 'Freesize' : `Size ${sz}`})`,
-            serialNumber: `${baseSerial}-${sizeCode}`,
-            size: sz,
-            availableSizes: [sz],
-            color: sizeColor,
-            image: sizeImg
-          });
-        });
-      } else {
-        const singleSize = sizesToSave[0] || 'Freesize';
-        const singleSizeCode = singleSize === 'Freesize' ? 'FS' : singleSize;
-        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
-        const baseSerial = rawSerial.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/[-_.\s]+$/, '') || rawSerial;
-        const cleanName = savedFormState.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || savedFormState.name;
-        const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || '';
-        const sizeImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
-
-        const hasSizeSuffix = /[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i.test(rawSerial);
-        const updatedSerial = hasSizeSuffix ? `${baseSerial}-${singleSizeCode}` : rawSerial;
-
-        onUpdateCamera({
-          ...editingCamera,
-          ...savedFormState,
-          name: `${cleanName} (${singleSize === 'Freesize' ? 'Freesize' : `Size ${singleSize}`})`,
-          serialNumber: updatedSerial,
-          shortName: baseSerial || effectiveShortName,
-          size: singleSize,
-          availableSizes: [singleSize],
-          color: sizeColor,
-          image: sizeImg
-        });
-      }
+      // Edit
+      onUpdateCamera({
+        ...editingCamera,
+        ...savedFormState,
+        image: imageRef
+      });
     } else {
-      // New: Tự động tách thành từng sản phẩm riêng nếu chọn từ 2 size trở lên
-      if (sizesToSave.length > 1) {
-        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
-        const baseSerial = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '') || rawSerial;
-        let globalIdx = 0;
-        sizesToSave.forEach((sz) => {
-          const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-          const sizeSpecificImg = (formState.sizeImageMap[sz] && formState.sizeImageMap[sz].trim()) || imageRef;
-          const qty = formState.sizeQtyMap[sz] || 1;
-          const colorVariants = formState.sizeColorVariants[sz] || [(formState.sizeColorMap[sz] || savedFormState.color || '')];
-          for (let q = 0; q < qty; q++) {
-            const pieceColor = (colorVariants[q] !== undefined ? colorVariants[q] : colorVariants[0]) || savedFormState.color || '';
-            const suffix = qty > 1 ? `${baseSerial}-${sizeCode}-${q + 1}` : `${baseSerial}-${sizeCode}`;
-            const newCam: Camera = {
-              ...savedFormState,
-              id: `outfit-${Date.now()}-${globalIdx}`,
-              name: `${savedFormState.name} (${sz === 'Freesize' ? 'Freesize' : `Size ${sz}`})`,
-              serialNumber: suffix,
-              size: sz,
-              availableSizes: [sz],
-              color: pieceColor,
-              image: sizeSpecificImg
-            };
-            onAddCamera(newCam);
-            globalIdx++;
-          }
-        });
-      } else {
-        // Chỉ chọn 1 size duy nhất (VD: Freesize hoặc Size M)
-        const singleSize = sizesToSave[0] || 'Freesize';
-        const rawSerial = (formState.serialNumber || `SP-${Date.now().toString().slice(-4)}`).trim();
-        const sizeColor = (formState.sizeColorMap[singleSize] && formState.sizeColorMap[singleSize].trim()) || savedFormState.color || '';
-        const sizeSpecificImg = (formState.sizeImageMap[singleSize] && formState.sizeImageMap[singleSize].trim()) || imageRef;
-        const singleQty = formState.sizeQtyMap[singleSize] || 1;
-        const singleColorVariants = formState.sizeColorVariants[singleSize] || [sizeColor];
-        for (let q = 0; q < singleQty; q++) {
-          const pieceColor = (singleColorVariants[q] !== undefined ? singleColorVariants[q] : singleColorVariants[0]) || sizeColor;
-          const suffix = singleQty > 1 ? `${rawSerial}-${q + 1}` : rawSerial;
-          const newCam: Camera = {
-            id: `outfit-${Date.now()}-${q}`,
-            ...savedFormState,
-            serialNumber: suffix,
-            size: singleSize,
-            availableSizes: [singleSize],
-            color: pieceColor,
-            image: sizeSpecificImg
-          };
-          onAddCamera(newCam);
-        }
-      }
+      // New
+      const newCam: Camera = {
+        id: `cam-${Date.now()}`,
+        ...savedFormState,
+        image: imageRef
+      };
+      onAddCamera(newCam);
     }
     setShowAddModal(false);
     setValidationError(null);
-    setShowUnsavedPrompt(false);
-    initialFormSnapshotRef.current = '';
   };
 
   const toggleMaintenance = (cam: Camera) => {
@@ -889,25 +289,30 @@ export default function EquipmentTracker({
     const BOM = '\uFEFF';
     
     // CSV Header
-    const headers = ['Mã Hệ Thống', 'Tên Trang Phục', 'Tên Viết Tắt', 'Danh Mục', 'Kích Cỡ', 'Màu Sắc', 'Dành Cho', 'Mã Tag (S/N)', 'Giá Thuê/Ngày (VND)', 'Trạng Thái Thuê', 'Tình Trạng Vệ Sinh', 'Mô Tả'];
+    const headers = ['Mã Hệ Thống', 'Tên Thiết Bị', 'Tên Viết Tắt', 'Danh Mục', 'Số Serial', 'Giá Thuê 1 Tiếng/Ngày (VND)', 'Trạng Thái', 'Mô Tả'];
     
-    // Rows using filteredCameras
+    // Rows using filteredCameras so it matches searched/filtered list view context perfectly!
     const rows = filteredCameras.map(cam => {
-      let statusVN = cam.status === 'Available' ? 'Sẵn sàng' : cam.status === 'Rented' ? 'Đang thuê' : 'Đang bảo dưỡng/giặt';
-      let cleaningVN = cam.cleaningStatus === 'Clean' ? 'Đã giặt sạch' : cam.cleaningStatus === 'Laundry' ? 'Đang giặt hấp' : 'Đang sửa may';
+      let categoryVN = cam.category;
+      if (cam.category === 'Body') categoryVN = 'Thân máy';
+      else if (cam.category === 'Lens') categoryVN = 'Ống kính';
+      else if (cam.category === 'Combo') categoryVN = 'Bộ máy (Combo)';
+      else if (cam.category === 'Accessory') categoryVN = 'Phụ kiện';
+      else if (cam.category === 'Printer') categoryVN = 'Máy in ảnh';
+
+      let statusVN = cam.status;
+      if (cam.status === 'Available') statusVN = 'Sẵn sàng';
+      else if (cam.status === 'Rented') statusVN = 'Đang cho thuê';
+      else if (cam.status === 'Maintenance') statusVN = 'Đang bảo trì';
 
       return [
         cam.id,
         `"${cam.name.replace(/"/g, '""')}"`,
         `"${cam.shortName.replace(/"/g, '""')}"`,
-        cam.category,
-        cam.size || 'Freesize',
-        `"${(cam.color || '').replace(/"/g, '""')}"`,
-        cam.gender || 'Nữ',
+        categoryVN,
         `"${cam.serialNumber.replace(/"/g, '""')}"`,
         cam.dailyRate,
         statusVN,
-        cleaningVN,
         `"${(cam.description || '').replace(/"/g, '""')}"`
       ];
     });
@@ -918,7 +323,7 @@ export default function EquipmentTracker({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `danh_sach_tu_do_trang_phuc_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute('download', `bao_cao_kho_thiet_bi_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -926,221 +331,102 @@ export default function EquipmentTracker({
 
   return (
     <div className="space-y-6">
+      {/* Biểu đồ tần suất thuê thiết bị trong tháng gần nhất bằng D3 */}
+      <RentalFrequencyChart
+        cameras={cameras}
+        contracts={contracts}
+        systemDate={systemDate}
+      />
+
       {/* Search and filter tools */}
-      <div className="bg-white border border-gray-150 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
-          <div className="space-y-0.5">
-            <h2 className="text-[15px] sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
-              <DressIcon className="text-orange-600 w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" /> Quản Lý Kho Trang Phục & Tủ Đồ Cho Thuê
+      <div className="bg-white border border-gray-150 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 sm:space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
+              <CameraIcon className="text-orange-600 w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" /> Quản Lý Đội Thiết Bị (Kho Máy)
             </h2>
-            <p className="text-[11.5px] sm:text-xs text-gray-500 leading-normal">
-              Theo dõi tình trạng sẵn sàng của áo dài, cổ phục, concept chụp ảnh, đầm dạ hội và phụ kiện cho thuê, kích cỡ và quy trình giặt hấp bảo dưỡng.
+            <p className="text-xs text-gray-500 leading-normal">
+              Kiểm tra theo dõi tình trạng thiết bị máy ảnh, ống kính và bảo trì định kỳ tránh hư hại.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0">
-            {/* View Mode Toggle: Gộp theo mẫu vs Tách từng chiếc */}
-            <div className="inline-flex items-center p-0.5 bg-gray-100 rounded-lg sm:rounded-xl border border-gray-250 shadow-3xs">
-              <button
-                type="button"
-                onClick={() => handleSetViewMode('grouped')}
-                className={`px-2.5 py-1.5 rounded-md sm:rounded-lg text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
-                  viewMode === 'grouped'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-                }`}
-                title="Gộp các trang phục cùng mẫu / cùng mã thành 1 thẻ gọn gàng"
-              >
-                <Layers className="w-3.5 h-3.5 shrink-0" />
-                <span>Gộp mẫu ({filteredOutfitGroups.length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetViewMode('individual')}
-                className={`px-2.5 py-1.5 rounded-md sm:rounded-lg text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
-                  viewMode === 'individual'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/60'
-                }`}
-                title="Hiển thị tách rời từng chiếc / từng size riêng biệt"
-              >
-                <span>Tách lẻ ({filteredCameras.length})</span>
-              </button>
-            </div>
-
-            {/* Mobile Layout Switcher: 1 Cột (Chữ to) vs 2 Cột (Gọn) */}
-            <div className="inline-flex sm:hidden items-center p-0.5 bg-gray-100 rounded-lg border border-gray-250 shadow-3xs">
-              <button
-                type="button"
-                onClick={() => handleSetMobileLayout('1-col')}
-                className={`px-2 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                  mobileLayout === '1-col'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-                title="Chế độ 1 cột: Chữ to rõ, thông tin thoáng đãng, dễ đọc nhất"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>1 Cột To</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetMobileLayout('2-col')}
-                className={`px-2 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                  mobileLayout === '2-col'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-                title="Chế độ 2 cột: Xem lướt nhiều mẫu"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>2 Cột</span>
-              </button>
-            </div>
-
+          <div className={`grid ${currentUserRole === 'admin' ? 'grid-cols-2' : 'grid-cols-1'} sm:flex sm:flex-wrap gap-2 w-full sm:w-auto`}>
             <button
               onClick={handleExportCSV}
-              className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"
+              className="bg-slate-50 border border-gray-200 text-gray-700 font-extrabold sm:font-semibold px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-sm flex items-center justify-center gap-1.5 hover:bg-slate-100 hover:text-gray-900 transition-all cursor-pointer shadow-4xs"
               title="Xuất định dạng CSV tải về"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> Xuất CSV
+              <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> Xuất bản CSV
             </button>
             {currentUserRole === 'admin' && (
               <button
                 onClick={handleOpenAddModal}
-                className="bg-orange-600 text-white font-bold px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-2xs"
+                className="bg-orange-600 text-white font-extrabold sm:font-medium px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-sm flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-2xs"
               >
-                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Thêm trang phục
+                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Thêm thiết bị
               </button>
             )}
           </div>
         </div>
 
-        {/* Search & Filters: 1 row on Desktop (lg:grid-cols-4), 2 cols on Mobile to prevent text truncation */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
-          {/* Search Bar */}
-          <div className="relative col-span-2 sm:col-span-2 lg:col-span-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 sm:top-3 h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Tìm tên trang phục, tag (VC-01), size, màu..."
+              placeholder="Tìm theo tên máy, số serial, viết tắt..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-7 py-1.5 sm:py-2 text-[11px] sm:text-xs font-normal border border-gray-250 rounded-lg sm:rounded-xl bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80 shadow-3xs"
+              className="pl-8.5 pr-4 py-1.5 sm:py-2.5 text-xs sm:text-sm w-full border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80"
             />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer"
-                title="Xóa tìm kiếm"
-              >
-                ✕
-              </button>
-            )}
           </div>
 
-          {/* Category Filter */}
-          <div className="relative col-span-2 sm:col-span-1 lg:col-span-1">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
-              <Filter className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-400 shrink-0" />
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full pl-7.5 pr-6 py-2 text-xs sm:text-sm font-medium border border-gray-250 rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
-              title="Lọc theo phân loại trang phục"
+              className="text-sm w-full border border-gray-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              <option value="ALL">Tất cả phân loại ({categoryCounts.ALL})</option>
-              <option value="Váy">Váy / Đầm ({categoryCounts['Váy'] || 0})</option>
-              <option value="Áo dài">Áo dài ({categoryCounts['Áo dài'] || 0})</option>
-              <option value="Dạ hội">Đầm dạ hội ({categoryCounts['Dạ hội'] || 0})</option>
-              <option value="Concept">Cổ phục & Concept ({categoryCounts['Concept'] || 0})</option>
-              <option value="Phụ kiện">Phụ kiện ({categoryCounts['Phụ kiện'] || 0})</option>
-              <option value="Chụp ảnh">Chụp ảnh & Cosplay ({categoryCounts['Chụp ảnh'] || 0})</option>
-              <option value="Khác">Khác ({categoryCounts['Khác'] || 0})</option>
+              <option value="ALL">Tất cả danh mục</option>
+              <option value="Body">Thân máy (Body)</option>
+              <option value="Lens">Ống kính (Lens)</option>
+              <option value="Combo">Combo Bộ máy</option>
+              <option value="Accessory">Phụ kiện kèm theo</option>
+              <option value="Printer">Máy in ảnh (Printer)</option>
             </select>
-            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
-              ▼
-            </div>
           </div>
 
-          {/* Size Filter */}
-          <div className="relative col-span-1 sm:col-span-1 lg:col-span-1">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-amber-600">
-              <Sparkles className="w-3.5 h-3.5" />
-            </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-400 shrink-0" />
             <select
-              value={sizeFilter}
-              onChange={e => setSizeFilter(e.target.value)}
-              className="w-full pl-7.5 pr-6 py-2 text-xs sm:text-sm font-medium border border-gray-250 rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
-              title="Lọc theo kích cỡ trang phục"
-            >
-              <option value="ALL">Tất cả kích cỡ</option>
-              <option value="XS">Size XS</option>
-              <option value="S">Size S</option>
-              <option value="M">Size M</option>
-              <option value="L">Size L</option>
-              <option value="XL">Size XL</option>
-              <option value="XXL">Size XXL</option>
-              <option value="Freesize">Freesize</option>
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
-              ▼
-            </div>
-          </div>
-
-          {/* Status Filter */}
-          <div className="relative col-span-1 sm:col-span-1 lg:col-span-1">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-blue-600">
-              <Clock className="w-3.5 h-3.5" />
-            </div>
-            <select
-              value={cleaningFilter !== 'ALL' ? `CLEANING_${cleaningFilter}` : statusFilter}
-              onChange={e => {
-                const val = e.target.value;
-                if (val.startsWith('CLEANING_')) {
-                  const cStatus = val.replace('CLEANING_', '');
-                  setCleaningFilter(cStatus);
-                  setStatusFilter('ALL');
-                } else {
-                  setCleaningFilter('ALL');
-                  setStatusFilter(val);
-                }
-              }}
-              className="w-full pl-7.5 pr-6 py-2 text-xs sm:text-sm font-medium border border-gray-250 rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
-              title="Lọc theo trạng thái"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="text-sm w-full border border-gray-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="ALL">Tất cả trạng thái</option>
-              <option value="Available">✓ Sẵn sàng</option>
-              <option value="Rented">⏳ Đang thuê</option>
-              <option value="CLEANING_Laundry">🧺 Đang giặt</option>
-              <option value="CLEANING_Mending">🪡 Đang sửa</option>
-              <option value="Maintenance">🔧 Bảo dưỡng / Khác</option>
+              <option value="Available">Sẵn sàng (Available)</option>
+              <option value="Rented">Đang cho thuê (Rented)</option>
+              <option value="Maintenance">Đang bảo trì (Maintenance)</option>
             </select>
-            <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-gray-400 text-[10px] sm:text-xs">
-              ▼
-            </div>
           </div>
         </div>
 
         {/* Dynamic Category Pill Filters with mobile scroll */}
         <div className="pt-3 border-t border-gray-100/80">
           <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider mb-2 select-none sm:hidden">
-            Lọc theo loại trang phục:
+            Lọc theo loại thiết bị:
           </div>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none sm:flex-wrap">
             <span className="hidden sm:inline text-[11px] font-bold text-gray-400 uppercase tracking-wider mr-2 select-none shrink-0">
-              Phân loại:
+              Lọc Đội Thiết Bị:
             </span>
             {[
-              { id: 'ALL', name: 'Tất cả', fullName: 'Tất cả trang phục', count: categoryCounts.ALL, color: 'bg-orange-600 border-orange-600 text-white' },
-              { id: 'Váy', name: 'Váy', fullName: 'Váy thời trang & Váy cưới', count: categoryCounts['Váy'] || 0, color: 'bg-rose-600 border-rose-600 text-white' },
-              { id: 'Áo dài', name: 'Áo dài', fullName: 'Áo dài truyền thống & Cách tân', count: categoryCounts['Áo dài'] || 0, color: 'bg-pink-600 border-pink-600 text-white' },
-              { id: 'Dạ hội', name: 'Dạ hội', fullName: 'Đầm dạ hội tiệc tối', count: categoryCounts['Dạ hội'] || 0, color: 'bg-amber-600 border-amber-600 text-white' },
-              { id: 'Concept', name: 'Concept', fullName: 'Cổ phục & Concept chụp ảnh', count: categoryCounts['Concept'] || 0, color: 'bg-purple-600 border-purple-600 text-white' },
-              { id: 'Phụ kiện', name: 'Phụ kiện', fullName: 'Phụ kiện đi kèm', count: categoryCounts['Phụ kiện'] || 0, color: 'bg-emerald-600 border-emerald-600 text-white' },
-              { id: 'Chụp ảnh', name: 'Chụp ảnh', fullName: 'Trang phục chụp ảnh & Cosplay', count: categoryCounts['Chụp ảnh'] || 0, color: 'bg-cyan-600 border-cyan-600 text-white' },
-              { id: 'Khác', name: 'Khác', fullName: 'Trang phục khác', count: categoryCounts['Khác'] || 0, color: 'bg-slate-600 border-slate-600 text-white' },
+              { id: 'ALL', name: 'Tất cả', fullName: 'Tất cả thiết bị', count: categoryCounts.ALL, color: 'bg-orange-600 border-orange-600 text-white' },
+              { id: 'Body', name: 'Máy ảnh', fullName: 'Máy ảnh / Thân máy', count: categoryCounts.Body, color: 'bg-blue-600 border-blue-600 text-white' },
+              { id: 'Lens', name: 'Ống kính', fullName: 'Ống kính (Lens)', count: categoryCounts.Lens, color: 'bg-purple-600 border-purple-600 text-white' },
+              { id: 'Combo', name: 'Combo', fullName: 'Bộ máy (Combo)', count: categoryCounts.Combo, color: 'bg-indigo-600 border-orange-500 text-white' },
+              { id: 'Accessory', name: 'Phụ kiện', fullName: 'Phụ kiện máy ảnh', count: categoryCounts.Accessory, color: 'bg-emerald-600 border-emerald-600 text-white' },
+              { id: 'Printer', name: 'Máy in', fullName: 'Máy in ảnh', count: categoryCounts.Printer, color: 'bg-rose-600 border-rose-600 text-white' },
             ].map(cat => {
               const isSelected = categoryFilter === cat.id;
               return (
@@ -1168,536 +454,354 @@ export default function EquipmentTracker({
         </div>
       </div>
 
-      {/* Equipment Grid Layout: dynamic 1-col or 2-cols on mobile, 3 cols on tablet, 4-5 cols on desktop */}
-      <div className={`grid ${mobileLayout === '1-col' ? 'grid-cols-1' : 'grid-cols-2'} sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4`}>
-        {viewMode === 'grouped' ? (
-          paginatedOutfitGroups.map((group, groupIndex) => {
-            const activeCam = group.items.find(c => c.id === selectedGroupSizes[group.groupKey]) || group.items[0];
-            const isFirst = groupIndex === 0;
-            const isLast = groupIndex === filteredOutfitGroups.length - 1;
-            const purchase = group.totalPurchase;
-            const revenue = group.totalRevenue;
-            const roiPercent = group.overallRoiPercent;
-            const isBreakeven = group.isBreakeven;
-            const remaining = purchase > revenue ? purchase - revenue : 0;
-            const dailyR = activeCam.dailyRate > 0 ? activeCam.dailyRate : (group.items[0]?.dailyRate || 100000);
-            const estRentalsLeft = remaining > 0 && dailyR > 0 ? Math.ceil(remaining / dailyR) : 0;
+      {/* Equipment Grid Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {paginatedCameras.map(cam => {
+          const globalIndex = cameras.findIndex(c => c.id === cam.id);
+          const isFirst = globalIndex === 0;
+          const isLast = globalIndex === cameras.length - 1;
+          const isDraggingThis = draggedCamId === cam.id;
+          const isDragTarget = dragOverCamId === cam.id && !isDraggingThis;
 
-            const isDraggingThis = draggedCamId === activeCam.id;
-            const isDragTarget = dragOverCamId === activeCam.id && !isDraggingThis;
-
-            return (
-              <div 
-                key={group.groupKey}
-                onDragOver={(e) => handleDragOver(e, activeCam.id)}
-                onDrop={(e) => handleDrop(e, activeCam.id)}
-                onClick={() => setDetailGroupKey(group.groupKey)}
-                className={`bg-white border rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative cursor-pointer group select-none ${
-                  isDraggingThis ? 'opacity-35 border-dashed border-orange-500 scale-[0.98]' :
-                  isDragTarget ? 'border-orange-500 ring-2 ring-orange-400/60 scale-[1.01] shadow-lg' :
-                  'border-gray-200/90 hover:border-orange-400'
-                }`}
-              >
-                <div>
-                  {/* Product Image strictly 4:5 Aspect Ratio (Dáng dọc thời trang 4:5) */}
-                  <div className="w-full aspect-[4/5] overflow-hidden relative bg-gray-100">
-                    <img
-                      src={activeCam.image || group.image}
-                      alt={group.cleanName}
-                      className="w-full h-full object-cover object-top transform group-hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    {/* Top-left: Category & ShortName & Sizes count badge */}
-                    <div className="absolute top-2 left-2 flex items-center gap-1.5 max-w-[90%] flex-wrap z-10 pointer-events-none">
-                      {currentUserRole === 'admin' && (
-                        <div
-                          draggable={true}
-                          onDragStart={(e) => {
-                            e.stopPropagation();
-                            handleDragStart(e, activeCam.id);
-                          }}
-                          onDragEnd={handleDragEnd}
-                          onClick={(e) => e.stopPropagation()}
-                          className="bg-black/60 hover:bg-orange-600 pointer-events-auto backdrop-blur-xs text-white p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
-                          title="Kéo & thả để đổi vị trí thứ tự mẫu áo"
-                        >
-                          <GripVertical className="w-3.5 h-3.5" />
-                        </div>
-                      )}
-                      <span className="bg-black/75 backdrop-blur-xs text-white text-[10px] sm:text-[11px] uppercase font-bold px-2 py-0.5 rounded-md tracking-wide truncate max-w-[120px] shadow-xs">
-                        {group.category === 'Áo dài' ? '🌸 Áo Dài' :
-                         group.category === 'Concept' ? '👘 Concept' :
-                         group.category === 'Dạ hội' ? '✨ Dạ Hội' :
-                         group.category === 'Chụp ảnh' ? '📸 Chụp Ảnh' :
-                         group.category === 'Phụ kiện' ? '🎀 Phụ Kiện' :
-                         group.category === 'Khác' ? '👗 Khác' :
-                         group.category === 'Printer' ? '🖨️ In ảnh' : group.category}
-                      </span>
-                      {group.shortName && (
-                        <span className="bg-orange-600 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md truncate max-w-[90px] shadow-xs">
-                          {group.shortName}
-                        </span>
-                      )}
-                      <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md shadow-xs">
-                        {group.items.length} size
-                      </span>
-                    </div>
-                  
-                    {/* Bottom: Status Overlay Badge */}
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-end z-10 pointer-events-none">
-                      {(() => {
-                        if (group.readyCount === group.items.length) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
-                              ✓ Sẵn sàng ({group.items.length}/{group.items.length})
-                            </span>
-                          );
-                        }
-                        if (group.readyCount > 0) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
-                              ✓ Còn {group.readyCount}/{group.items.length}
-                            </span>
-                          );
-                        }
-                        if (group.laundryCount > 0) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-blue-700/95 text-white backdrop-blur-xs">
-                              🧺 Đang giặt ({group.laundryCount})
-                            </span>
-                          );
-                        }
-                        if (group.mendingCount > 0) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-amber-700/95 text-white backdrop-blur-xs">
-                              🪡 Đang sửa ({group.mendingCount})
-                            </span>
-                          );
-                        }
-                        return (
-                          <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-purple-700/95 text-white backdrop-blur-xs">
-                            ⏳ Đang kín lịch
-                          </span>
-                        );
-                      })()}
-                    </div>
+          return (
+            <div 
+              key={cam.id}
+              onDragOver={(e) => handleDragOver(e, cam.id)}
+              onDrop={(e) => handleDrop(e, cam.id)}
+              className={`bg-white border rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative ${
+                isDraggingThis ? 'opacity-35 border-dashed border-orange-500 scale-[0.98]' :
+                isDragTarget ? 'border-orange-500 ring-2 ring-orange-400/60 scale-[1.01] shadow-lg' :
+                'border-gray-150/65'
+              }`}
+            >
+              <div>
+                {/* Product Image and tags */}
+                <div className="h-36 sm:h-44 md:h-48 overflow-hidden relative bg-gray-100">
+                  <img
+                    src={cam.image}
+                    alt={cam.name}
+                    className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-2.5 left-2.5 flex flex-wrap items-center gap-1">
+                    {currentUserRole === 'admin' && (
+                      <div
+                        draggable={true}
+                        onDragStart={(e) => handleDragStart(e, cam.id)}
+                        onDragEnd={handleDragEnd}
+                        className="bg-black/60 hover:bg-orange-600 backdrop-blur-xs text-white text-[10px] font-bold p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm"
+                        title="Kéo & thả để đổi vị trí thứ tự thiết bị"
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                    <span className="bg-black/60 backdrop-blur-xs text-white text-[9px] sm:text-[10px] uppercase font-bold px-2 py-0.5 rounded-full tracking-wider">
+                      {cam.category === 'Body' ? 'Thân máy' :
+                       cam.category === 'Lens' ? 'Ống kính' :
+                       cam.category === 'Combo' ? 'Bộ Gear' :
+                       cam.category === 'Printer' ? 'Máy in ảnh' : 'Phụ kiện'}
+                    </span>
+                    <span className="bg-orange-600 text-white text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {cam.shortName}
+                    </span>
                   </div>
+                
+                {/* Status Overlay Bubble */}
+                <div className="absolute top-2.5 right-2.5 text-xs">
+                  <span className={`inline-block font-bold text-[10px] sm:text-[11px] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full shadow-sm ${
+                    cam.status === 'Available' ? 'bg-emerald-500 text-white' :
+                    cam.status === 'Rented' ? 'bg-blue-600 text-white' :
+                    'bg-amber-500 text-white'
+                  }`}>
+                    {cam.status === 'Available' ? 'Có sẵn' :
+                     cam.status === 'Rented' ? 'Đang thuê' : 'Bảo trì'}
+                  </span>
+                </div>
+              </div>
 
-                  {/* Product text details - Siêu gọn, không bao giờ bị rớt dòng */}
-                  <div className="p-2.5 sm:p-3 space-y-1.5">
-                    <div>
-                      <h3 className="font-extrabold text-gray-900 text-xs sm:text-sm group-hover:text-orange-600 transition-colors line-clamp-1" title={group.cleanName}>
-                        {group.cleanName}
-                      </h3>
-                      <div className="text-gray-400 font-mono text-[10.5px] sm:text-xs mt-0.5 flex justify-between items-center">
-                        <span className="truncate">Mã: <b className="text-gray-700">{group.baseSerial}</b></span>
-                        {group.gender && (
-                          <span className={`text-[9.5px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ml-1 ${group.gender === 'Nữ' ? 'bg-pink-50 text-pink-700 border border-pink-100' : group.gender === 'Nam' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-gray-100 text-gray-600'}`}>
-                            {group.gender}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Price row - 1 dòng duy nhất, to rõ */}
-                    <div className="pt-0.5 flex items-baseline justify-between gap-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
-                          {(activeCam.price1Day ?? activeCam.dailyRate).toLocaleString()}đ
-                        </span>
-                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">/ngày</span>
-                      </div>
-                      {roiPercent !== null && (
-                        <span className={`text-[9.5px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
-                          isBreakeven ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-50 text-amber-900 border border-amber-200'
-                        }`}>
-                          {isBreakeven ? '✓ Hòa vốn' : `${roiPercent}% vốn`}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Quick Size & Color summary */}
-                    <div className="flex items-center gap-1 flex-wrap text-[10px] sm:text-[11px] pt-0.5">
-                      <span className="font-bold bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
-                        {group.items.length > 1
-                          ? `Size: ${group.items.map(i => i.size || 'FS').join(', ')}`
-                          : `Size ${activeCam.size || 'FS'}`}
-                      </span>
-                      {activeCam.color && (
-                        <span className="text-gray-500 bg-gray-50 border border-gray-200/60 px-1.5 py-0.5 rounded truncate max-w-[90px]">
-                          🎨 {activeCam.color}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Touch Cue */}
-                    <div className="pt-1 mt-1 border-t border-gray-100 flex items-center justify-between text-[11px] font-bold text-orange-600 group-hover:text-orange-700">
-                      <span>Chi tiết & bảng giá</span>
-                      <ChevronRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
-                    </div>
+              {/* Product text details */}
+              <div className="p-4 sm:p-5 space-y-3.5">
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm sm:text-base hover:text-orange-600 transition-colors line-clamp-1">{cam.name}</h3>
+                  <div className="text-gray-400 font-mono text-[11px] sm:text-xs mt-0.5 flex justify-between">
+                    <span>S/N: {cam.serialNumber}</span>
                   </div>
                 </div>
 
-                {/* Footer Admin Bar: Reorder & Quick Tools */}
-                {currentUserRole === 'admin' ? (
-                  <div 
-                    onClick={e => e.stopPropagation()} 
-                    className="px-2 py-1.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1 text-xs"
-                  >
-                    <div className="flex items-center gap-0.5 bg-white border border-gray-250 rounded-lg p-0.5 shadow-3xs shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleMoveGroup(groupIndex, 'left')}
-                        disabled={isFirst}
-                        className="p-1 text-gray-500 hover:text-orange-600 disabled:opacity-20 cursor-pointer rounded"
-                        title="Đẩy lên trước"
-                      >
-                        <ArrowLeft className="w-3 h-3" />
-                      </button>
-                      <span className="text-[9.5px] font-mono font-bold text-gray-600 px-0.5">#{groupIndex + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveGroup(groupIndex, 'right')}
-                        disabled={isLast}
-                        className="p-1 text-gray-500 hover:text-orange-600 disabled:opacity-20 cursor-pointer rounded"
-                        title="Đẩy về sau"
-                      >
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
+                <p className="text-gray-500 text-[11px] sm:text-xs line-clamp-2 h-7 sm:h-8">
+                  {cam.description || 'Chưa cung cấp mô tả chi tiết cho sản phẩm.'}
+                </p>
+
+                {/* Dynamic Tiered Rates info */}
+                {/* Desktop Version: Always visible */}
+                {cam.category === 'Printer' ? (
+                  <div className="hidden md:block border-t border-gray-100 pt-3 space-y-1.5 bg-rose-50/40 p-3 rounded-xl border border-rose-200/70">
+                    <div className="flex justify-between items-center text-[10px] text-gray-500 font-extrabold uppercase tracking-wider pb-0.5 border-b border-rose-200/50">
+                      <span>BẢNG GIÁ IN ẢNH</span>
+                      <span>ĐƠN GIÁ / TẤM</span>
                     </div>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(activeCam)}
-                        className="p-1 sm:p-1.5 bg-white border border-gray-300 hover:bg-orange-50 hover:text-orange-600 rounded-lg transition-colors cursor-pointer shadow-3xs"
-                        title="Sửa thông tin"
-                      >
-                        <Edit2 className="w-3 h-3 text-gray-700" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => handleDuplicateCamera(activeCam, e)}
-                        className="p-1 sm:p-1.5 bg-white border border-gray-300 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer shadow-3xs"
-                        title="Nhân bản (Sao chép mẫu này tạo đồ mới nhanh)"
-                      >
-                        <Copy className="w-3 h-3 text-gray-700 hover:text-indigo-600" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (activeCam.cleaningStatus === 'Laundry' || activeCam.cleaningStatus === 'Mending') {
-                            onUpdateCamera({ ...activeCam, cleaningStatus: 'Clean' });
-                          } else {
-                            onUpdateCamera({ ...activeCam, cleaningStatus: 'Laundry' });
-                          }
-                        }}
-                        className={`text-[9.5px] sm:text-[10px] px-1.5 py-1 font-bold rounded-lg border transition-colors cursor-pointer shadow-3xs ${
-                          activeCam.cleaningStatus === 'Laundry' ? 'bg-blue-50 text-blue-800 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
-                        }`}
-                        title={activeCam.cleaningStatus === 'Laundry' ? 'Đã giặt xong' : 'Gửi đi giặt'}
-                      >
-                        {activeCam.cleaningStatus === 'Laundry' ? '✨Xong' : '🧺Giặt'}
-                      </button>
+                    <div className="space-y-1.5 pt-1 text-[11px] font-semibold">
+                      <div className="flex justify-between items-center bg-white px-2.5 py-1.5 rounded-lg border border-rose-200 shadow-3xs">
+                        <span className="text-gray-700 font-bold">1 - 2 tấm:</span>
+                        <span className="font-mono text-rose-700 font-bold">{(cam.printPrice1To2 ?? 40000).toLocaleString()}đ/tấm</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-white px-2.5 py-1.5 rounded-lg border border-rose-200 shadow-3xs">
+                        <span className="text-gray-700 font-bold">3 - 9 tấm:</span>
+                        <span className="font-mono text-rose-700 font-bold">{(cam.printPrice3To9 ?? 35000).toLocaleString()}đ/tấm</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-rose-100/80 px-2.5 py-1.5 rounded-lg border border-rose-300 shadow-3xs">
+                        <span className="text-rose-950 font-black">Từ 10 tấm trở lên:</span>
+                        <span className="font-mono text-rose-700 font-black">{(cam.printPrice10Plus ?? 33000).toLocaleString()}đ/tấm</span>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="px-2 py-1 bg-gray-50 border-t border-gray-200 text-right">
-                    <span className="text-[10px] text-gray-400 font-semibold">Chạm để xem chi tiết</span>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        ) : (
-          paginatedCameras.map(cam => {
-            const globalIndex = cameras.findIndex(c => c.id === cam.id);
-            const isFirst = globalIndex === 0;
-            const isLast = globalIndex === cameras.length - 1;
-            const isDraggingThis = draggedCamId === cam.id;
-            const isDragTarget = dragOverCamId === cam.id && !isDraggingThis;
-
-            const purchase = cam.purchasePrice || 0;
-            const revenue = cameraRevenueMap[cam.id] || 0;
-            const roiPercent = purchase > 0 ? Math.round((revenue / purchase) * 100) : null;
-            const isBreakeven = roiPercent !== null && roiPercent >= 100;
-
-            const rawSizes = (cam.availableSizes && cam.availableSizes.length > 0)
-              ? cam.availableSizes
-              : (cam.size ? cam.size.split(',').map(s => s.trim()).filter(Boolean) : []);
-
-            return (
-              <div 
-                key={cam.id}
-                onDragOver={(e) => handleDragOver(e, cam.id)}
-                onDrop={(e) => handleDrop(e, cam.id)}
-                onClick={() => setDetailCameraId(cam.id)}
-                className={`bg-white border rounded-2xl overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative cursor-pointer group select-none ${
-                  isDraggingThis ? 'opacity-35 border-dashed border-orange-500 scale-[0.98]' :
-                  isDragTarget ? 'border-orange-500 ring-2 ring-orange-400/60 scale-[1.01] shadow-lg' :
-                  'border-gray-200/90 hover:border-orange-400'
-                }`}
-              >
-                <div>
-                  {/* Product Image strictly 4:5 Aspect Ratio (Dáng dọc thời trang 4:5) */}
-                  <div className="w-full aspect-[4/5] overflow-hidden relative bg-gray-100">
-                    <img
-                      src={cam.image}
-                      alt={cam.name}
-                      className="w-full h-full object-cover object-top transform hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    {/* Top-left: Category & ShortName & Drag Handle */}
-                    <div className="absolute top-2 left-2 flex items-center gap-1.5 max-w-[90%] flex-wrap z-10">
-                      {currentUserRole === 'admin' && (
-                        <div
-                          draggable={true}
-                          onDragStart={(e) => handleDragStart(e, cam.id)}
-                          onDragEnd={handleDragEnd}
-                          className="bg-black/60 hover:bg-orange-600 backdrop-blur-xs text-white p-1 rounded-full cursor-grab active:cursor-grabbing inline-flex items-center justify-center transition-colors shadow-sm shrink-0"
-                          title="Kéo & thả để đổi vị trí thứ tự trang phục"
-                        >
-                          <GripVertical className="w-3.5 h-3.5" />
-                        </div>
-                      )}
-                      <span className="bg-black/75 backdrop-blur-xs text-white text-[10px] sm:text-[11px] uppercase font-bold px-2 py-0.5 rounded-md tracking-wide truncate max-w-[120px] shadow-xs">
-                        {cam.category === 'Áo dài' ? '🌸 Áo Dài' :
-                         cam.category === 'Concept' ? '👘 Concept' :
-                         cam.category === 'Dạ hội' ? '✨ Dạ Hội' :
-                         cam.category === 'Chụp ảnh' ? '📸 Chụp Ảnh' :
-                         cam.category === 'Phụ kiện' ? '🎀 Phụ Kiện' :
-                         cam.category === 'Khác' ? '👗 Khác' :
-                         cam.category === 'Printer' ? '🖨️ In ảnh' : cam.category}
-                      </span>
-                      {cam.shortName && (
-                        <span className="bg-orange-600 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md truncate max-w-[90px] shadow-xs">
-                          {cam.shortName}
-                        </span>
-                      )}
+                  <div className="hidden md:block border-t border-gray-100 pt-3 space-y-1.5 bg-orange-50/30 p-3 rounded-xl border border-orange-200/70">
+                    <div className="flex justify-between items-center text-[10px] text-gray-500 font-extrabold uppercase tracking-wider pb-0.5 border-b border-orange-200/50">
+                      <span>Thời hạn</span>
+                      <span>Đơn giá/ngày (Hoặc buổi)</span>
                     </div>
-                  
-                    {/* Bottom: Status Overlay Badge */}
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-end z-10 pointer-events-none">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1 text-[11px] font-semibold">
                       {(() => {
-                        const isLaundry = cam.cleaningStatus === 'Laundry';
-                        const isMending = cam.cleaningStatus === 'Mending';
-                        const isRented = cam.status === 'Rented';
-                        const isMaintenance = cam.status === 'Maintenance';
+                        const p1 = cam.price1Day ?? cam.dailyRate;
+                        const p6h = cam.price6Hours ?? (Math.round((p1 * 0.7) / 10000) * 10000);
+                        const p2_daily = Math.max(0, p1 - 30000);
+                        const p4_daily = Math.max(0, p1 - 40000);
+                        const p3_daily = p4_daily;
+                        const total2Days = Math.round((cam.price2Days ?? ((p1 + p2_daily) / 2)) * 2);
+                        const total3Days = Math.round((cam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3);
+                        const rateFrom4Days = cam.price4DaysPlus ?? p4_daily;
 
-                        if (isRented) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-purple-700/95 text-white backdrop-blur-xs">
-                              ⏳ Đang thuê
-                            </span>
-                          );
-                        }
-                        if (isLaundry) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-blue-700/95 text-white backdrop-blur-xs">
-                              🧺 Đang giặt
-                            </span>
-                          );
-                        }
-                        if (isMending) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-amber-700/95 text-white backdrop-blur-xs">
-                              🪡 Đang sửa
-                            </span>
-                          );
-                        }
-                        if (isMaintenance) {
-                          return (
-                            <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-rose-700/95 text-white backdrop-blur-xs">
-                              🛠️ Bảo trì
-                            </span>
-                          );
-                        }
                         return (
-                          <span className="inline-flex items-center gap-1 font-bold text-[10px] sm:text-[11px] px-2.5 py-1 rounded-md shadow-md bg-emerald-600/95 text-white backdrop-blur-xs">
-                            ✓ Sẵn sàng
-                          </span>
+                          <>
+                            <div className="flex justify-between items-center bg-amber-50 px-2 py-1 rounded-lg border border-amber-300 col-span-2 mb-1 shadow-3xs">
+                              <span className="text-amber-900 font-extrabold">Thuê ngắn hạn (6 tiếng):</span>
+                              <span className="font-mono text-amber-700 font-extrabold">{p6h.toLocaleString()}đ</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600 font-medium">Thuê 1 ngày:</span>
+                              <span className="font-mono text-gray-800 font-bold">{p1.toLocaleString()}đ</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600 font-medium">Thuê 2 ngày:</span>
+                              <span className="font-mono text-gray-800 font-bold">{total2Days.toLocaleString()}đ</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600 font-medium">Thuê 3 ngày:</span>
+                              <span className="font-mono text-gray-800 font-bold">{total3Days.toLocaleString()}đ</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-600 font-medium">Từ 4 ngày:</span>
+                              <span className="font-mono text-orange-600 font-extrabold">{rateFrom4Days.toLocaleString()}đ/ngày</span>
+                            </div>
+                          </>
                         );
                       })()}
                     </div>
                   </div>
+                )}
 
-                  {/* Product text details */}
-                  <div className="p-3 sm:p-4 space-y-2.5">
-                    <div>
-                      <h3 className="font-extrabold text-gray-900 text-sm sm:text-base hover:text-orange-600 transition-colors line-clamp-1" title={cam.name}>{cam.name}</h3>
-                      <div className="text-gray-500 font-mono text-[11px] sm:text-xs mt-1 flex justify-between items-center">
-                        <span>Mã: <b className="text-gray-800">{cam.serialNumber}</b></span>
-                        {cam.gender && <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full ${cam.gender === 'Nữ' ? 'bg-pink-50 text-pink-700 border border-pink-200' : cam.gender === 'Nam' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-700'}`}>{cam.gender}</span>}
-                      </div>
-                    </div>
-
-                    {/* Price row - 1 dòng duy nhất, to rõ */}
-                    <div className="pt-0.5 flex items-baseline justify-between gap-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-sm sm:text-base font-black text-orange-600 font-mono">
-                          {cam.category === 'Printer'
-                            ? `${(cam.printPrice1To2 ?? 40000).toLocaleString()}đ`
-                            : `${(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ`}
-                        </span>
-                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
-                          {cam.category === 'Printer' ? '/tấm' : '/ngày'}
-                        </span>
-                      </div>
-                      {roiPercent !== null && (
-                        <span className={`text-[9.5px] sm:text-[10px] font-bold px-1 py-0.2 rounded shrink-0 ${
-                          isBreakeven ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-50 text-amber-900 border border-amber-200'
-                        }`}>
-                          {isBreakeven ? '✓ Hòa vốn' : `${roiPercent}% vốn`}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Quick Size & Color summary */}
-                    <div className="flex items-center gap-1 flex-wrap text-[10px] sm:text-[11px] pt-0.5">
-                      {rawSizes.length > 0 && (
-                        <span className="font-bold bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
-                          Size: {rawSizes.join(' · ')}
-                        </span>
-                      )}
-                      {cam.color && (
-                        <span className="text-gray-500 bg-gray-50 border border-gray-200/60 px-1.5 py-0.5 rounded truncate max-w-[90px]">
-                          🎨 {cam.color}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Touch Cue */}
-                    <div className="pt-1 mt-1 border-t border-gray-100 flex items-center justify-between text-[11px] font-bold text-orange-600 group-hover:text-orange-700">
-                      <span>Chi tiết & bảng giá</span>
-                      <ChevronRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Status and Admin tools bar */}
-                <div onClick={e => e.stopPropagation()} className="px-2.5 sm:px-3 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1.5">
-                  {currentUserRole === 'admin' ? (
-                    <>
-                      {/* Reorder Buttons: Left & Right */}
-                      <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1 shadow-3xs shrink-0" title="Đổi vị trí trang phục trong danh sách">
+                {/* Mobile Version: Collapsed by default, elegant toggle button */}
+                <div className="block md:hidden border-t border-gray-100/60 pt-2.5">
+                  {cam.category === 'Printer' ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center bg-rose-50/70 p-2 sm:p-2.5 rounded-xl border border-rose-200/80">
+                        <div>
+                          <span className="text-[9px] text-rose-800 font-extrabold block uppercase tracking-wide">Giá in ảnh</span>
+                          <span className="text-xs sm:text-sm font-extrabold text-rose-600">
+                            {(cam.printPrice1To2 ?? 40000).toLocaleString()}đ
+                            <span className="text-[9px] font-normal text-gray-500">/tấm (từ 33k)</span>
+                          </span>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => handleMoveCamera(cam.id, 'left')}
-                          disabled={isFirst}
-                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
-                          title="Di chuyển lên trước (←)"
+                          onClick={() => togglePricingExpanded(cam.id)}
+                          className="px-2.5 py-1.5 text-[9px] sm:text-[10px] bg-white border border-rose-200 text-rose-900 rounded-lg hover:bg-rose-50 active:scale-95 transition-all font-bold cursor-pointer flex items-center gap-1 shrink-0 shadow-3xs"
                         >
-                          <ArrowLeft className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="text-[10px] sm:text-xs font-mono font-bold text-gray-600 px-1 select-none" title={`Vị trí thứ ${globalIndex + 1} trên tổng ${cameras.length} trang phục`}>
-                          #{globalIndex + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveCamera(cam.id, 'right')}
-                          disabled={isLast}
-                          className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
-                          title="Di chuyển về sau (→)"
-                        >
-                          <ArrowRight className="w-3.5 h-3.5" />
+                          {expandedPrices[cam.id] ? 'Thu gọn' : 'Chi tiết 3 mốc'}
+                          <span className="text-[8px] text-gray-500 transition-transform duration-200" style={{ transform: expandedPrices[cam.id] ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-1.5 ml-auto">
-                        <button
-                          onClick={() => handleOpenEditModal(cam)}
-                          className="text-gray-700 hover:text-orange-600 p-1.5 bg-white border border-gray-300 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
-                          title="Sửa thông tin (Admin)"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          onClick={(e) => handleDuplicateCamera(cam, e)}
-                          className="text-gray-700 hover:text-indigo-600 p-1.5 bg-white border border-gray-300 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
-                          title="Nhân bản (Tạo đồ mới từ mẫu này trong 3 giây)"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            if (cam.cleaningStatus === 'Laundry' || cam.cleaningStatus === 'Mending') {
-                              onUpdateCamera({ ...cam, cleaningStatus: 'Clean' });
-                            } else if (cam.status === 'Maintenance') {
-                              onUpdateCamera({ ...cam, status: 'Available' });
-                            } else {
-                              onUpdateCamera({ ...cam, cleaningStatus: 'Laundry' });
-                            }
-                          }}
-                          className={`text-[10px] sm:text-xs px-2 py-1.5 font-bold rounded-lg transition-all cursor-pointer shadow-3xs whitespace-nowrap ${
-                            cam.cleaningStatus === 'Laundry'
-                              ? 'bg-blue-50 border border-blue-300 text-blue-800 hover:bg-blue-100'
-                              : cam.cleaningStatus === 'Mending'
-                              ? 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'
-                              : cam.status === 'Maintenance'
-                              ? 'bg-rose-50 border border-rose-300 text-rose-800 hover:bg-rose-100'
-                              : 'bg-gray-100 border border-gray-300 text-gray-700 hover:bg-blue-50 hover:text-blue-700'
-                          }`}
-                          title={
-                            cam.cleaningStatus === 'Laundry' ? 'Bấm để hoàn tất: Đã giặt sạch thơm (Sẵn sàng)' :
-                            cam.cleaningStatus === 'Mending' ? 'Bấm để hoàn tất: Đã sửa xong (Sẵn sàng)' :
-                            cam.status === 'Maintenance' ? 'Bấm để hoàn tất bảo trì' :
-                            'Gửi trang phục đi giặt hấp'
-                          }
-                        >
-                          {cam.cleaningStatus === 'Laundry' ? '✨Giặt' :
-                           cam.cleaningStatus === 'Mending' ? '✨Sửa' :
-                           cam.status === 'Maintenance' ? '✓BT' :
-                           '🧺'}
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            if (cam.status === 'Rented') {
-                              setDeleteError(`Trang phục "${cam.name}" đang trong trạng thái ĐANG THUÊ. Vui lòng hoàn tất hợp đồng thu hồi trang phục trước khi xóa khỏi hệ thống.`);
-                              setCameraToDelete(cam);
-                            } else {
-                              setDeleteError(null);
-                              setCameraToDelete(cam);
-                            }
-                          }}
-                          className="text-gray-500 hover:text-red-650 p-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer shadow-3xs"
-                          title="Xóa trang phục"
-                        >
-                          <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        </button>
-                      </div>
-                    </>
+                      {expandedPrices[cam.id] && (
+                        <div className="space-y-1 bg-rose-50/40 p-2.5 rounded-xl border border-rose-200 text-[10.5px] font-medium">
+                          <div className="flex justify-between items-center bg-white p-1.5 rounded-lg border border-rose-100">
+                            <span className="text-gray-700">1 - 2 tấm:</span>
+                            <span className="font-mono text-rose-700 font-bold">{(cam.printPrice1To2 ?? 40000).toLocaleString()}đ/tấm</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-white p-1.5 rounded-lg border border-rose-100">
+                            <span className="text-gray-700">3 - 9 tấm:</span>
+                            <span className="font-mono text-rose-700 font-bold">{(cam.printPrice3To9 ?? 35000).toLocaleString()}đ/tấm</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-rose-100 p-1.5 rounded-lg border border-rose-200 font-bold">
+                            <span className="text-rose-950">Từ 10 tấm:</span>
+                            <span className="font-mono text-rose-700 font-black">{(cam.printPrice10Plus ?? 33000).toLocaleString()}đ/tấm</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <>
-                      <span className="text-[11px] font-bold text-gray-500 bg-gray-200/50 px-2 rounded-md py-1 uppercase flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5 text-gray-550 shrink-0" /> Chế độ xem (Staff)
-                      </span>
+                    <div>
+                      <div className="flex justify-between items-center bg-orange-50/50 p-2 sm:p-2.5 rounded-xl border border-orange-200/80">
+                        <div>
+                          <span className="text-[9px] text-gray-500 font-extrabold block uppercase tracking-wide">Giá ngày cơ bản</span>
+                          <span className="text-xs sm:text-sm font-extrabold text-orange-600">
+                            {(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ
+                            <span className="text-[9px] font-normal text-gray-400">/ngày</span>
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => togglePricingExpanded(cam.id)}
+                          className="px-2.5 py-1.5 text-[9px] sm:text-[10px] bg-white border border-gray-300 text-gray-800 rounded-lg hover:bg-gray-50 active:scale-95 transition-all font-bold cursor-pointer flex items-center gap-1 shrink-0 shadow-3xs"
+                        >
+                          {expandedPrices[cam.id] ? 'Thu gọn bảng giá' : 'Bảng giá lũy tiến'}
+                          <span className="text-[8px] text-gray-500 transition-transform duration-200" style={{ transform: expandedPrices[cam.id] ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                        </button>
+                      </div>
 
-                      <button
-                        onClick={() => toggleMaintenance(cam)}
-                        className={`text-xs px-3 py-1.5 font-bold rounded-lg transition-all cursor-pointer ${
-                          cam.status === 'Maintenance'
-                            ? 'bg-emerald-55 border border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                            : 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100'
-                        }`}
-                        title={cam.status === 'Maintenance' ? 'Hoàn tất giặt hấp' : 'Báo cần giặt hấp / May sửa'}
-                      >
-                        {cam.status === 'Maintenance' ? 'Xong giặt/Sửa' : '🧺 Cần giặt/Sửa'}
-                      </button>
-                    </>
+                      {expandedPrices[cam.id] && (
+                        <div className="mt-2 space-y-1.5 bg-orange-50/30 p-2.5 rounded-xl border border-orange-200/80 text-[10px] sm:text-[11px] font-medium transition-all duration-300">
+                          <div className="flex justify-between items-center text-[9px] text-gray-500 font-bold uppercase tracking-wider pb-0.5 border-b border-orange-200/60">
+                            <span>Thời hạn</span>
+                            <span>Đơn giá/ngày (hoặc buổi)</span>
+                          </div>
+                          {(() => {
+                            const p1 = cam.price1Day ?? cam.dailyRate;
+                            const p6h = cam.price6Hours ?? (Math.round((p1 * 0.7) / 10000) * 10000);
+                            const p2_daily = Math.max(0, p1 - 30000);
+                            const p4_daily = Math.max(0, p1 - 40000);
+                            const p3_daily = p4_daily;
+                            const total2Days = Math.round((cam.price2Days ?? ((p1 + p2_daily) / 2)) * 2);
+                            const total3Days = Math.round((cam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3);
+                            const rateFrom4Days = cam.price4DaysPlus ?? p4_daily;
+
+                            return (
+                              <>
+                                <div className="flex justify-between items-center bg-amber-50 p-1.5 rounded-lg border border-amber-300 font-bold">
+                                  <span className="text-amber-900 font-extrabold">Ngắn hạn (6 tiếng):</span>
+                                  <span className="font-mono text-amber-700 font-extrabold">{p6h.toLocaleString()}đ</span>
+                                </div>
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-gray-600">Thuê 1 ngày:</span>
+                                  <span className="font-mono text-gray-800 font-bold">{p1.toLocaleString()}đ</span>
+                                </div>
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-gray-600">Thuê 2 ngày:</span>
+                                  <span className="font-mono text-gray-800 font-bold">{total2Days.toLocaleString()}đ</span>
+                                </div>
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-gray-600">Thuê 3 ngày:</span>
+                                  <span className="font-mono text-gray-800 font-bold">{total3Days.toLocaleString()}đ</span>
+                                </div>
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-gray-600">Từ 4 ngày:</span>
+                                  <span className="font-mono text-orange-600 font-extrabold">{rateFrom4Days.toLocaleString()}đ/ngày</span>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
-            );
-          })
-        )}
-        {((viewMode === 'grouped' && filteredOutfitGroups.length === 0) || (viewMode === 'individual' && filteredCameras.length === 0)) && (
+            </div>
+
+            {/* Quick Status and Admin tools bar */}
+            <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-1.5 flex-wrap sm:flex-nowrap">
+              {currentUserRole === 'admin' ? (
+                <>
+                  {/* Reorder Buttons: Left & Right */}
+                  <div className="flex items-center gap-0.5 bg-white border border-gray-300 rounded-lg p-0.5 shadow-3xs" title="Đổi vị trí thiết bị trong danh sách">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveCamera(cam.id, 'left')}
+                      disabled={isFirst}
+                      className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
+                      title="Di chuyển lên trước (←)"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[10px] font-mono font-bold text-gray-600 px-1 select-none" title={`Vị trí thứ ${globalIndex + 1} trên tổng ${cameras.length} thiết bị`}>
+                      #{globalIndex + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveCamera(cam.id, 'right')}
+                      disabled={isLast}
+                      className="p-1 text-gray-600 hover:text-orange-600 hover:bg-orange-50 disabled:opacity-25 disabled:pointer-events-none rounded transition cursor-pointer"
+                      title="Di chuyển về sau (→)"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <button
+                      onClick={() => handleOpenEditModal(cam)}
+                      className="text-gray-700 hover:text-orange-600 p-1.5 bg-white border border-gray-300 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer shadow-3xs"
+                      title="Sửa thông tin (Admin)"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={() => toggleMaintenance(cam)}
+                      className={`text-[11px] px-2.5 py-1.5 font-bold rounded-lg transition-all cursor-pointer shadow-3xs ${
+                        cam.status === 'Maintenance'
+                          ? 'bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                          : 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100'
+                      }`}
+                      title={cam.status === 'Maintenance' ? 'Chuyển sang Sẵn sàng hoạt động' : 'Chuyển sang trạng thái Đang bảo trì'}
+                    >
+                      {cam.status === 'Maintenance' ? 'Xong bảo dưỡng' : 'Cần bảo trì'}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (cam.status === 'Rented') {
+                          setDeleteError(`Thiết bị "${cam.name}" hiện đang trong trạng thái ĐANG THUÊ (Rented) bởi khách hàng. Vui lòng hoàn tất thu hồi hoặc xử lý hợp đồng của thiết bị này trước khi xóa khỏi hệ thống.`);
+                          setCameraToDelete(cam);
+                        } else {
+                          setDeleteError(null);
+                          setCameraToDelete(cam);
+                        }
+                      }}
+                      className="text-gray-500 hover:text-red-650 p-1.5 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all cursor-pointer shadow-3xs"
+                      title="Xóa máy"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] font-bold text-gray-500 bg-gray-200/50 px-2 rounded-md py-1 uppercase flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-gray-550 shrink-0" /> Chế độ xem (Staff)
+                  </span>
+
+                  <button
+                    onClick={() => toggleMaintenance(cam)}
+                    className={`text-xs px-3 py-1.5 font-bold rounded-lg transition-all cursor-pointer ${
+                      cam.status === 'Maintenance'
+                        ? 'bg-emerald-55 border border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                        : 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100'
+                    }`}
+                    title={cam.status === 'Maintenance' ? 'Chuyển sang Sẵn sàng hoạt động' : 'Báo hành/Cần bảo trì'}
+                  >
+                    {cam.status === 'Maintenance' ? 'Hoàn tất bảo dưỡng' : 'Báo hỏng/Cần bảo trì'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
+        {filteredCameras.length === 0 && (
           <div className="col-span-full bg-white border border-gray-150 p-12 text-center rounded-2xl text-gray-400 italic font-medium">
-            Không tìm thấy trang phục nào trùng khớp với bộ lọc của bạn.
+            Không tìm thấy máy móc nào trùng khớp với bộ lọc của bạn.
           </div>
         )}
       </div>
@@ -1705,36 +809,9 @@ export default function EquipmentTracker({
       {/* Pagination controls for equipment */}
       {totalPages > 1 && (
         <div className="bg-white border border-gray-150 p-3 sm:p-4 rounded-2xl flex flex-col items-center gap-3 shadow-2xs select-none">
-          <div className="flex items-center justify-between w-full flex-wrap gap-2">
-            <span className="text-xs text-gray-500 font-medium text-center">
-              {viewMode === 'grouped' ? (
-                <>
-                  Hiển thị từ <span className="font-bold text-gray-800">{(currentPage - 1) * itemsPerPage + 1}</span> tới <span className="font-bold text-gray-800">{Math.min(currentPage * itemsPerPage, filteredOutfitGroups.length)}</span> trong tổng số <span className="font-bold text-gray-800">{filteredOutfitGroups.length}</span> mẫu trang phục (<span className="font-bold text-orange-600">{filteredCameras.length}</span> chiếc/size)
-                </>
-              ) : (
-                <>
-                  Hiển thị từ <span className="font-bold text-gray-800">{(currentPage - 1) * itemsPerPage + 1}</span> tới <span className="font-bold text-gray-800">{Math.min(currentPage * itemsPerPage, filteredCameras.length)}</span> trong tổng số <span className="font-bold text-gray-800">{filteredCameras.length}</span> trang phục
-                </>
-              )}
-            </span>
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-gray-400 font-bold">Hiển thị:</span>
-              {[10, 15, 20].map(n => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => { setItemsPerPage(n); setCurrentPage(1); }}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer ${
-                    itemsPerPage === n
-                      ? 'bg-orange-600 text-white shadow-xs'
-                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
+          <span className="text-xs text-gray-500 font-medium text-center">
+            Hiển thị từ <span className="font-bold text-gray-800">{(currentPage - 1) * itemsPerPage + 1}</span> tới <span className="font-bold text-gray-800">{Math.min(currentPage * itemsPerPage, filteredCameras.length)}</span> trong tổng số <span className="font-bold text-gray-800">{filteredCameras.length}</span> thiết bị
+          </span>
           <div className="flex items-center gap-1 overflow-x-auto max-w-full pb-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
             <button
               type="button"
@@ -1774,476 +851,6 @@ export default function EquipmentTracker({
         </div>
       )}
 
-      {/* Outfit Detail Bottom Sheet / Modal */}
-      {(detailGroup || detailCamera) && typeof document !== 'undefined' && createPortal(
-        (() => {
-          const isGroup = Boolean(detailGroup);
-          const group = detailGroup;
-          const activeCam: Camera | undefined = isGroup && group
-            ? (group.items.find(c => c.id === selectedGroupSizes[group.groupKey]) || group.items[0])
-            : (detailCamera || undefined);
-
-          if (!activeCam) return null;
-
-          const title = isGroup && group ? group.cleanName : activeCam.name;
-          const category = activeCam.category;
-          const gender = activeCam.gender || 'Nữ';
-
-          // --- Single size metrics ---
-          const singlePurchase = activeCam.purchasePrice || 0;
-          const singleRevenue = cameraRevenueMap[activeCam.id] || 0;
-          const singleRoiPercent = singlePurchase > 0 ? Math.round((singleRevenue / singlePurchase) * 100) : null;
-
-          // --- Group metrics ---
-          const groupPurchase = (isGroup && group) ? group.totalPurchase : singlePurchase;
-          const groupRevenue = (isGroup && group) ? group.totalRevenue : singleRevenue;
-          const groupRoiPercent = (isGroup && group) ? group.overallRoiPercent : singleRoiPercent;
-
-          // --- Active metrics based on view mode ---
-          const useGroup = roiViewMode === 'group';
-          const purchase = useGroup ? groupPurchase : singlePurchase;
-          const revenue = useGroup ? groupRevenue : singleRevenue;
-          const roiPercent = useGroup ? groupRoiPercent : singleRoiPercent;
-
-          const isBreakeven = roiPercent !== null && roiPercent >= 100;
-          const remaining = purchase > revenue ? purchase - revenue : 0;
-          const p1 = activeCam.price1Day ?? activeCam.dailyRate;
-          const estRentalsLeft = remaining > 0 && p1 > 0 ? Math.ceil(remaining / p1) : 0;
-
-          // Tiered pricing
-          const p2_daily = Math.max(0, p1 - 30000);
-          const p4_daily = Math.max(0, p1 - 40000);
-          const p3_daily = p4_daily;
-          const total2Days = Math.round((activeCam.price2Days ?? ((p1 + p2_daily) / 2)) * 2);
-          const total3Days = Math.round((activeCam.price3Days ?? ((p1 + p2_daily + p3_daily) / 3)) * 3);
-          const rateFrom4Days = activeCam.price4DaysPlus ?? p4_daily;
-
-          const closeDetail = () => {
-            setDetailGroupKey(null);
-            setDetailCameraId(null);
-            setRoiViewMode('single');
-          };
-
-          return (
-            <div 
-              className="fixed inset-0 z-[9990] flex items-end sm:items-center justify-center animate-fade-in"
-              onTouchMove={(e) => {
-                if (e.target === e.currentTarget) e.preventDefault();
-              }}
-            >
-              {/* Dark backdrop */}
-              <div 
-                className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
-                onClick={closeDetail}
-              />
-
-              {/* Bottom Sheet / Modal Dialog */}
-              <div 
-                className="relative bg-white w-full sm:max-w-xl max-h-[88vh] sm:max-h-[90vh] rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-bottom duration-300"
-                onClick={e => e.stopPropagation()}
-              >
-                {/* Mobile drag handle */}
-                <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mt-3 mb-1 sm:hidden shrink-0" />
-
-                {/* Header */}
-                <div className="px-5 py-3 border-b border-gray-150 flex items-center justify-between gap-3 shrink-0 bg-white">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="bg-orange-50 text-orange-700 text-[10.5px] font-bold px-2 py-0.5 rounded-md border border-orange-200">
-                        {category}
-                      </span>
-                      {activeCam.shortName && (
-                        <span className="bg-gray-100 text-gray-700 text-[10.5px] font-bold px-2 py-0.5 rounded-md border border-gray-200">
-                          {activeCam.shortName}
-                        </span>
-                      )}
-                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${gender === 'Nữ' ? 'bg-pink-50 text-pink-700' : 'bg-blue-50 text-blue-700'}`}>
-                        {gender}
-                      </span>
-                    </div>
-                    <h2 className="text-base sm:text-lg font-black text-gray-900 truncate mt-1" title={title}>
-                      {title}
-                    </h2>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={closeDetail}
-                    className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0"
-                    title="Đóng"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Scrollable Content */}
-                <div className="p-4 sm:p-5 overflow-y-auto space-y-4 overscroll-contain">
-                  {/* Top Product Card: Image + Key Information */}
-                  <div className="flex gap-3.5 bg-slate-50 border border-slate-200/90 rounded-2xl p-3">
-                    <div className="w-28 sm:w-32 aspect-[4/5] rounded-xl overflow-hidden bg-gray-200 shrink-0 shadow-xs border border-gray-200">
-                      <img 
-                        src={activeCam.image || (group ? group.image : '')} 
-                        alt={title}
-                        className="w-full h-full object-cover object-top"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-
-                    <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5 space-y-1.5">
-                      <div>
-                        <div className="text-xs text-gray-500 font-mono">
-                          Mã tem: <b className="text-gray-900 font-bold">{activeCam.serialNumber}</b>
-                        </div>
-                        {activeCam.color && (
-                          <div className="text-xs text-gray-600 mt-0.5 flex items-center gap-1">
-                            <span>Màu sắc:</span>
-                            <span className="font-bold text-gray-800">🎨 {activeCam.color}</span>
-                          </div>
-                        )}
-                        <div className="mt-1">
-                          {(() => {
-                            if (activeCam.status === 'Rented') return <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">⏳ Đang thuê</span>;
-                            if (activeCam.cleaningStatus === 'Laundry') return <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">🧺 Đang gửi giặt</span>;
-                            if (activeCam.cleaningStatus === 'Mending') return <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">🪡 Đang sửa đồ</span>;
-                            if (activeCam.status === 'Maintenance') return <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">🛠️ Bảo trì</span>;
-                            return <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">✓ Sẵn sàng cho thuê</span>;
-                          })()}
-                        </div>
-                      </div>
-
-                      <div className="pt-1 border-t border-slate-200/80">
-                        <div className="text-[11px] text-gray-500 uppercase font-bold">Giá thuê ngày:</div>
-                        <div className="text-lg sm:text-xl font-black text-orange-600 font-mono">
-                          {category === 'Printer'
-                            ? `${(activeCam.printPrice1To2 ?? 40000).toLocaleString()}đ / tấm`
-                            : `${p1.toLocaleString()}đ / ngày`}
-                        </div>
-                        {activeCam.depositAmount !== undefined && activeCam.depositAmount > 0 && (
-                          <div className="text-[11px] text-gray-500 font-mono">
-                            Cọc: <b className="text-gray-700">{activeCam.depositAmount.toLocaleString()}đ</b>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Size selector if Group mode */}
-                  {isGroup && group && group.items.length > 1 && (
-                    <div className="bg-white border border-gray-200 rounded-2xl p-3.5 space-y-2 shadow-2xs">
-                      <div className="flex items-center justify-between text-xs font-bold text-gray-700">
-                        <span>CHỌN SIZE ĐỂ XEM CHI TIẾT TỪNG TEM ({group.items.length} size):</span>
-                        <span className="text-orange-600 font-black">Size {activeCam.size || 'FS'}</span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {group.items.map(item => {
-                          const isSel = item.id === activeCam.id;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setSelectedGroupSizes(prev => ({ ...prev, [group.groupKey]: item.id }))}
-                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                                isSel
-                                  ? 'bg-orange-50 border-2 border-orange-500 ring-2 ring-orange-300/80 shadow-xs'
-                                  : 'bg-gray-50 hover:bg-gray-100 border-gray-250 text-gray-700'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="font-black text-sm text-gray-900">Size {item.size || 'FS'}</span>
-                                <span className={`w-2 h-2 rounded-full ${
-                                  item.status === 'Rented' ? 'bg-purple-500' :
-                                  item.cleaningStatus === 'Laundry' ? 'bg-blue-500' :
-                                  item.cleaningStatus === 'Mending' ? 'bg-amber-500' :
-                                  item.status === 'Maintenance' ? 'bg-rose-500' : 'bg-emerald-500'
-                                }`} />
-                              </div>
-                              <div className="text-[11px] font-mono text-gray-500 truncate mt-1">
-                                {item.serialNumber}
-                              </div>
-                              {item.color && (
-                                <div className="text-[10.5px] text-gray-600 truncate">
-                                  🎨 {item.color}
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tiered Pricing Table */}
-                  {category !== 'Printer' ? (
-                    <div className="bg-orange-50/50 border border-orange-200/90 rounded-2xl p-3.5 space-y-2">
-                      <div className="text-xs font-black uppercase tracking-wider text-orange-950 flex items-center justify-between">
-                        <span>BẢNG GIÁ THUÊ THEO SỐ NGÀY</span>
-                        <span className="text-[11px] text-orange-600 font-bold">Càng thuê lâu càng rẻ</span>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                        <div className="bg-white border border-orange-200 rounded-xl p-2 shadow-2xs">
-                          <div className="text-[11px] text-gray-500 font-bold">1 ngày</div>
-                          <div className="text-sm font-black text-gray-900 font-mono mt-0.5">{p1.toLocaleString()}đ</div>
-                          <div className="text-[10px] text-gray-400">gốc / ngày</div>
-                        </div>
-
-                        <div className="bg-white border border-orange-200 rounded-xl p-2 shadow-2xs">
-                          <div className="text-[11px] text-gray-500 font-bold">2 ngày</div>
-                          <div className="text-sm font-black text-gray-900 font-mono mt-0.5">{total2Days.toLocaleString()}đ</div>
-                          <div className="text-[10px] text-orange-600 font-semibold">~{Math.round(total2Days / 2).toLocaleString()}đ/ng</div>
-                        </div>
-
-                        <div className="bg-white border border-orange-200 rounded-xl p-2 shadow-2xs">
-                          <div className="text-[11px] text-gray-500 font-bold">3 ngày</div>
-                          <div className="text-sm font-black text-gray-900 font-mono mt-0.5">{total3Days.toLocaleString()}đ</div>
-                          <div className="text-[10px] text-orange-600 font-semibold">~{Math.round(total3Days / 3).toLocaleString()}đ/ng</div>
-                        </div>
-
-                        <div className="bg-orange-100/90 border border-orange-300 rounded-xl p-2 shadow-2xs">
-                          <div className="text-[11px] text-orange-950 font-bold">Từ 4 ngày</div>
-                          <div className="text-sm font-black text-orange-700 font-mono mt-0.5">{rateFrom4Days.toLocaleString()}đ</div>
-                          <div className="text-[10px] text-orange-800 font-bold">mỗi ngày tiếp</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-rose-50/50 border border-rose-200/90 rounded-2xl p-3.5 space-y-2">
-                      <div className="text-xs font-black uppercase tracking-wider text-rose-950">
-                        BẢNG GIÁ IN ẢNH
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="bg-white border border-rose-200 rounded-xl p-2">
-                          <div className="text-[11px] text-gray-500 font-bold">1 - 2 tấm</div>
-                          <div className="text-sm font-black text-rose-700 font-mono mt-0.5">{(activeCam.printPrice1To2 ?? 40000).toLocaleString()}đ</div>
-                        </div>
-                        <div className="bg-white border border-rose-200 rounded-xl p-2">
-                          <div className="text-[11px] text-gray-500 font-bold">3 - 9 tấm</div>
-                          <div className="text-sm font-black text-rose-700 font-mono mt-0.5">{(activeCam.printPrice3To9 ?? 35000).toLocaleString()}đ</div>
-                        </div>
-                        <div className="bg-rose-100 border border-rose-300 rounded-xl p-2">
-                          <div className="text-[11px] text-rose-950 font-bold">Từ 10 tấm</div>
-                          <div className="text-sm font-black text-rose-800 font-mono mt-0.5">{(activeCam.printPrice10Plus ?? 33000).toLocaleString()}đ</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ROI / Break-even section */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
-                    {/* Toggle: single size vs whole group */}
-                    {isGroup && group && group.items.length > 1 && (
-                      <div className="flex gap-1 mb-1">
-                        <button
-                          type="button"
-                          onClick={() => setRoiViewMode('single')}
-                          className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
-                            roiViewMode === 'single'
-                              ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          Size {activeCam.size || activeCam.serialNumber}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRoiViewMode('group')}
-                          className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
-                            roiViewMode === 'group'
-                              ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'
-                          }`}
-                        >
-                          Cả mẫu ({group.items.length} size)
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-gray-700 flex items-center gap-1">
-                        <span>💎 Vốn nhập:</span>
-                        <b className="font-mono text-gray-900">{purchase > 0 ? `${purchase.toLocaleString()}đ` : '—'}</b>
-                        {useGroup && isGroup && group && <span className="text-gray-400">({group.items.length} size)</span>}
-                      </span>
-                      {roiPercent !== null && (
-                        <span className={`px-2 py-0.5 rounded-md font-black text-xs ${
-                          isBreakeven ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-200'
-                        }`}>
-                          {isBreakeven ? `✓ Đã hòa vốn (${roiPercent}%)` : `Hoàn vốn: ${roiPercent}%`}
-                        </span>
-                      )}
-                    </div>
-
-                    {purchase > 0 && (
-                      <div className="space-y-1">
-                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${isBreakeven ? 'bg-emerald-500' : 'bg-orange-500'}`}
-                            style={{ width: `${Math.min(roiPercent || 0, 100)}%` }}
-                          />
-                        </div>
-                        <div className="flex justify-between items-center text-xs text-gray-500 pt-0.5">
-                          <span>Đã thu về: <b className="text-gray-900 font-mono font-bold">{revenue.toLocaleString()}đ</b></span>
-                          <span>
-                            {isBreakeven ? (
-                              <b className="text-emerald-700 font-mono font-bold">+{(revenue - purchase).toLocaleString()}đ lãi</b>
-                            ) : (
-                              <span>Cần thêm: ~<b className="text-orange-600 font-mono font-bold">{estRentalsLeft}</b> lượt thuê</span>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Per-size breakdown when viewing group */}
-                    {useGroup && isGroup && group && group.items.length > 1 && (
-                      <div className="pt-1 border-t border-slate-200 space-y-1">
-                        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wide mb-1">Chi tiết từng size</div>
-                        {group.items.map(item => {
-                          const itemRevenue = cameraRevenueMap[item.id] || 0;
-                          const itemPurchase = item.purchasePrice || 0;
-                          const itemRoi = itemPurchase > 0 ? Math.round((itemRevenue / itemPurchase) * 100) : null;
-                          const isActive = item.id === activeCam.id;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedGroupSizes(prev => ({ ...prev, [group.groupKey]: item.id }));
-                                setRoiViewMode('single');
-                              }}
-                              className={`w-full flex items-center justify-between text-xs px-2.5 py-1.5 rounded-xl border cursor-pointer transition-colors ${
-                                isActive
-                                  ? 'bg-indigo-50 border-indigo-300 text-indigo-800'
-                                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                              }`}
-                            >
-                              <span className="font-bold">{item.size || item.serialNumber}</span>
-                              <span className="font-mono">{itemPurchase > 0 ? `${itemPurchase.toLocaleString()}đ` : '—'}</span>
-                              {itemRoi !== null && (
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
-                                  itemRoi >= 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
-                                }`}>
-                                  {itemRoi}%
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Description */}
-                  {(activeCam.description || (group && group.description)) && (
-                    <div className="bg-white border border-gray-200 rounded-2xl p-3.5 space-y-1 text-xs">
-                      <div className="font-bold text-gray-700">Mô tả & ghi chú phụ kiện:</div>
-                      <p className="text-gray-600 whitespace-pre-line leading-relaxed">
-                        {activeCam.description || (group ? group.description : '')}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer Action Bar */}
-                <div className="p-3.5 sm:p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2 shrink-0">
-                  {currentUserRole === 'admin' ? (
-                    <>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            closeDetail();
-                            handleOpenEditModal(activeCam);
-                          }}
-                          className="px-3 py-2 bg-white border border-gray-300 hover:bg-orange-50 hover:text-orange-600 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-3xs cursor-pointer transition-colors"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>Sửa đồ</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            closeDetail();
-                            handleDuplicateCamera(activeCam, e);
-                          }}
-                          className="px-3 py-2 bg-white border border-gray-300 hover:bg-indigo-50 hover:text-indigo-600 text-gray-700 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-3xs cursor-pointer transition-colors"
-                          title="Tạo đồ mới nhanh bằng cách nhân bản mẫu này"
-                        >
-                          <Copy className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>Nhân bản</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (activeCam.cleaningStatus === 'Laundry' || activeCam.cleaningStatus === 'Mending') {
-                              onUpdateCamera({ ...activeCam, cleaningStatus: 'Clean' });
-                            } else {
-                              onUpdateCamera({ ...activeCam, cleaningStatus: 'Laundry' });
-                            }
-                          }}
-                          className={`px-3 py-2 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-3xs cursor-pointer transition-colors border ${
-                            activeCam.cleaningStatus === 'Laundry'
-                              ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-                              : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:text-blue-700'
-                          }`}
-                        >
-                          {activeCam.cleaningStatus === 'Laundry' ? '✨ Xong giặt' : '🧺 Gửi giặt'}
-                        </button>
-
-                        {isGroup && group && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeDetail();
-                              handleAddSizeToGroup(group);
-                            }}
-                            className="px-3 py-2 bg-orange-50 border border-orange-200 text-orange-700 font-bold text-xs rounded-xl flex items-center gap-1 shadow-3xs cursor-pointer hover:bg-orange-600 hover:text-white transition-colors"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Thêm Size</span>
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            closeDetail();
-                            setCameraToDelete(activeCam);
-                          }}
-                          className="p-2 text-gray-400 hover:text-red-650 hover:bg-red-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-red-200"
-                          title="Xóa trang phục"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={closeDetail}
-                        className="px-4 py-2 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-xl cursor-pointer transition-colors shadow-2xs ml-auto"
-                      >
-                        Đóng
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={closeDetail}
-                      className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm rounded-xl cursor-pointer transition-colors shadow-xs"
-                    >
-                      Đã xem xong
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })(),
-        document.body
-      )}
-
       {/* Camera Add/Edit Modal */}
       {showAddModal && typeof document !== 'undefined' && createPortal(
         <div 
@@ -2252,42 +859,21 @@ export default function EquipmentTracker({
             if (e.target === e.currentTarget) e.preventDefault();
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden self-center border border-gray-100 animate-scale-up flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden self-center border border-gray-100 animate-scale-up flex flex-col max-h-[90vh]">
             <div className="bg-orange-600 text-white px-6 py-4 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg flex items-center gap-2">
-                <DressIcon className="w-5 h-5" /> {editingCamera ? 'Cập Nhật Trang Phục' : 'Thêm Trang Phục Mới Vào Tủ Đồ'}
+                <CameraIcon className="w-5 h-5" /> {editingCamera ? 'Cập Nhật Thiết Bị' : 'Thêm Máy Mới Vào Kho'}
               </h3>
               <button
                 type="button"
-                onClick={handleRequestClose}
+                onClick={() => setShowAddModal(false)}
                 className="text-white hover:text-gray-200 font-bold text-xl cursor-pointer"
               >
                 &times;
               </button>
             </div>
 
-            {/* Unsaved changes warning bar */}
-            {showUnsavedPrompt && (
-              <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0">
-                <span className="text-xs text-amber-800 font-semibold flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                  Bạn có thay đổi chưa được lưu. Bấm &quot;Lưu thay đổi&quot; để lưu, hoặc thoát mà không lưu?
-                </span>
-                <div className="flex gap-2 shrink-0">
-                  <button type="button" onClick={() => { setShowAddModal(false); setShowUnsavedPrompt(false); setValidationError(null); initialFormSnapshotRef.current = ''; }}
-                    className="text-xs font-bold text-amber-700 hover:text-red-700 cursor-pointer px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
-                    Thoát không lưu
-                  </button>
-                  <button type="button" onClick={() => { formRef.current?.requestSubmit(); setShowUnsavedPrompt(false); }}
-                    className="text-xs font-bold bg-orange-600 hover:bg-orange-700 text-white cursor-pointer px-3 py-1 rounded-lg flex items-center gap-1 transition-colors">
-                    <Save className="w-3 h-3" /> Lưu ngay
-                  </button>
-                </div>
-              </div>
-            )}
-
             <form 
-              ref={formRef}
               onSubmit={handleSubmit} 
               className="p-6 space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
               style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
@@ -2298,31 +884,29 @@ export default function EquipmentTracker({
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Tên trang phục đầy đủ *</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Tên thiết bị đầy đủ *</label>
                 <input
                   type="text"
                   required
                   value={formState.name}
                   onChange={e => setFormState({ ...formState, name: e.target.value })}
                   className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                  placeholder="VD: Áo dài tơ tằm thêu tay hoa sen tứ thân truyền thống"
+                  placeholder="VD: Canon EOS R50 Body"
                 />
               </div>
 
               {/* Category Selector */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Phân loại trang phục *
+                  Mục thiết bị / Phân loại chính *
                 </label>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {[
-                    { id: 'Váy', label: 'Váy', icon: '👗' },
-                    { id: 'Áo dài', label: 'Áo dài', icon: '🌸' },
-                    { id: 'Dạ hội', label: 'Dạ hội', icon: '✨' },
-                    { id: 'Concept', label: 'Concept', icon: '👘' },
-                    { id: 'Phụ kiện', label: 'Phụ kiện', icon: '🎀' },
-                    { id: 'Chụp ảnh', label: 'Chụp ảnh', icon: '📸' },
-                    { id: 'Khác', label: 'Khác', icon: '🏷️' },
+                    { id: 'Body', label: 'Thân máy', sub: 'Body', icon: '📷' },
+                    { id: 'Lens', label: 'Ống kính', sub: 'Lens', icon: '🔍' },
+                    { id: 'Combo', label: 'Combo bộ máy', sub: 'Combo', icon: '🎒' },
+                    { id: 'Accessory', label: 'Phụ kiện kèm', sub: 'Phụ kiện', icon: '⚡' },
+                    { id: 'Printer', label: 'Máy in ảnh', sub: 'Máy in', icon: '🖨️' },
                   ].map(cat => {
                     const isSelected = formState.category === cat.id;
                     return (
@@ -2337,667 +921,68 @@ export default function EquipmentTracker({
                           dailyRate: cat.id === 'Printer' && prev.dailyRate === 290000 ? 40000 : prev.dailyRate,
                           price1Day: cat.id === 'Printer' && prev.price1Day === 290000 ? 40000 : prev.price1Day,
                         }))}
-                        className={`p-2 sm:p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 min-w-0 ${
+                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
                           isSelected
-                            ? 'bg-orange-50 border-orange-500 text-orange-700 font-black ring-2 ring-orange-200 shadow-3xs'
-                            : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 font-bold'
+                            ? 'bg-orange-50 border-orange-500 text-orange-700 font-bold ring-2 ring-orange-200 shadow-3xs'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 font-medium'
                         }`}
                       >
-                        <span className="text-xl sm:text-2xl">{cat.icon}</span>
-                        <span className="text-xs sm:text-sm font-black whitespace-nowrap truncate w-full px-1">{cat.label}</span>
+                        <span className="text-base">{cat.icon}</span>
+                        <span className="text-xs leading-tight font-bold">{cat.label}</span>
+                        <span className="text-[9.5px] text-gray-400 font-normal">{cat.sub}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Mã Tag / Số hiệu (S/N) *</label>
-                <input
-                  type="text"
-                  required
-                  value={formState.serialNumber}
-                  onChange={e => {
-                    const val = e.target.value;
-                    const baseCode = val.replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim();
-                    setFormState({ ...formState, serialNumber: val, shortName: baseCode || val });
-                  }}
-                  className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono font-bold"
-                  placeholder="VD: ĐL K01, VC-01, AD-05, DH-02..."
-                />
-                <p className="text-[11px] text-gray-400 mt-1">Mã ngắn gắn trên tem mác / móc áo để nhận diện và hiển thị nhanh trên lịch</p>
-              </div>
-
-              {/* Gender & Cleaning Status row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">Dành cho giới tính</label>
-                  <div className="flex gap-2">
-                    {[
-                      { id: 'Nữ', label: 'Nữ 👩' },
-                      { id: 'Nam', label: 'Nam 👨' },
-                      { id: 'Unisex', label: 'Unisex 🚻' }
-                    ].map(g => (
-                      <button
-                        key={g.id}
-                        type="button"
-                        onClick={() => setFormState({ ...formState, gender: g.id as any })}
-                        className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-bold transition cursor-pointer border text-center whitespace-nowrap ${
-                          formState.gender === g.id
-                            ? 'bg-orange-600 text-white border-orange-600 shadow-xs'
-                            : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {g.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">Tình trạng vệ sinh & Giặt hấp</label>
-                  <select
-                    value={formState.cleaningStatus}
-                    onChange={e => setFormState({ ...formState, cleaningStatus: e.target.value as any })}
-                    className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-750"
-                  >
-                    <option value="Clean">✨ Đã giặt sạch thơm (Sẵn sàng)</option>
-                    <option value="Laundry">🧺 Đang giặt hấp khử khuẩn (Laundry)</option>
-                    <option value="Mending">🪡 Đang sửa may / Đính đá (Mending)</option>
-                  </select>
-                </div>
-              </div>
-
-
-              {/* Khối Kích cỡ & Tự động tạo sản phẩm riêng theo từng Size/Màu */}
-              <div className="bg-orange-50/50 p-3.5 rounded-xl border border-orange-200/80 space-y-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                    <label className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                      <span>Kích cỡ (Size) *</span>
-                      <span className="text-[10px] font-semibold text-orange-600 bg-orange-100/90 px-2 py-0.5 rounded-full">
-                        Chọn size để tự động tạo từng chiếc
-                      </span>
-                    </label>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newSizes = ['S', 'M', 'L'];
-                          const nextColorMap = { ...formState.sizeColorMap };
-                          newSizes.forEach(s => {
-                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || '';
-                          });
-                          setFormState(prev => ({
-                            ...prev,
-                            selectedSizes: newSizes,
-                            size: newSizes.join(', '),
-                            sizeColorMap: nextColorMap,
-                            sizeQtyMap: {}
-                          }));
-                        }}
-                        className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
-                      >
-                        S-M-L
-                      </button>
-                      <span className="text-gray-300">•</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-                          const nextColorMap = { ...formState.sizeColorMap };
-                          newSizes.forEach(s => {
-                            if (!nextColorMap[s]) nextColorMap[s] = formState.color || '';
-                          });
-                          setFormState(prev => ({
-                            ...prev,
-                            selectedSizes: newSizes,
-                            size: newSizes.join(', '),
-                            sizeColorMap: nextColorMap,
-                            sizeQtyMap: {}
-                          }));
-                        }}
-                        className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
-                      >
-                        Tất cả
-                      </button>
-                      <span className="text-gray-300">•</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextColorMap = { ...formState.sizeColorMap };
-                          if (!nextColorMap['Freesize']) nextColorMap['Freesize'] = formState.color || '';
-                          setFormState(prev => ({
-                            ...prev,
-                            selectedSizes: ['Freesize'],
-                            size: 'Freesize',
-                            sizeColorMap: nextColorMap
-                          }));
-                        }}
-                        className="text-orange-600 hover:text-orange-800 font-bold hover:underline cursor-pointer"
-                      >
-                        Chỉ Freesize
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Size buttons */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'].map(sz => {
-                      const isSelected = formState.selectedSizes.includes(sz);
-                      const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'];
-                      return (
-                        <button
-                          key={sz}
-                          type="button"
-                          onClick={() => {
-                            let nextSizes: string[];
-                            if (isSelected) {
-                              nextSizes = formState.selectedSizes.filter(s => s !== sz);
-                              if (nextSizes.length === 0) nextSizes = [sz]; // luôn giữ ít nhất 1 size
-                            } else {
-                              nextSizes = [...formState.selectedSizes, sz];
-                            }
-                            nextSizes.sort((a, b) => ALL_SIZES.indexOf(a) - ALL_SIZES.indexOf(b));
-                            const nextColorMap = { ...formState.sizeColorMap };
-                            if (!nextColorMap[sz]) {
-                              nextColorMap[sz] = formState.color || '';
-                            }
-                            setFormState(prev => ({
-                              ...prev,
-                              selectedSizes: nextSizes,
-                              size: nextSizes.join(', '),
-                              sizeColorMap: nextColorMap
-                            }));
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border flex items-center gap-1 ${
-                            isSelected
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-xs ring-2 ring-orange-200'
-                              : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                          {isSelected && <span className="text-[10px]">✓</span>}
-                          <span>{sz}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* BẢNG PHÂN LOẠI CHI TIẾT TỪNG CHIẾC (LIVE PREVIEW & CHỌN MÀU TỪNG SIZE) */}
-                <div className="bg-white rounded-xl border border-orange-200/90 shadow-2xs overflow-hidden">
-                  <div className="bg-orange-100/60 px-3 py-2 border-b border-orange-200/80 flex items-center justify-between flex-wrap gap-1">
-                    <span className="text-xs font-black text-orange-950 flex items-center gap-1.5">
-                      <span>⚡ Danh sách sản phẩm sẽ tự động tạo ({formState.selectedSizes.reduce((acc, sz) => acc + (formState.sizeQtyMap[sz] || 1), 0)} chiếc):</span>
-                    </span>
-                    <span className="text-[10.5px] text-orange-800/80 font-medium italic">
-                      Mỗi size được cấp mã tag riêng & chọn màu độc lập
-                    </span>
-                  </div>
-
-                  <div className="divide-y divide-gray-100 max-h-[360px] overflow-y-auto">
-                    {formState.selectedSizes.map(sz => {
-                      const sizeCode = sz === 'Freesize' ? 'FS' : sz;
-                      const rawSerial = (formState.serialNumber || '').trim();
-                      const cleanBase = rawSerial.replace(/-+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '').trim().replace(/-+$/, '');
-                      const displaySerial = rawSerial
-                        ? (formState.selectedSizes.length > 1 ? `${cleanBase}-${sizeCode}` : rawSerial)
-                        : `VD: V01-${sizeCode}`;
-                      const currentColor = formState.sizeColorMap[sz] !== undefined && formState.sizeColorMap[sz] !== ''
-                        ? formState.sizeColorMap[sz]
-                        : (formState.color || '');
-                      const currentSizeImg = formState.sizeImageMap[sz] || '';
-
-                      return (
-                        <div key={sz} className="p-3 flex flex-col gap-2.5 hover:bg-orange-50/20 transition">
-                          {/* Header row: Size badge + Clean Tag preview + Current Color pill */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 bg-orange-50/50 p-2 rounded-lg border border-orange-100/90">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-black bg-orange-600 text-white px-2.5 py-1 rounded-md shadow-2xs min-w-[55px] text-center">
-                                {sz}
-                              </span>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-bold text-gray-800 font-mono">
-                                  Mã: <strong className={rawSerial ? "text-orange-700" : "text-gray-400 italic"}>{displaySerial}</strong>
-                                </span>
-                                <span className="text-[10px] text-gray-400">
-                                  {sz === 'Freesize' ? 'Kiểu dáng Freesize' : `Kích cỡ chuẩn ${sz}`}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Current color badge pill */}
-                            <div className="inline-flex items-center gap-1.5 bg-white border border-orange-200/90 px-2.5 py-1 rounded-full text-[11px] font-bold text-orange-950 shadow-2xs self-start sm:self-auto">
-                              <span className={`w-2.5 h-2.5 rounded-full ${currentColor ? 'bg-orange-500 ring-1 ring-orange-300' : 'bg-gray-300'} shrink-0`}></span>
-                              {(() => {
-                                const qty2 = formState.sizeQtyMap[sz] || 1;
-                                const allColors = (formState.sizeColorVariants[sz] || [currentColor]).filter(Boolean);
-                                if (allColors.length > 1) {
-                                  return <span className="text-[10px]">{allColors.map((col, i) => <span key={i} className="font-black text-orange-700">{i > 0 ? ' · ' : ''}{col || '?'}</span>)}</span>;
-                                }
-                                return currentColor
-                                  ? <span>Màu: <strong className="text-orange-700 font-black">{currentColor}</strong></span>
-                                  : <span className="text-gray-400 font-medium italic">Chưa nhập màu</span>;
-                              })()}
-                            </div>
-                          </div>
-
-
-                          {/* Số lượng + Màu riêng từng chiếc */}
-                          {(() => {
-                            const qty = formState.sizeQtyMap[sz] || 1;
-                            const variants = formState.sizeColorVariants[sz] || [formState.sizeColorMap[sz] || ''];
-                            const COLORS = [
-                              { name: '⚪ Trắng', full: 'Trắng tinh khôi' }, { name: '🔴 Đỏ', full: 'Đỏ đô' },
-                              { name: '⚫ Đen', full: 'Đen tuyền' }, { name: '🌾 Be', full: 'Be sữa' },
-                              { name: '🌸 Hồng', full: 'Hồng phấn' }, { name: '🔵 Xanh', full: 'Xanh pastel' },
-                              { name: '🟡 Vàng', full: 'Vàng đồng' }, { name: '🟣 Tím', full: 'Tím mộng mơ' },
-                              { name: '🟤 Nâu', full: 'Nâu tây' }
-                            ];
-                            return (
-                              <div className="space-y-2">
-                                {/* Header: Số lượng điều chỉnh */}
-                                <div className="flex items-center gap-2 bg-blue-50/60 border border-blue-200/70 rounded-lg px-2.5 py-1.5">
-                                  <span className="text-[11px] font-bold text-blue-700 shrink-0">📦 Số lượng Size {sz}:</span>
-                                  <div className="flex items-center gap-1.5 ml-auto">
-                                    <button type="button"
-                                      onClick={() => {
-                                        const newQty = Math.max(1, qty - 1);
-                                        const newVariants = variants.slice(0, newQty);
-                                        setFormState(prev => ({
-                                          ...prev,
-                                          sizeQtyMap: { ...prev.sizeQtyMap, [sz]: newQty },
-                                          sizeColorVariants: { ...prev.sizeColorVariants, [sz]: newVariants }
-                                        }));
-                                      }}
-                                      className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
-                                    >−</button>
-                                    <span className="text-sm font-black text-blue-800 min-w-[20px] text-center">{qty}</span>
-                                    <button type="button"
-                                      onClick={() => {
-                                        const newQty = qty + 1;
-                                        const newVariants = [...variants, variants[0] || ''];
-                                        setFormState(prev => ({
-                                          ...prev,
-                                          sizeQtyMap: { ...prev.sizeQtyMap, [sz]: newQty },
-                                          sizeColorVariants: { ...prev.sizeColorVariants, [sz]: newVariants }
-                                        }));
-                                      }}
-                                      className="w-6 h-6 rounded-md bg-white border border-blue-200 text-blue-700 font-black text-sm flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
-                                    >+</button>
-                                  </div>
-                                  <span className="text-[10px] text-blue-600/80 font-medium">chiếc</span>
-                                </div>
-                                {/* Từng chiếc: màu riêng */}
-                                {Array.from({ length: qty }).map((_, qIdx) => {
-                                  const pieceColor = variants[qIdx] ?? (formState.sizeColorMap[sz] || '');
-                                  return (
-                                    <div key={qIdx} className="space-y-1.5 bg-gray-50/80 border border-gray-200/80 rounded-lg p-2.5">
-                                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                        <label className="text-[11px] font-bold text-gray-700 shrink-0 flex items-center gap-1">
-                                          <span>🎨 {qty > 1 ? `Chiếc ${qIdx + 1} – Màu:` : `Màu sắc Size ${sz}:`}</span>
-                                        </label>
-                                        <input
-                                          type="text"
-                                          value={pieceColor}
-                                          onChange={e => {
-                                            const val = e.target.value;
-                                            const updated = [...(formState.sizeColorVariants[sz] || Array(qty).fill(''))];
-                                            updated[qIdx] = val;
-                                            setFormState(prev => ({
-                                              ...prev,
-                                              sizeColorVariants: { ...prev.sizeColorVariants, [sz]: updated },
-                                              sizeColorMap: { ...prev.sizeColorMap, [sz]: qIdx === 0 ? val : (prev.sizeColorMap[sz] || '') }
-                                            }));
-                                          }}
-                                          placeholder="Gõ màu tùy ý (VD: Đỏ đô, Be sữa...)"
-                                          className="flex-1 bg-white border border-gray-300 rounded-lg px-2.5 py-1 text-xs text-gray-850 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 font-semibold"
-                                        />
-                                      </div>
-                                      <div className="flex items-center gap-1 flex-wrap pl-0.5">
-                                        <span className="text-[10px] text-gray-400 font-medium shrink-0">Chọn nhanh:</span>
-                                        {COLORS.map(col => {
-                                          const isActive = pieceColor === col.full;
-                                          return (
-                                            <button key={col.name} type="button"
-                                              onClick={() => {
-                                                const updated = [...(formState.sizeColorVariants[sz] || Array(qty).fill(''))];
-                                                updated[qIdx] = col.full;
-                                                setFormState(prev => ({
-                                                  ...prev,
-                                                  sizeColorVariants: { ...prev.sizeColorVariants, [sz]: updated },
-                                                  sizeColorMap: { ...prev.sizeColorMap, [sz]: qIdx === 0 ? col.full : (prev.sizeColorMap[sz] || '') }
-                                                }));
-                                              }}
-                                              className={`text-[10px] px-2 py-0.5 rounded-md transition cursor-pointer font-bold border ${isActive ? 'bg-orange-600 text-white border-orange-600 shadow-2xs ring-1 ring-orange-300' : 'bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-800 border-gray-200'}`}
-                                              title={`Chọn màu ${col.full}`}
-                                            >{col.name}</button>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })()}
-
-                          {/* Image row for this specific size / color */}
-                          <div className="flex items-center gap-2 pt-1 border-t border-dashed border-gray-150 text-xs">
-                            <div className="w-9 h-9 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 shrink-0 flex items-center justify-center">
-                              {currentSizeImg ? (
-                                <img src={currentSizeImg} alt={`Ảnh Size ${sz}`} className="w-full h-full object-cover" />
-                              ) : formState.image ? (
-                                <img src={formState.image} alt="Ảnh mặc định" className="w-full h-full object-cover opacity-60" title="Đang dùng ảnh chung" />
-                              ) : (
-                                <ImageIcon className="w-4 h-4 text-gray-300" />
-                              )}
-                            </div>
-
-                            <input
-                              type="url"
-                              value={currentSizeImg}
-                              onChange={e => {
-                                const val = e.target.value;
-                                setFormState(prev => ({
-                                  ...prev,
-                                  sizeImageMap: {
-                                    ...prev.sizeImageMap,
-                                    [sz]: val
-                                  }
-                                }));
-                              }}
-                              placeholder={`URL ảnh riêng cho Size ${sz} / màu này (để trống sẽ dùng ảnh chung)...`}
-                              className="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-1 text-[11px] font-mono text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                            />
-
-                            <label className="shrink-0 inline-flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border border-gray-200 hover:border-orange-300 rounded-lg text-[10.5px] font-bold cursor-pointer transition">
-                              {uploadingSize === sz ? (
-                                <Loader2 className="w-3 h-3 animate-spin text-orange-600" />
-                              ) : (
-                                <Upload className="w-3 h-3" />
-                              )}
-                              <span className="hidden sm:inline">{uploadingSize === sz ? 'Đang tải...' : 'Tải ảnh'}</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                disabled={uploadingSize === sz}
-                                className="hidden"
-                                onChange={async e => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    setUploadingSize(sz);
-                                    try {
-                                      const reader = new FileReader();
-                                      reader.onload = (ev) => {
-                                        const img = new Image();
-                                        img.onload = async () => {
-                                          try {
-                                            const maxW = 600;
-                                            const scale = img.width > maxW ? maxW / img.width : 1;
-                                            const canvas = document.createElement('canvas');
-                                            canvas.width = Math.round(img.width * scale);
-                                            canvas.height = Math.round(img.height * scale);
-                                            const ctx = canvas.getContext('2d')!;
-                                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                            const compImg = canvas.toDataURL('image/jpeg', 0.8);
-                                            const prefix = `${formState.serialNumber || 'outfit'}_${sz}`;
-                                            const oldSizeImg = formState.sizeImageMap[sz];
-                                            const storageUrl = await uploadOutfitImageToStorage(compImg, prefix);
-                                            setFormState(prev => ({
-                                              ...prev,
-                                              sizeImageMap: {
-                                                ...prev.sizeImageMap,
-                                                [sz]: storageUrl
-                                              }
-                                            }));
-                                            // Tự động xóa file ảnh cũ trên Storage nếu không còn ai dùng
-                                            if (oldSizeImg && oldSizeImg !== storageUrl) {
-                                              deleteOutfitImageFromStorage(oldSizeImg, cameras);
-                                            }
-                                          } finally {
-                                            setUploadingSize(null);
-                                          }
-                                        };
-                                        img.onerror = () => setUploadingSize(null);
-                                        img.src = ev.target?.result as string;
-                                      };
-                                      reader.onerror = () => setUploadingSize(null);
-                                      reader.readAsDataURL(file);
-                                    } catch {
-                                      setUploadingSize(null);
-                                    }
-                                  }
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
-
-                            {currentSizeImg && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const oldImg = currentSizeImg;
-                                  setFormState(prev => {
-                                    const next = { ...prev.sizeImageMap };
-                                    delete next[sz];
-                                    return { ...prev, sizeImageMap: next };
-                                  });
-                                  if (oldImg) {
-                                    deleteOutfitImageFromStorage(oldImg, cameras);
-                                  }
-                                }}
-                                className="text-gray-400 hover:text-red-500 text-xs px-1"
-                                title="Bỏ ảnh riêng, dùng ảnh chung"
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Measurements & Accessories */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Số đo chuẩn tham khảo */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-gray-700">Số đo chuẩn tham khảo</label>
-                    {detailSuggestions.measurements.length > 0 && (
-                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
-                        ⚡ Có gợi ý
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Tên viết tắt (Shorthand) *</label>
                   <input
                     type="text"
-                    list="suggest-measurements"
-                    value={formState.measurements}
-                    onChange={e => setFormState({ ...formState, measurements: e.target.value })}
+                    required
+                    value={formState.shortName}
+                    onChange={e => setFormState({ ...formState, shortName: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: Ngực 86 - Eo 66 - Mông 92, dài 140cm"
+                    placeholder="VD: R50"
                   />
-                  <datalist id="suggest-measurements">
-                    {detailSuggestions.measurements.map((m, idx) => (
-                      <option key={idx} value={m} />
-                    ))}
-                  </datalist>
-                  {detailSuggestions.measurements.length > 0 && (
-                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
-                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
-                      {detailSuggestions.measurements.slice(0, 5).map((m, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setFormState(prev => ({ ...prev, measurements: m }))}
-                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[170px] ${
-                            formState.measurements === m
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
-                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
-                          }`}
-                          title={m}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                {/* Phụ kiện đi kèm mặc định */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-gray-700">Phụ kiện đi kèm mặc định</label>
-                    {detailSuggestions.includedAccessories.length > 0 && (
-                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
-                        ⚡ Có gợi ý
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Số Serial (S/N) *</label>
                   <input
                     type="text"
-                    list="suggest-accessories"
-                    value={formState.includedAccessories}
-                    onChange={e => setFormState({ ...formState, includedAccessories: e.target.value })}
+                    required
+                    value={formState.serialNumber}
+                    onChange={e => setFormState({ ...formState, serialNumber: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: Voan dài 3m, vương miện, nơ cổ chú rể..."
+                    placeholder="VD: CAN-R50-1039"
                   />
-                  <datalist id="suggest-accessories">
-                    {detailSuggestions.includedAccessories.map((acc, idx) => (
-                      <option key={idx} value={acc} />
-                    ))}
-                  </datalist>
-                  {detailSuggestions.includedAccessories.length > 0 && (
-                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
-                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
-                      {detailSuggestions.includedAccessories.slice(0, 6).map((acc, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setFormState(prev => {
-                              const current = prev.includedAccessories?.trim() || '';
-                              if (!current) return { ...prev, includedAccessories: acc };
-                              if (current.includes(acc)) return prev;
-                              return { ...prev, includedAccessories: `${current}, ${acc}` };
-                            });
-                          }}
-                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[150px] ${
-                            formState.includedAccessories?.includes(acc)
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
-                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
-                          }`}
-                          title={`Bấm để thêm: ${acc}`}
-                        >
-                          + {acc}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Fabric & Brand */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Chất liệu vải / Kiểu dáng */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-gray-700">Chất liệu vải / Kiểu dáng</label>
-                    {detailSuggestions.type.length > 0 && (
-                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
-                        ⚡ Có gợi ý
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Dòng máy / Phân loại</label>
                   <input
                     type="text"
-                    list="suggest-types"
                     value={formState.type}
                     onChange={e => setFormState({ ...formState, type: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: Lụa satin, Ren thêu hoa chìm, Gấm..."
+                    placeholder="VD: Mirrorless APS-C"
                   />
-                  <datalist id="suggest-types">
-                    {detailSuggestions.type.map((tp, idx) => (
-                      <option key={idx} value={tp} />
-                    ))}
-                  </datalist>
-                  {detailSuggestions.type.length > 0 && (
-                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
-                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
-                      {detailSuggestions.type.slice(0, 6).map((tp, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setFormState(prev => {
-                              const current = prev.type?.trim() || '';
-                              if (!current) return { ...prev, type: tp };
-                              if (current.includes(tp)) return prev;
-                              return { ...prev, type: `${current}, ${tp}` };
-                            });
-                          }}
-                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[150px] ${
-                            formState.type?.includes(tp)
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
-                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
-                          }`}
-                          title={`Bấm để thêm: ${tp}`}
-                        >
-                          {tp}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                {/* Thương hiệu / Xưởng thiết kế */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-gray-700">Thương hiệu / Xưởng thiết kế</label>
-                    {detailSuggestions.brand.length > 0 && (
-                      <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60">
-                        ⚡ Có gợi ý
-                      </span>
-                    )}
-                  </div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Hãng sản xuất</label>
                   <input
                     type="text"
-                    list="suggest-brands"
                     value={formState.brand}
                     onChange={e => setFormState({ ...formState, brand: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                    placeholder="VD: Caos Atelier, Hàng may đo cao cấp..."
+                    placeholder="VD: Canon, Sony, Fujifilm"
                   />
-                  <datalist id="suggest-brands">
-                    {detailSuggestions.brand.map((b, idx) => (
-                      <option key={idx} value={b} />
-                    ))}
-                  </datalist>
-                  {detailSuggestions.brand.length > 0 && (
-                    <div className="flex items-center gap-1 flex-wrap mt-1.5 max-h-16 overflow-y-auto">
-                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Đã nhập:</span>
-                      {detailSuggestions.brand.slice(0, 5).map((b, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setFormState(prev => ({ ...prev, brand: b }))}
-                          className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer font-medium truncate max-w-[150px] ${
-                            formState.brand === b
-                              ? 'bg-orange-600 text-white border-orange-600 shadow-2xs font-bold'
-                              : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-orange-700 border-gray-200'
-                          }`}
-                          title={b}
-                        >
-                          {b}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -3005,18 +990,12 @@ export default function EquipmentTracker({
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-gray-700">
-                    Ảnh bìa trang phục (Link URL hoặc Tải ảnh)
+                    Ảnh bìa thiết bị (Link URL hoặc Tải ảnh)
                   </label>
                   {formState.image && (
                     <button
                       type="button"
-                      onClick={() => {
-                        const oldImg = formState.image;
-                        setFormState(prev => ({ ...prev, image: '' }));
-                        if (oldImg) {
-                          deleteOutfitImageFromStorage(oldImg, cameras);
-                        }
-                      }}
+                      onClick={() => setFormState(prev => ({ ...prev, image: '' }))}
                       className="text-[10px] text-rose-500 hover:text-rose-700 font-bold cursor-pointer transition"
                     >
                       ✕ Xóa ảnh
@@ -3056,66 +1035,36 @@ export default function EquipmentTracker({
 
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-lg text-xs font-bold transition cursor-pointer">
-                        {isUploadingImage ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-600" />
-                        ) : (
-                          <Upload className="w-3.5 h-3.5" />
-                        )}
-                        <span>{isUploadingImage ? 'Đang tải lên Cloud...' : 'Tải ảnh từ máy tính / điện thoại'}</span>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Tải ảnh từ máy</span>
                         <input
                           type="file"
                           accept="image/*"
-                          disabled={isUploadingImage}
                           className="hidden"
-                          onChange={async e => {
+                          onChange={e => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              setIsUploadingImage(true);
-                              try {
-                                const reader = new FileReader();
-                                reader.onload = (ev) => {
-                                  const img = new Image();
-                                  img.onload = async () => {
-                                    try {
-                                      const maxW = 600;
-                                      const scale = img.width > maxW ? maxW / img.width : 1;
-                                      const canvas = document.createElement('canvas');
-                                      canvas.width = Math.round(img.width * scale);
-                                      canvas.height = Math.round(img.height * scale);
-                                      const ctx = canvas.getContext('2d')!;
-                                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                      const compImg = canvas.toDataURL('image/jpeg', 0.8);
-                                      // Tự động đẩy lên Supabase Storage và nhận lại URL công khai
-                                      const prefix = (formState.serialNumber || formState.name || 'outfit').trim();
-                                      const oldMainImg = formState.image;
-                                      const storageUrl = await uploadOutfitImageToStorage(compImg, prefix);
-                                      setFormState(prev => ({ ...prev, image: storageUrl }));
-                                      // Tự động dọn dẹp file ảnh cũ nếu không còn ai dùng
-                                      if (oldMainImg && oldMainImg !== storageUrl) {
-                                        deleteOutfitImageFromStorage(oldMainImg, cameras);
-                                      }
-                                    } finally {
-                                      setIsUploadingImage(false);
-                                    }
-                                  };
-                                  img.onerror = () => setIsUploadingImage(false);
-                                  img.src = ev.target?.result as string;
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                const img = new Image();
+                                img.onload = () => {
+                                  const maxW = 600;
+                                  const scale = img.width > maxW ? maxW / img.width : 1;
+                                  const canvas = document.createElement('canvas');
+                                  canvas.width = Math.round(img.width * scale);
+                                  canvas.height = Math.round(img.height * scale);
+                                  const ctx = canvas.getContext('2d')!;
+                                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                  setFormState(prev => ({ ...prev, image: canvas.toDataURL('image/jpeg', 0.7) }));
                                 };
-                                reader.onerror = () => setIsUploadingImage(false);
-                                reader.readAsDataURL(file);
-                              } catch {
-                                setIsUploadingImage(false);
-                              }
+                                img.src = ev.target?.result as string;
+                              };
+                              reader.readAsDataURL(file);
                             }
                             e.target.value = '';
                           }}
                         />
                       </label>
-                      {formState.image && formState.image.startsWith('https://') && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
-                          <Cloud className="w-3 h-3" /> Link Cloud sẵn sàng
-                        </span>
-                      )}
                       <span className="text-[10px] text-gray-400">hoặc dán đường dẫn ảnh trực tiếp</span>
                     </div>
                   </div>
@@ -3194,12 +1143,14 @@ export default function EquipmentTracker({
                       type="button"
                       onClick={() => {
                         const p1 = formState.price1Day || formState.dailyRate || 290000;
+                        const p6h = Math.round((p1 * 0.7) / 10000) * 10000;
                         const p2_daily = Math.max(0, p1 - 30000);
                         const p4_daily = Math.max(0, p1 - 40000);
                         const p3_daily = p4_daily;
 
                         setFormState(prev => ({
                           ...prev,
+                          price6Hours: p6h,
                           price1Day: p1,
                           dailyRate: p1,
                           price2Days: p1 + p2_daily,
@@ -3216,6 +1167,15 @@ export default function EquipmentTracker({
                   </div>
 
                   <div className="space-y-2.5">
+                    <div className="bg-amber-50/80 p-2 rounded-lg border border-amber-200">
+                      <label className="block text-[11px] font-extrabold text-amber-900 mb-0.5">⚡ Giá thuê gói 6 tiếng (VND)</label>
+                      <MoneyInput
+                        value={formState.price6Hours}
+                        onChange={v => setFormState(prev => ({ ...prev, price6Hours: v }))}
+                        className="border border-amber-300 bg-white rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                        suffixColor="amber"
+                      />
+                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div>
@@ -3225,7 +1185,6 @@ export default function EquipmentTracker({
                           onChange={v => setFormState(prev => ({ ...prev, price1Day: v, dailyRate: v }))}
                           className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                           suffixColor="gray"
-                          placeholder="VD: 350.000"
                         />
                       </div>
                       <div>
@@ -3235,7 +1194,6 @@ export default function EquipmentTracker({
                           onChange={v => setFormState(prev => ({ ...prev, price2Days: v }))}
                           className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                           suffixColor="gray"
-                          placeholder="VD: 650.000"
                         />
                       </div>
                       <div>
@@ -3245,7 +1203,6 @@ export default function EquipmentTracker({
                           onChange={v => setFormState(prev => ({ ...prev, price3Days: v }))}
                           className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                           suffixColor="gray"
-                          placeholder="VD: 950.000"
                         />
                       </div>
                     </div>
@@ -3257,54 +1214,31 @@ export default function EquipmentTracker({
                         onChange={v => setFormState(prev => ({ ...prev, price4DaysPlus: v }))}
                         className="border border-gray-200 rounded-lg p-2 text-xs focus:ring-1 focus:ring-orange-500 focus:outline-none"
                         suffixColor="gray"
-                        placeholder="VD: 300.000"
                       />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Original Purchase Price / Capital Investment */}
-              <div className="bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-200/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                    <span>💎 Giá gốc / Vốn nhập đồ (VNĐ)</span>
-                  </label>
-                  <span className="text-[10px] text-emerald-800 font-semibold bg-emerald-100/70 px-2 py-0.5 rounded-full">
-                    Tự động chuyển vào Khoản chi & Doanh thu
-                  </span>
-                </div>
-                <MoneyInput
-                  value={formState.purchasePrice || 0}
-                  onChange={v => setFormState({ ...formState, purchasePrice: v })}
-                  placeholder="VD: 1.200.000"
-                  className="border border-emerald-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-gray-800 font-bold"
-                  suffixColor="emerald"
-                />
-                <p className="text-[10.5px] text-emerald-700/90 leading-tight">
-                  💡 Chi phí mua/may mẫu này sẽ tự động ghi nhận vào mục <b>Khoản chi & Doanh thu</b>. Nếu sửa hoặc xóa giá về 0, hệ thống sẽ tự động cập nhật/trừ ở Khoản chi tương ứng.
-                </p>
-              </div>
-
               {/* Deposit Money Option */}
               <div className="bg-amber-50/50 p-3.5 rounded-xl border border-amber-200/80 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-amber-950">
-                    Trị giá cọc trang phục quy định (VNĐ)
+                    Trị giá cọc máy quy định (VNĐ)
                   </label>
                   <span className="text-[10px] text-amber-800 font-semibold">Tự động điền khi tạo đơn</span>
                 </div>
                 <MoneyInput
                   value={formState.depositAmount || 0}
                   onChange={v => setFormState({ ...formState, depositAmount: v })}
-                  placeholder="VD: 2.000.000"
+                  placeholder="VD: 5.000.000"
                   className="border border-amber-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white text-gray-800"
                   suffixColor="amber"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Trạng thái cho thuê</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Trạng thái thiết bị</label>
                 <select
                   value={formState.status}
                   onChange={e => setFormState({ ...formState, status: e.target.value as any })}
@@ -3312,7 +1246,7 @@ export default function EquipmentTracker({
                 >
                   <option value="Available">Sẵn sàng cho thuê (Available)</option>
                   <option value="Rented">Đang được khách thuê (Rented)</option>
-                  <option value="Maintenance">Đang giặt hấp / May sửa (Maintenance)</option>
+                  <option value="Maintenance">Bảo trì / Vệ sinh cảm biến (Maintenance)</option>
                 </select>
               </div>
 
@@ -3322,7 +1256,7 @@ export default function EquipmentTracker({
                   value={formState.conditionNotes}
                   onChange={e => setFormState({ ...formState, conditionNotes: e.target.value })}
                   className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono text-xs"
-                  placeholder="VD: Đồ kèm voan cô dâu, vương miện và tùng váy xếp ly. Tình trạng vải mới 99%, đính đá thủ công..."
+                  placeholder="VD: Bao gồm 2 pin, 1 sạc đôi, thẻ nhớ Sandisk 64GB, filter UV..."
                   rows={3}
                 />
               </div>
@@ -3330,17 +1264,16 @@ export default function EquipmentTracker({
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={handleRequestClose}
+                  onClick={() => setShowAddModal(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-650 hover:bg-gray-105 rounded-xl transition-colors cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
-                  className="bg-orange-600 text-white font-medium px-5 py-2 rounded-xl text-sm hover:bg-orange-700 transition-all cursor-pointer flex items-center gap-1.5"
+                  className="bg-orange-600 text-white font-medium px-5 py-2 rounded-xl text-sm hover:bg-orange-700 transition-all cursor-pointer"
                 >
-                  <Check className="w-4 h-4" />
-                  {editingCamera ? 'Lưu thay đổi' : 'Thêm vào tủ đồ'}
+                  {editingCamera ? 'Lưu thay đổi' : 'Thêm thiết bị'}
                 </button>
               </div>
             </form>
@@ -3360,7 +1293,7 @@ export default function EquipmentTracker({
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 animate-scale-up">
             <div className="bg-rose-600 text-white px-6 py-4 flex justify-between items-center">
               <h3 className="font-bold text-base flex items-center gap-2">
-                ⚠️ Xác nhận xóa trang phục
+                ⚠️ Xác nhận xóa thiết bị
               </h3>
               <button
                 type="button"
@@ -3396,10 +1329,10 @@ export default function EquipmentTracker({
               ) : (
                 <div className="space-y-4">
                   <p className="text-gray-650 text-sm font-medium leading-relaxed">
-                    Bạn có chắc chắn muốn xóa trang phục <strong className="text-red-700 font-black">{cameraToDelete.name}</strong> (S/N: {cameraToDelete.serialNumber}) ra khỏi hệ thống quản lý kho?
+                    Bạn có chắc chắn muốn xóa thiết bị <strong className="text-red-700 font-black">{cameraToDelete.name}</strong> (S/N: {cameraToDelete.serialNumber}) ra khỏi hệ thống quản lý kho?
                   </p>
                   <div className="bg-gray-50 border border-gray-150 p-3.5 rounded-xl text-xs text-gray-500 leading-relaxed font-semibold">
-                    🔍 <strong>Lưu ý:</strong> Hành động này không thể hoàn tác. Tên trang phục trong các hợp đồng trong quá khứ vẫn sẽ được giữ nguyên dạng văn bản thô để đảm bảo tính minh bạch hóa đơn.
+                    🔍 <strong>Lưu ý:</strong> Hành động này không thể hoàn tác. Tên thiết bị trong các hợp đồng trong quá khứ vẫn sẽ được giữ nguyên dạng văn bản thô để đảm bảo tính minh bạch hóa đơn.
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
                     <button
@@ -3430,5 +1363,4 @@ export default function EquipmentTracker({
     </div>
   );
 }
-
 

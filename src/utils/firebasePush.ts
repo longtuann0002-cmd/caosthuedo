@@ -24,20 +24,19 @@ export interface FirebaseConfig {
   vapidKey?: string;
 }
 
-// Dedicated config shared with Tiệm Nhà Caos verified Firebase infrastructure
 export const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
   apiKey: "AIzaSyA33_97jLHcuEz2TGHBpOeo2RS3y1VAnAE",
   authDomain: "tiem-anh-nha-caos-d827f.firebaseapp.com",
   projectId: "tiem-anh-nha-caos-d827f",
   storageBucket: "tiem-anh-nha-caos-d827f.firebasestorage.app",
   messagingSenderId: "449788423673",
-  appId: "1:449788423673:web:64a2cab6bb9768608d2128",
+  appId: "1:449788423673:web:8488b804d60d63a68d2128",
   vapidKey: "BKE-FrK50bX5zz885rkfzoWYKO_Jtun5MR2Qdg_H3KsGcVOesZdIswAIh5wGRYQggbt6sKWCL9ZGOmH-dV4VUp0"
 };
 
-const STORAGE_KEY_CONFIG = 'thuedo_firebase_config';
-const STORAGE_KEY_TOKEN = 'thuedo_fcm_device_token';
-const STORAGE_KEY_ALL_TOKENS = 'thuedo_all_device_tokens';
+const STORAGE_KEY_CONFIG = 'caos_firebase_config';
+const STORAGE_KEY_TOKEN = 'caos_fcm_device_token';
+const STORAGE_KEY_ALL_TOKENS = 'caos_all_device_tokens';
 
 // Default pre-stored or active config
 export function getFirebaseConfig(): FirebaseConfig {
@@ -45,12 +44,6 @@ export function getFirebaseConfig(): FirebaseConfig {
     const stored = localStorage.getItem(STORAGE_KEY_CONFIG);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // NẾU CÒN LƯU DỰ ÁN CŨ caos-thue-do THÌ XÓA NGAY VÀ RESET VỀ TIỆM ẢNH NHÀ CAOS
-      if (parsed.projectId === 'caos-thue-do' || parsed.messagingSenderId === '569940659255') {
-        localStorage.removeItem(STORAGE_KEY_CONFIG);
-        localStorage.removeItem(STORAGE_KEY_TOKEN);
-        return DEFAULT_FIREBASE_CONFIG;
-      }
       if (parsed.apiKey && parsed.projectId) {
         return parsed;
       }
@@ -73,6 +66,7 @@ export function getFirebaseConfig(): FirebaseConfig {
     };
   }
 
+  // Use the official pre-configured project credentials
   return DEFAULT_FIREBASE_CONFIG;
 }
 
@@ -104,6 +98,10 @@ export function initFirebaseMessaging(): Messaging | null {
       
       // Setup foreground message listener
       onMessage(messagingInstance, (payload) => {
+        // When app is in FOREGROUND: FCM delivers here (not to SW)
+        // Do NOT call reg.showNotification() here — it would duplicate
+        // the notification that Firestore cross-device listener already shows.
+        // Just log for debugging.
         console.log('[FCM foreground] Received push:', payload.notification?.title || payload.data?.title);
       });
     }
@@ -134,7 +132,7 @@ export async function registerDeviceFCMToken(): Promise<{
   if (!config) {
     return { 
       success: false, 
-      error: 'Chưa cấu hình Firebase Project riêng cho ứng dụng này.' 
+      error: 'Chưa cấu hình Firebase Project. Vui lòng nhập thông tin cấu hình Firebase trước.' 
     };
   }
 
@@ -218,7 +216,7 @@ async function saveTokenToSharedRegistry(token: string): Promise<void> {
 const CLIENT_SESSION_ID = 'sess_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
 
 // Broadcast notification across all devices
-// (Uses Multi-Channel: Supabase Cloud Broadcast + BroadcastChannel locally + Server Push)
+// (Uses Multi-Channel: Vercel Serverless Push -> Apple APNs + Firestore Cloud broadcast + BroadcastChannel locally)
 export async function broadcastToAllDevices(
   title: string, 
   body: string, 
@@ -226,57 +224,73 @@ export async function broadcastToAllDevices(
 ): Promise<boolean> {
   let anyDelivered = false;
 
-  // 1. SUPABASE CLOUD (ƯU TIÊN SỐ 1 - 100% ĐỒNG BỘ GIỮA CÁC THIẾT BỊ)
+  // 0. Server-Side Push via Vercel -> Google FCM -> Apple APNs (WAKES UP CLOSED PHONES & RINGS CHIME)
   try {
-    const ok = await syncToSupabase('thuedo_latest_push_event', {
+    fetch('/api/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body, data })
+    }).catch(err => console.warn('Serverless push call:', err));
+    anyDelivered = true;
+  } catch (e) {}
+
+  // 1. Firebase Firestore Cloud Broadcast (delivers across the internet to all connected phones/laptops)
+  try {
+    const config = getFirebaseConfig();
+    const app = getApps().length > 0 ? getApp() : initializeApp(config);
+    const db = getFirestore(app);
+    await addDoc(collection(db, 'caos_cloud_alerts'), {
       title,
       body,
       data: data || {},
       senderSessionId: CLIENT_SESSION_ID,
       timestamp: Date.now()
     });
-    if (ok) anyDelivered = true;
+    anyDelivered = true;
   } catch (e) {
-    console.warn('Supabase broadcast error:', e);
+    console.warn('Firebase Firestore broadcast error:', e);
   }
 
   // 2. BroadcastChannel (Delivers instantly to all active tabs/windows on the same machine)
   try {
     if (typeof BroadcastChannel !== 'undefined') {
-      const channel = new BroadcastChannel('thuedo_cross_device_notifications');
+      const channel = new BroadcastChannel('caos_cross_device_notifications');
       channel.postMessage({
         title,
         body,
-        data: data || {},
-        senderSessionId: CLIENT_SESSION_ID,
+        data,
         timestamp: Date.now()
       });
+      channel.close();
       anyDelivered = true;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('BroadcastChannel error:', e);
+  }
 
-  // 3. Storage event fallback (for tabs that don't support BroadcastChannel)
+  // 3. Storage event broadcast (for other tabs on local browsers)
   try {
-    localStorage.setItem('thuedo_latest_broadcast_alert', JSON.stringify({
+    localStorage.setItem('caos_latest_broadcast_alert', JSON.stringify({
       title,
       body,
-      data: data || {},
-      senderSessionId: CLIENT_SESSION_ID,
-      timestamp: Date.now()
+      data,
+      time: Date.now()
     }));
-    anyDelivered = true;
   } catch (e) {}
 
-  // 4. Server-Side Push via Vercel (nếu có cấu hình)
-  const config = getFirebaseConfig();
-  if (config) {
+  // 4. Supabase Realtime broadcast if configured
+  if (isSupabaseConfigured) {
     try {
-      fetch('/api/send-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, body, data })
-      }).catch(() => {});
-    } catch (e) {}
+      await syncToSupabase('latest_push_event', {
+        title,
+        body,
+        data,
+        timestamp: new Date().toISOString()
+      });
+      anyDelivered = true;
+    } catch (e) {
+      console.warn('Supabase push broadcast error:', e);
+    }
   }
 
   return anyDelivered;
@@ -286,58 +300,59 @@ export async function broadcastToAllDevices(
 export function listenToCrossDeviceAlerts(
   onAlert: (alert: { title: string; body: string; data?: any }) => void
 ): () => void {
+  // Record the time the listener was set up — only fire alerts AFTER this point
   const listenStartTime = Date.now();
+
+  // 1. Listen via Firebase Firestore (Across the Internet from any remote phone or computer)
   let unsubscribeFirestore: (() => void) | null = null;
-  let isFirstSnapshot = true;
+  let isFirstSnapshot = true; // Skip the initial batch (already delivered as push)
+  try {
+    const config = getFirebaseConfig();
+    const app = getApps().length > 0 ? getApp() : initializeApp(config);
+    const db = getFirestore(app);
+    const q = query(
+      collection(db, 'caos_cloud_alerts'),
+      orderBy('timestamp', 'desc'),
+      limit(5)
+    );
+    unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+      // On first snapshot: Firestore returns existing docs — skip them all
+      // (they were already delivered as FCM push when app was closed)
+      if (isFirstSnapshot) {
+        isFirstSnapshot = false;
+        return;
+      }
 
-  // 1. Listen via Firebase Firestore (only if dedicated Firebase is configured)
-  const config = getFirebaseConfig();
-  if (config) {
-    try {
-      const app = getApps().length > 0 ? getApp() : initializeApp(config);
-      const db = getFirestore(app);
-      const q = query(
-        collection(db, 'thuedo_cloud_alerts'),
-        orderBy('timestamp', 'desc'),
-        limit(5)
-      );
-      unsubscribeFirestore = onSnapshot(q, (snapshot) => {
-        if (isFirstSnapshot) {
-          isFirstSnapshot = false;
-          return;
-        }
-
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const alertData = change.doc.data();
-            if (
-              alertData &&
-              alertData.timestamp &&
-              alertData.timestamp > listenStartTime &&
-              Date.now() - alertData.timestamp < 60000 &&
-              alertData.senderSessionId !== CLIENT_SESSION_ID
-            ) {
-              onAlert({
-                title: alertData.title,
-                body: alertData.body,
-                data: alertData.data
-              });
-            }
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const alertData = change.doc.data();
+          if (
+            alertData &&
+            alertData.timestamp &&
+            alertData.timestamp > listenStartTime &&          // Must be NEWER than app open
+            Date.now() - alertData.timestamp < 60000 &&      // Within 60s (not stale)
+            alertData.senderSessionId !== CLIENT_SESSION_ID  // Not from self
+          ) {
+            onAlert({
+              title: alertData.title,
+              body: alertData.body,
+              data: alertData.data
+            });
           }
-        });
-      }, (err) => {
-        console.warn('Firestore subscription status:', err.message);
+        }
       });
-    } catch (e) {
-      console.warn('Firestore listen init error:', e);
-    }
+    }, (err) => {
+      console.warn('Firestore subscription status:', err.message);
+    });
+  } catch (e) {
+    console.warn('Firestore listen init error:', e);
   }
 
   // 2. Listen via BroadcastChannel (local machine)
   let channel: BroadcastChannel | null = null;
   if (typeof BroadcastChannel !== 'undefined') {
     try {
-      channel = new BroadcastChannel('thuedo_cross_device_notifications');
+      channel = new BroadcastChannel('caos_cross_device_notifications');
       channel.onmessage = (event) => {
         if (event.data && event.data.title) {
           onAlert(event.data);
@@ -348,7 +363,7 @@ export function listenToCrossDeviceAlerts(
 
   // 3. Listen via storage event (cross-tab sync)
   const storageListener = (e: StorageEvent) => {
-    if (e.key === 'thuedo_latest_broadcast_alert' && e.newValue) {
+    if (e.key === 'caos_latest_broadcast_alert' && e.newValue) {
       try {
         const parsed = JSON.parse(e.newValue);
         if (parsed && parsed.title) {
@@ -359,76 +374,17 @@ export function listenToCrossDeviceAlerts(
   };
   window.addEventListener('storage', storageListener);
 
-  // 4. Listen via Supabase Cloud (đảm bảo 100% đồng bộ giữa PC và điện thoại)
-  let supabaseInterval: any = null;
-  let lastProcessedSupabaseTime = Date.now() - 3000;
-
-  supabaseInterval = setInterval(async () => {
-    try {
-      const latestEvent = await fetchFromSupabase('thuedo_latest_push_event');
-      if (
-        latestEvent &&
-        latestEvent.timestamp &&
-        latestEvent.timestamp > lastProcessedSupabaseTime &&
-        Math.abs(Date.now() - latestEvent.timestamp) < 180000 &&
-        latestEvent.senderSessionId !== CLIENT_SESSION_ID
-      ) {
-        lastProcessedSupabaseTime = latestEvent.timestamp;
-        onAlert({
-          title: latestEvent.title,
-          body: latestEvent.body,
-          data: latestEvent.data
-        });
-      }
-    } catch (e) {}
-  }, 2000);
-
   return () => {
     if (unsubscribeFirestore) unsubscribeFirestore();
     if (channel) channel.close();
     window.removeEventListener('storage', storageListener);
-    if (supabaseInterval) clearInterval(supabaseInterval);
   };
-}
-
-// Play notification chime sound via Web Audio API
-export function playNotificationSound() {
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const now = ctx.currentTime;
-
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(587.33, now); // D5
-    gain1.gain.setValueAtTime(0.3, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.35);
-
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(880, now + 0.15); // A5
-    gain2.gain.setValueAtTime(0.35, now + 0.15);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.15);
-    osc2.stop(now + 0.6);
-  } catch (e) {}
 }
 
 // Sync lightweight contracts to Firestore cloud doc so Vercel 9AM Cron Job can read them
 export async function syncContractsToCloud(contracts: any[]): Promise<void> {
-  const config = getFirebaseConfig();
-  if (!config) return;
-
   try {
+    const config = getFirebaseConfig();
     const app = getApps().length > 0 ? getApp() : initializeApp(config);
     const db = getFirestore(app);
     const lightweight = (contracts || []).map(c => ({
@@ -439,9 +395,10 @@ export async function syncContractsToCloud(contracts: any[]): Promise<void> {
       endDate: c.endDate,
       status: c.status,
       startTime: c.startTime,
-      returnTime: c.returnTime
+      returnTime: c.returnTime,
+      is6Hours: c.is6Hours
     }));
-    await setDoc(doc(db, 'thuedo_cloud_data', 'contracts'), {
+    await setDoc(doc(db, 'caos_cloud_data', 'contracts'), {
       data: JSON.stringify(lightweight),
       updatedAt: new Date().toISOString()
     });
@@ -449,3 +406,4 @@ export async function syncContractsToCloud(contracts: any[]): Promise<void> {
     console.warn('Sync contracts to cloud doc failed:', err);
   }
 }
+

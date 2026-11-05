@@ -275,11 +275,11 @@ export default function RentalFrequencyChart({
       {/* Header element */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="space-y-0.5">
-          <h3 className="text-sm sm:text-base font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-            <TrendingUp className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-orange-600 shrink-0" /> Tần Suất Thuê Trang Phục (30 Ngày Qua)
+          <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
+            <TrendingUp className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-orange-600 shrink-0" /> Tần Suất Thuê Thiết Bị Trong Tháng
           </h3>
-          <p className="text-[11px] sm:text-xs text-gray-500 leading-normal">
-            Phân tích số lượt thuê trang phục từ <span className="font-bold text-gray-700">{dateRangeLabel}</span>
+          <p className="text-xs text-gray-500 leading-normal">
+            Phân tích số lượt thuê thiết bị từ <span className="font-bold text-gray-700">{dateRangeLabel}</span>
           </p>
         </div>
         <div className="bg-orange-50/70 border border-orange-100 px-3 py-1.5 rounded-xl flex items-center gap-1.5 self-start sm:self-auto shadow-3xs">
@@ -322,12 +322,9 @@ export default function RentalFrequencyChart({
                   {tooltip.data.name}
                 </span>
                 <span className="text-[9px] text-slate-300 font-bold bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
-                  {tooltip.data.category === 'Váy cưới' ? 'Váy cưới' :
-                   tooltip.data.category === 'Vest' ? 'Vest/Suit' :
-                   tooltip.data.category === 'Áo dài' ? 'Áo dài' :
-                   tooltip.data.category === 'Concept' ? 'Cổ phục / Concept' :
-                   tooltip.data.category === 'Dạ hội' ? 'Đầm dạ hội' :
-                   tooltip.data.category === 'Phụ kiện' ? 'Phụ kiện' : tooltip.data.category}
+                  {tooltip.data.category === 'Body' ? 'Thân máy' :
+                   tooltip.data.category === 'Lens' ? 'Ống kính' :
+                   tooltip.data.category === 'Combo' ? 'Bộ máy' : 'Phụ kiện'}
                 </span>
               </div>
               <h4 className="font-bold text-xs leading-relaxed text-slate-100">

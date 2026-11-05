@@ -47,11 +47,13 @@ export function getCameraRateForDuration(camera: Camera, days: number, is6Hours?
  */
 export function getInitialTieredPrices(dailyRate: number) {
   const p1 = dailyRate;
+  const p6h = Math.round((p1 * 0.7) / 10000) * 10000;
   const p2_daily = Math.max(0, p1 - 30000);
   const p4_daily = Math.max(0, p1 - 40000);
   const p3_daily = p4_daily;
 
   return {
+    price6Hours: p6h,
     price1Day: p1,
     price2Days: (p1 + p2_daily) / 2,
     price3Days: (p1 + p2_daily + p3_daily) / 3,
@@ -89,8 +91,8 @@ export function checkBookingConflict(
   selectedCameraIds: string[],
   startDate: string,
   endDate: string,
-  is6Hours: boolean = false,
-  existingContracts: any[] = [],
+  is6Hours: boolean,
+  existingContracts: any[],
   ignoreContractId?: string,
   startTime?: string,
   returnTime?: string
@@ -126,12 +128,12 @@ export function checkBookingConflict(
       const overlapDate = candidateDates.find(d => existingDates.includes(d));
       if (overlapDate) {
         const item = contract.items.find((i: any) => i.cameraId === cameraId);
-        const name = item ? item.cameraName : 'Trang phục';
+        const name = item ? item.cameraName : 'Thiết bị';
         
         if (is6Hours && !contract.is6Hours) {
           return {
             hasConflict: true,
-            message: `Trùng lịch: Trang phục "${name}" đã có hợp đồng thuê cả ngày/nhiều ngày vào ngày ${overlapDate}. Không được phép đặt thêm lịch thuê 6 tiếng!`
+            message: `Trùng lịch: Thiết bị "${name}" đã có hợp đồng thuê cả ngày/nhiều ngày vào ngày ${overlapDate}. Không được phép đặt thêm lịch thuê 6 tiếng!`
           };
         }
         if (!is6Hours && contract.is6Hours) {
@@ -139,13 +141,13 @@ export function checkBookingConflict(
           const exEnd = contract.returnTime || '14:00';
           return {
             hasConflict: true,
-            message: `Trùng lịch: Trang phục "${name}" đã có hợp đồng thuê 6 tiếng (${exStart} - ${exEnd}) vào ngày ${overlapDate}. Không được phép đặt thêm lịch thuê cả ngày!`
+            message: `Trùng lịch: Thiết bị "${name}" đã có hợp đồng thuê 6 tiếng (${exStart} - ${exEnd}) vào ngày ${overlapDate}. Không được phép đặt thêm lịch thuê cả ngày!`
           };
         }
         if (!is6Hours && !contract.is6Hours) {
           return {
             hasConflict: true,
-            message: `Trùng lịch: Trang phục "${name}" đã có lịch thuê cả ngày/nhiều ngày vào ngày ${overlapDate}. Không thể đặt trùng!`
+            message: `Trùng lịch: Thiết bị "${name}" đã có lịch thuê cả ngày/nhiều ngày vào ngày ${overlapDate}. Không thể đặt trùng!`
           };
         }
         if (is6Hours && contract.is6Hours) {
@@ -170,7 +172,7 @@ export function checkBookingConflict(
             const curEnd = returnTime || '14:00';
             return {
               hasConflict: true,
-              message: `Trùng giờ thuê 6 tiếng: Trang phục "${name}" đã có khách đặt từ ${exStart} đến ${exEnd} vào ngày ${overlapDate}. Khung giờ bạn chọn (${curStart} - ${curEnd}) bị trùng lặp thời gian!`
+              message: `Trùng giờ thuê 6 tiếng: Thiết bị "${name}" đã có khách đặt từ ${exStart} đến ${exEnd} vào ngày ${overlapDate}. Khung giờ bạn chọn (${curStart} - ${curEnd}) bị trùng lặp thời gian!`
             };
           }
           // Nếu không trùng giờ (ví dụ: Khách 1 thuê 08:00 - 14:00, Khách 2 thuê 14:00 - 20:00 hoặc 15:00 - 21:00) -> HỢP LỆ! Không báo lỗi.
@@ -205,4 +207,3 @@ export function getPrintPrice(
   }
   return { unitPrice: p1, totalPrice: p1 * c, tierLabel: '1-2 tấm' };
 }
-

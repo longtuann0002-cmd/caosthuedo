@@ -50,7 +50,6 @@ import {
   broadcastToAllDevices,
   FirebaseConfig
 } from '../utils/firebasePush';
-import { registerAppleWebPushSubscription } from '../utils/appleWebPush';
 
 interface NotificationCenterProps {
   contracts: RentalContract[];
@@ -144,8 +143,8 @@ export default function NotificationCenter({
           id: `handover-${c.id}`,
           type: 'handover',
           contract: c,
-          title: `Bàn giao trang phục cho ${c.customerName}`,
-          description: `Bắt đầu hợp đồng ${c.contractCode}. Gồm ${c.items.length} trang phục.`,
+          title: `Bàn giao thiết bị cho ${c.customerName}`,
+          description: `Bắt đầu hợp đồng ${c.contractCode}. Gồm ${c.items.length} thiết bị.`,
           badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
           badgeText: 'Cần bàn giao'
         });
@@ -157,7 +156,7 @@ export default function NotificationCenter({
           id: `return-${c.id}`,
           type: 'return',
           contract: c,
-          title: `Thu hồi trang phục từ ${c.customerName}`,
+          title: `Thu hồi thiết bị từ ${c.customerName}`,
           description: `Hợp đồng ${c.contractCode} kết thúc hôm nay.`,
           badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
           badgeText: 'Tới hạn thu hồi'
@@ -186,7 +185,7 @@ export default function NotificationCenter({
           type: 'upcoming',
           contract: c,
           title: `Lịch sắp thuê ngày mai: ${c.customerName}`,
-          description: `Khách bắt đầu thuê ngày mai (${tomorrowDate}). Gói gồm ${c.items.length} trang phục.`,
+          description: `Khách bắt đầu thuê ngày mai (${tomorrowDate}). Gói gồm ${c.items.length} thiết bị.`,
           badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
           badgeText: 'Sắp thuê (Ngày mai)'
         });
@@ -229,7 +228,6 @@ export default function NotificationCenter({
       setPushPermission('granted');
       setShowIPhoneGuide(false);
       await registerDeviceFCMToken().catch(() => {});
-      await registerAppleWebPushSubscription().catch(() => {});
       updateAppBadge(1);
       await sendTestNotification();
     } else {
@@ -290,46 +288,16 @@ export default function NotificationCenter({
   const handleGetFCMToken = async () => {
     setIsGettingToken(true);
     setPushErrorMessage('');
-    const [res] = await Promise.all([
-      registerDeviceFCMToken(),
-      registerAppleWebPushSubscription().catch(() => {})
-    ]);
+    const res = await registerDeviceFCMToken();
     setIsGettingToken(false);
-    if (res && res.success && res.token) {
+    if (res.success && res.token) {
       setFcmToken(res.token);
-      setToastMessage('Đã đăng ký thiết bị thành công vào hệ thống nhận tin màn hình khóa!');
+      setToastMessage('Đã đăng ký Token thiết bị thành công vào hệ thống thông báo đa máy!');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
-    } else if (res && res.error) {
+    } else if (res.error) {
       setPushErrorMessage(res.error);
     }
-  };
-
-  const [isTestingServerPush, setIsTestingServerPush] = useState(false);
-  const handleTestServerPush = async () => {
-    setIsTestingServerPush(true);
-    try {
-      const res = await fetch('/api/send-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: '🧾 Tiệm Nhà Caos - Thử màn hình khóa',
-          body: 'Thông báo đánh thức iPhone khi tắt màn hình đã hoạt động hoàn hảo! 🎉',
-          data: { type: 'test' }
-        })
-      });
-      const data = await res.json();
-      if (data.delivered > 0) {
-        setToastMessage(`✅ Đã gửi tín hiệu tới ${data.delivered} thiết bị! Bạn có thể khóa màn hình iPhone để xem nhé.`);
-      } else {
-        setToastMessage(data.message || 'Chưa tìm thấy thiết bị nào đăng ký.');
-      }
-    } catch (e: any) {
-      setToastMessage('Lỗi gửi push: ' + e.message);
-    }
-    setShowToast(true);
-    setIsTestingServerPush(false);
-    setTimeout(() => setShowToast(false), 5000);
   };
 
   const handleBroadcastTest = async () => {
@@ -359,7 +327,7 @@ export default function NotificationCenter({
   };
 
   const executeHandover = (contractId: string) => {
-    onUpdateContractStatus(contractId, 'Active', 'Bàn giao trang phục đúng hạn ngày hiện tại.');
+    onUpdateContractStatus(contractId, 'Active', 'Bàn giao thiết bị đúng hạn ngày hiện tại.');
     setToastMessage(`Đã bàn giao và kích hoạt hợp đồng ${contracts.find(c => c.id === contractId)?.contractCode}!`);
     setShowToast(true);
     setShowToastAction(false);
@@ -375,7 +343,7 @@ export default function NotificationCenter({
   const executeReturn = (contractId: string) => {
     const contract = contracts.find(c => c.id === contractId);
     if (!contract) return;
-    onUpdateContractStatus(contractId, 'Completed', 'Đã thu hồi trang phục đầy đủ, tất toán và chuyển giặt hấp.', contract.totalPrice);
+    onUpdateContractStatus(contractId, 'Completed', 'Đã thu hồi máy đầy đủ & nghiệm thu hợp đồng.', contract.totalPrice);
     setToastMessage(`Hợp đồng ${contract.contractCode} đã hoàn tất thành công!`);
     setShowToast(true);
     setShowToastAction(false);
@@ -666,22 +634,18 @@ export default function NotificationCenter({
                           {/* Items details list */}
                           <div className="mt-2 bg-gray-50 rounded-lg p-2.5 border border-gray-200/60 space-y-1">
                             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
-                              Trang phục yêu cầu:
+                              Thiết bị yêu cầu:
                             </div>
-                            {c.items.map((it, idx) => {
-                              const isPrinter = it.cameraName?.toLowerCase().includes('in ảnh') || it.cameraName?.toLowerCase().includes('máy in');
-                              return (
-                                <div key={idx} className="flex justify-between items-center text-xs">
-                                  <span className="font-medium text-gray-700 truncate max-w-[280px] flex items-center gap-1.5">
-                                    <span className="shrink-0">{isPrinter ? '🖨️' : '👗'}</span>
-                                    <span className="truncate">{it.cameraName}</span>
-                                  </span>
-                                  <span className="font-mono text-gray-500 text-[10px] shrink-0 ml-2">
-                                    ({it.quantity} chiếc) • {Math.round(it.dailyRate).toLocaleString()}đ/ngày
-                                  </span>
-                                </div>
-                              );
-                            })}
+                            {c.items.map((it, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-xs">
+                                <span className="font-medium text-gray-700 truncate max-w-[280px]">
+                                  📷 {it.cameraName}
+                                </span>
+                                <span className="font-mono text-gray-500 text-[10px]">
+                                  ({it.quantity} chiếc) • {Math.round(it.dailyRate).toLocaleString()}đ/ngày
+                                </span>
+                              </div>
+                            ))}
                           </div>
 
                           {/* Customer / Deposit meta details */}
@@ -755,19 +719,19 @@ export default function NotificationCenter({
                                 className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition shadow-2xs cursor-pointer w-full sm:w-auto"
                               >
                                 <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                                Xử lý trả đồ & Chuyển giặt
+                                Xử lý trả máy & Hoàn tất
                               </button>
                             )}
                             
                             {item.type === 'upcoming' && (
                               <div className="text-[11px] text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-semibold flex items-center gap-1.5 w-full sm:w-auto">
-                                <Clock className="w-3.5 h-3.5 shrink-0 text-amber-550 animate-pulse" /> Sắp đến hạn thuê ngày mai - Hãy chuẩn bị & là ủi sẵn sàng trang phục!
+                                <Clock className="w-3.5 h-3.5 shrink-0 text-amber-550 animate-pulse" /> Sắp đến hạn thuê ngày mai - Hãy sạc pin & chuẩn bị sẵn sàng thiết bị!
                               </div>
                             )}
 
                             {/* Direct Note addition details */}
                             <div className="text-[10px] text-gray-400 font-medium italic self-start sm:self-center">
-                              * Thao tác sẽ cập nhật trạng thái trang phục tự động.
+                              * Thao tác sẽ cập nhật trạng thái thiết bị tự động.
                             </div>
                           </div>
                         </div>
@@ -788,11 +752,11 @@ export default function NotificationCenter({
                   <span className="p-2 bg-indigo-50 rounded-xl">
                     <CheckCircle className="w-6 h-6 text-indigo-600" />
                   </span>
-                  <h3 className="font-bold text-lg text-gray-900 font-display">Bàn giao trang phục thuê</h3>
+                  <h3 className="font-bold text-lg text-gray-900 font-display">Bàn giao thiết bị thuê</h3>
                 </div>
                 
                 <p className="text-sm text-gray-650 leading-relaxed">
-                  Xác nhận bàn giao trang phục và kích hoạt hợp đồng <strong>{contracts.find(c => c.id === confirmHandoverId)?.contractCode}</strong> sang trạng thái <strong>ĐANG THUÊ (Active)</strong>?
+                  Xác nhận bàn giao thiết bị và kích hoạt hợp đồng <strong>{contracts.find(c => c.id === confirmHandoverId)?.contractCode}</strong> sang trạng thái <strong>ĐANG THUÊ (Active)</strong>?
                 </p>
 
                 <div className="flex justify-end gap-3 pt-2">
@@ -827,11 +791,11 @@ export default function NotificationCenter({
                     <span className="p-2 bg-emerald-50 rounded-xl">
                       <CheckCircle className="w-6 h-6 text-emerald-600" />
                     </span>
-                    <h3 className="font-bold text-lg text-gray-900 font-display">Nhận lại đồ & Tất toán (Chuyển giặt)</h3>
+                    <h3 className="font-bold text-lg text-gray-900 font-display">Nhận lại máy & Tất toán</h3>
                   </div>
                   
                   <div className="space-y-2 text-sm text-gray-650 leading-relaxed">
-                    <p>Xác nhận đã nhận đủ trang phục nguyên vẹn từ khách hàng <strong>{contract.customerName}</strong> và thu hồi hợp đồng?</p>
+                    <p>Xác nhận đã nhận đủ thiết bị nguyên vẹn từ khách hàng <strong>{contract.customerName}</strong> và thu hồi hợp đồng?</p>
                     <div className="bg-gray-50 border border-gray-200/50 p-3 rounded-xl space-y-1.5 font-sans font-medium text-xs mt-2">
                       <div className="flex justify-between">
                         <span className="text-gray-550">Mã đơn hàng:</span>
@@ -994,17 +958,6 @@ export default function NotificationCenter({
                       <span>{broadcastSent ? 'Đã bắn tín hiệu!' : 'Bắn thử TẤT CẢ máy'}</span>
                     </button>
                   </div>
-
-                  {/* Nút test nảy màn hình khóa trực tiếp từ máy chủ Apple Push */}
-                  <button
-                    type="button"
-                    onClick={handleTestServerPush}
-                    disabled={isTestingServerPush}
-                    className="w-full py-2 px-3 rounded-xl border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800 text-[11px] font-black transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 shadow-3xs"
-                  >
-                    <Smartphone className={`w-3.5 h-3.5 text-emerald-700 ${isTestingServerPush ? 'animate-spin' : ''}`} />
-                    <span>{isTestingServerPush ? 'Đang gửi qua máy chủ...' : '🚀 Bắn thử màn hình khóa iPhone (qua máy chủ Apple)'}</span>
-                  </button>
 
                   {/* App Icon Badge Test Area */}
                   <div className="p-2 bg-rose-50/60 border border-rose-200/80 rounded-xl flex items-center justify-between gap-2">

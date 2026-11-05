@@ -323,7 +323,7 @@ export default function CustomerManager({
       'Địa Chỉ',
       'Số Giấy Tờ (CCCD/ID)',
       'Hạng Tin Cậy',
-      'Số Lần Thuê Trang Phục',
+      'Số Lần Thuê Máy',
       'Ghi Chú Chi Tiết',
       'Tổng Doanh Số Tích Lũy (VND)',
       'Ngày Khởi Tạo'
@@ -366,26 +366,26 @@ export default function CustomerManager({
       <div className="bg-white border border-gray-150 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 shadow-xs space-y-3 sm:space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
           <div className="space-y-1">
-            <h2 className="text-[15px] sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
-              <User className="text-orange-600 w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" /> Quản Lý Khách Hàng Thuê Trang Phục
+            <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2 select-none">
+              <User className="text-orange-600 w-4.5 h-4.5 sm:w-5 sm:h-5 shrink-0" /> Quản Lý Khách Hàng Thuê Máy
             </h2>
-            <p className="text-[11.5px] sm:text-xs text-gray-500 leading-normal">
+            <p className="text-xs text-gray-500 leading-normal">
               Tra cứu hồ sơ khách hàng, kiểm soát dư nợ chưa thu và xếp hạng độ tin cậy.
             </p>
           </div>
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
             <button
               onClick={handleExportCSV}
-              className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-slate-100 transition-all cursor-pointer shadow-3xs"
+              className="bg-slate-50 border border-gray-200 text-gray-700 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-slate-100 transition-all cursor-pointer shadow-3xs"
               title="Xuất định dạng CSV tải về"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" /> Xuất CSV
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" /> Xuất CSV
             </button>
             <button
               onClick={handleOpenAddModal}
-              className="bg-orange-600 text-white font-bold px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-3xs"
+              className="bg-orange-600 text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-orange-700 transition-all cursor-pointer shadow-3xs"
             >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Thêm khách
+              <Plus className="w-4 h-4 shrink-0" /> Thêm khách
             </button>
           </div>
         </div>
@@ -414,14 +414,14 @@ export default function CustomerManager({
             </button>
           </div>
 
-          {/* Card 2: Chưa Thanh Toán Cọc 50% Giữ Đồ */}
+          {/* Card 2: Chưa Thanh Toán Cọc 50% Giữ Máy */}
           <div className="bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-3xs">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="p-2 sm:p-2.5 bg-amber-200/80 text-amber-800 rounded-xl shrink-0">
                 <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
               </div>
               <div className="min-w-0">
-                <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">Chưa Cọc 50% Giữ Đồ</span>
+                <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">Chưa Cọc 50% Giữ Máy</span>
                 <span className="font-mono text-base sm:text-lg font-black text-amber-700 block truncate mt-0.5">
                   {overallPendingDeposit.toLocaleString()} đ
                 </span>
@@ -442,22 +442,22 @@ export default function CustomerManager({
           <div className="flex flex-col md:flex-row items-stretch gap-2">
             {/* Search Box */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <Search className="absolute left-3 top-2.5 sm:top-3 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 placeholder="Tìm theo tên, SĐT, số CCCD, trang liên kết..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="pl-8.5 pr-8 py-1.5 sm:py-2 text-[11px] sm:text-xs font-normal w-full border border-gray-200 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80 bg-white"
+                className="pl-9 pr-8 py-2 text-xs sm:text-sm w-full border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer text-xs"
+                  className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
                   title="Xóa tìm kiếm"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -467,12 +467,12 @@ export default function CustomerManager({
               {/* Sort Dropdown */}
               <div className="relative flex-1 md:w-52">
                 <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
-                  <ArrowUpDown className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <ArrowUpDown className="w-3.5 h-3.5" />
                 </div>
                 <select
                   value={sortBy}
                   onChange={e => setSortBy(e.target.value as CustomerSortOption)}
-                  className="w-full pl-7 sm:pl-7.5 pr-5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+                  className="w-full pl-8 pr-6 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-gray-50 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate"
                   title="Sắp xếp danh sách khách hàng"
                 >
                   <option value="RENTAL_DESC">Thuê nhiều nhất</option>
@@ -485,7 +485,7 @@ export default function CustomerManager({
                   <option value="NAME_DESC">Tên Z → A</option>
                   <option value="TRUST_HIGH_FIRST">Độ tin cậy cao</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-1.5 sm:pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">
+                <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[9px]">
                   ▼
                 </div>
               </div>
@@ -493,12 +493,12 @@ export default function CustomerManager({
               {/* Trust Filter */}
               <div className="relative flex-1 md:w-44">
                 <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-emerald-600">
-                  <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <Shield className="w-3.5 h-3.5" />
                 </div>
                 <select
                   value={trustFilter}
                   onChange={e => setTrustFilter(e.target.value as any)}
-                  className="w-full pl-7 sm:pl-7.5 pr-5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+                  className="w-full pl-8 pr-6 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-gray-50 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate"
                   title="Lọc theo mức độ tin cậy"
                 >
                   <option value="ALL">Tất cả mức độ</option>
@@ -506,7 +506,7 @@ export default function CustomerManager({
                   <option value="Medium">● Mức chuẩn</option>
                   <option value="Low">▲ Cần cẩn thận</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-1.5 sm:pr-2 flex items-center pointer-events-none text-gray-400 text-[8px] sm:text-[9px]">
+                <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[9px]">
                   ▼
                 </div>
               </div>
@@ -944,7 +944,7 @@ export default function CustomerManager({
                   value={formState.notes}
                   onChange={e => setFormState({ ...formState, notes: e.target.value })}
                   className="w-full border border-gray-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono text-xs"
-                  placeholder="Ví dụ: Khách hàng quen thích lấy đồ sớm lúc 7h sáng, giữ váy áo cẩn thận."
+                  placeholder="Ví dụ: Khách hàng quen thích lấy máy sớm lúc 7h sáng, giữ máy cẩn thận."
                   rows={3}
                 />
               </div>
@@ -1196,7 +1196,7 @@ export default function CustomerManager({
 
                     {displayContracts.length === 0 ? (
                       <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-400 font-medium italic text-xs">
-                        Khách hàng này chưa phát sinh hợp đồng thuê trang phục nào trong hệ thống.
+                        Khách hàng này chưa phát sinh hợp đồng thuê máy nào trong hệ thống.
                       </div>
                     ) : (
                       <div className="space-y-2.5">
@@ -1253,29 +1253,32 @@ export default function CustomerManager({
                                 <div className="bg-slate-50 p-2 rounded-lg border border-gray-200">
                                   <div className="text-gray-400 font-bold text-[10px] uppercase">Thời hạn:</div>
                                   <div className="font-mono text-gray-800 font-bold mt-0.5">
-                                    📅 {formatDMY(contract.startDate)} đến {formatDMY(contract.endDate)}
+                                    📅 {formatDMY(contract.startDate)} {contract.is6Hours ? '' : `đến ${formatDMY(contract.endDate)}`}
                                   </div>
                                 </div>
                                 <div className="bg-slate-50 p-2 rounded-lg border border-gray-200">
-                                  <div className="text-gray-400 font-bold text-[10px] uppercase">Thời hạn thuê:</div>
+                                  <div className="text-gray-400 font-bold text-[10px] uppercase">Hình thức:</div>
                                   <div className="font-bold text-gray-800 mt-0.5">
-                                    {calculatedDays} ngày ({calculatedDays} đêm)
+                                    {contract.is6Hours 
+                                      ? `Gói ngắn hạn 6 giờ (Trả trước ${contract.returnTime || '18:00'})` 
+                                      : `${calculatedDays} ngày (${calculatedDays} đêm)`
+                                    }
                                   </div>
                                 </div>
                               </div>
 
                               {/* Contract items */}
                               <div className="space-y-1">
-                                <div className="text-[10.5px] font-extrabold text-gray-400 uppercase tracking-wider">Trang phục thuê:</div>
+                                <div className="text-[10.5px] font-extrabold text-gray-400 uppercase tracking-wider">Thiết bị thuê:</div>
                                 <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100 bg-white">
                                   {contract.items.map((item, id) => (
                                     <div key={id} className="flex justify-between items-center p-2 text-xs hover:bg-slate-50/50 gap-2">
                                       <div className="font-bold text-gray-800 flex items-center gap-1.5 font-sans truncate min-w-0">
-                                        <span className="text-orange-500 shrink-0">✨</span>
+                                        <span className="text-orange-500 shrink-0">📷</span>
                                         <span className="truncate">{item.cameraName}</span>
                                       </div>
                                       <div className="text-right font-mono text-gray-600 font-medium shrink-0 text-[11px] sm:text-xs">
-                                        ({item.quantity}c) • {Math.round(item.dailyRate).toLocaleString()} đ/ngày
+                                        ({item.quantity}c) • {Math.round(item.dailyRate).toLocaleString()} đ {contract.is6Hours ? '/6h' : '/ngày'}
                                       </div>
                                     </div>
                                   ))}

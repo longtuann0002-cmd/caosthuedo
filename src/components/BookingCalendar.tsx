@@ -2,14 +2,13 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, RentalContract, BankConfig, Customer } from '../types';
 import MoneyInput from './MoneyInput';
-import { DressIcon } from './DressIcon';
-import { Plus, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Camera as CameraIcon, AlertTriangle, CheckCircle, Info, Trash2, CreditCard, Settings, Phone, Copy, Sparkles, Clock, User, Filter, Eye, Image as ImageIcon, FileText, Zap, Edit2, X, Save, Check, ShieldAlert, Printer } from 'lucide-react';
+import { Plus, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Camera as CameraIcon, AlertTriangle, CheckCircle, Info, Trash2, CreditCard, Settings, Phone, Copy, Sparkles, Clock, User, Filter, Eye, Image as ImageIcon, FileText, Zap, Edit2, X, Save, Check } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { getCameraRateForDuration, checkBookingConflict, getPrintPrice } from '../utils/pricing';
+import { getCameraRateForDuration, checkBookingConflict, add6Hours, getPrintPrice } from '../utils/pricing';
 import { loadStoredData, saveStoredData } from '../utils/mockData';
 import { isSupabaseConfigured, syncToSupabase, fetchFromSupabase } from '../utils/supabase';
 import { formatDMY } from '../utils/dateUtils';
-import { VIET_BANKS, getBankBin, QrDisplay, DEFAULT_RENTAL_TERMS } from './ContractManager';
+import { VIET_BANKS, getBankBin, QrDisplay } from './ContractManager';
 import { useScrollLock } from '../utils/useScrollLock';
 import { generateNextContractCode } from '../utils/contractUtils';
 
@@ -72,14 +71,6 @@ interface BookingCalendarProps {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
   systemDate: string;
-  initialBookingIntent?: {
-    startDate?: string;
-    endDate?: string;
-    selectedCameraIds?: string[];
-    is6Hours?: boolean;
-    note?: string;
-  } | null;
-  onClearBookingIntent?: () => void;
 }
 
 export default function BookingCalendar({
@@ -90,9 +81,7 @@ export default function BookingCalendar({
   onDeleteContract,
   selectedDate,
   setSelectedDate,
-  systemDate,
-  initialBookingIntent,
-  onClearBookingIntent
+  systemDate
 }: BookingCalendarProps) {
   // Calendar focuses on a target year and month. Initialize to match selectedDate (closest booking on startup)
   const [currentYear, setCurrentYear] = useState<number>(() => {
@@ -103,57 +92,23 @@ export default function BookingCalendar({
     const parts = selectedDate.split('-');
     return parts[1] ? parseInt(parts[1]) : 5;
   }); // 1-indexed
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'timeline'>('month');
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
   const [showAddQuickModal, setShowAddQuickModal] = useState(false);
   const [hideCustomerSuggestions, setHideCustomerSuggestions] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [customAlertMessage, setCustomAlertMessage] = useState<string | null>(null);
   const [selectedCameraFilter, setSelectedCameraFilter] = useState<string>('ALL');
-          const [quickOutfitSearch, setQuickOutfitSearch] = useState<string>('');
-  const [quickSizeFilter, setQuickSizeFilter] = useState<string>('ALL');
-  const [quickAvailabilityFilter, setQuickAvailabilityFilter] = useState<'ALL' | 'READY' | 'BUSY'>('ALL');
-  const [mobileDetailDate, setMobileDetailDate] = useState<string | null>(null);
-  const [showOnlySelected, setShowOnlySelected] = useState<boolean>(false);
 
   // Tự động hủy lọc nếu thiết bị đang chọn lọc bị chuyển sang trạng thái bảo trì
   useEffect(() => {
     if (selectedCameraFilter !== 'ALL') {
-      const exists = cameras.some(c => c.status !== 'Maintenance' && c.id === selectedCameraFilter);
+      const exists = cameras.some(c => c.status !== 'Maintenance' && c.shortName === selectedCameraFilter);
       if (!exists) {
         setSelectedCameraFilter('ALL');
       }
     }
   }, [cameras, selectedCameraFilter]);
-
-  // Handle booking intent (e.g. from global search modal "+ Đặt lịch")
-  useEffect(() => {
-    if (!initialBookingIntent) return;
-    const sDate = initialBookingIntent.startDate || selectedDate || systemDate;
-    const eDate = initialBookingIntent.endDate || sDate;
-    
-    // Jump calendar view to target date
-    if (sDate) {
-      setSelectedDate(sDate);
-      const parts = sDate.split('-');
-      if (parts[0]) setCurrentYear(parseInt(parts[0]));
-      if (parts[1]) setCurrentMonth(parseInt(parts[1]));
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      startDate: sDate,
-      endDate: eDate,
-      selectedCameraIds: initialBookingIntent.selectedCameraIds || [],
-      note: initialBookingIntent.note || prev.note || ''
-    }));
-
-    setShowAddQuickModal(true);
-
-    if (onClearBookingIntent) {
-      onClearBookingIntent();
-    }
-  }, [initialBookingIntent, selectedDate, systemDate, setSelectedDate, onClearBookingIntent]);
 
   const goToToday = () => {
     const today = systemDate || new Date().toISOString().split('T')[0];
@@ -162,13 +117,6 @@ export default function BookingCalendar({
     setCurrentYear(parseInt(parts[0]));
     setCurrentMonth(parseInt(parts[1]));
   };
-
-  // State for customizable rental terms
-  const [rentalTerms, setRentalTerms] = useState<string>(() => {
-    return localStorage.getItem('shop_rental_terms') || DEFAULT_RENTAL_TERMS;
-  });
-  const [editingTerms, setEditingTerms] = useState(false);
-  const [termsDraft, setTermsDraft] = useState('');
 
   // Helper to read custom QR image safely (handles plain base64, data URIs, or JSON-encoded strings)
   const getStoredCustomQr = (): string => {
@@ -303,81 +251,37 @@ export default function BookingCalendar({
   };
   
   // For quick booking form
-  const DRAFT_KEY_BOOKING = 'thuedo_booking_form_draft';
-  const [formData, setFormData] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem(DRAFT_KEY_BOOKING);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && (parsed.customerName || parsed.selectedCameraIds?.length)) {
-          return parsed;
-        }
-      }
-    } catch {}
-    return {
-      customerId: '',
-      customerName: '',
-      customerPhone: '',
-      customerDocType: 'CCCD' as const,
-      customerDocNote: '',
-      selectedCameraIds: [] as string[],
-      printCounts: {} as Record<string, number>,
-      startDate: '',
-      endDate: '',
-      depositAmount: 0,
-      paidAmount: 0,
-      discountPercent: 0, // Tỷ lệ tự giảm giá (%)
-      itemDiscounts: {} as Record<string, number>, // Giảm giá riêng cho từng món: { [cameraId]: discountPercent (0-100) }
-      customFinalPrice: null as number | null,
-      note: '',
-    };
+  const [formData, setFormData] = useState({
+    customerId: '',
+    customerName: '',
+    customerPhone: '',
+    customerDocType: 'CCCD_And_1M' as const,
+    customerDocNote: '',
+    selectedCameraIds: [] as string[],
+    printCounts: {} as Record<string, number>,
+    startDate: '',
+    endDate: '',
+    is6Hours: false,
+    startTime: '08:00',
+    returnTime: '14:00',
+    depositAmount: 1000000,
+    paidAmount: 0,
+    discountPercent: 0, // Tỷ lệ tự giảm giá (%)
+    customFinalPrice: null as number | null,
+    note: '',
   });
 
   const [prevCalculatedTotal, setPrevCalculatedTotal] = useState(0);
-  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
   const quickDocNoteInputRef = useRef<HTMLInputElement>(null);
-  const outfitListScrollRef = useRef<HTMLDivElement>(null);
-
-  // Đóng modal và xóa draft + reset form (không lưu nháp khi thoát không submit)
-  const handleCloseQuickModal = () => {
-    try { sessionStorage.removeItem(DRAFT_KEY_BOOKING); } catch {}
-    setFormData({
-      customerId: '',
-      customerName: '',
-      customerPhone: '',
-      customerDocType: 'CCCD',
-      customerDocNote: '',
-      selectedCameraIds: [],
-      printCounts: {},
-      startDate: '',
-      endDate: '',
-      depositAmount: 0,
-      paidAmount: 0,
-      discountPercent: 0,
-      itemDiscounts: {},
-      customFinalPrice: null,
-      note: '',
-    });
-    setShowAddQuickModal(false);
-    setShowOnlySelected(false);
-  };
-
-  // Auto-save draft form to sessionStorage so switching tabs doesn't lose data
-  useEffect(() => {
-    if (!showAddQuickModal) return;
-    const hasData = formData.customerName || formData.customerPhone || formData.selectedCameraIds.length > 0 || formData.note;
-    if (hasData) {
-      try { sessionStorage.setItem(DRAFT_KEY_BOOKING, JSON.stringify(formData)); } catch {}
-    }
-  }, [formData, showAddQuickModal]);
 
   const calculatedDays = useMemo(() => {
+    if (formData.is6Hours) return 1;
     if (!formData.startDate || !formData.endDate) return 0;
     const start = new Date(formData.startDate);
     const end = new Date(formData.endDate);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
     return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-  }, [formData.startDate, formData.endDate]);
+  }, [formData.startDate, formData.endDate, formData.is6Hours]);
 
   const totalBeforeDiscount = useMemo(() => {
     let regularDailyTotal = 0;
@@ -386,22 +290,18 @@ export default function BookingCalendar({
     formData.selectedCameraIds.forEach(id => {
       const cam = cameras.find(c => c.id === id);
       if (!cam) return;
-      const itemDisc = formData.itemDiscounts?.[id] || 0;
-      const discMultiplier = Math.max(0, 1 - itemDisc / 100);
-
       if (cam.category === 'Printer' || cam.isPrinter) {
         const prints = formData.printCounts?.[id] || 5;
         const { totalPrice } = getPrintPrice(cam, prints);
-        printerTotal += Math.round(totalPrice * discMultiplier);
+        printerTotal += totalPrice;
       } else {
-        const baseRate = getCameraRateForDuration(cam, calculatedDays);
-        regularDailyTotal += Math.round(baseRate * discMultiplier);
+        regularDailyTotal += getCameraRateForDuration(cam, calculatedDays, formData.is6Hours);
       }
     });
 
-    const camerasCost = regularDailyTotal * calculatedDays;
+    const camerasCost = formData.is6Hours ? regularDailyTotal : regularDailyTotal * calculatedDays;
     return camerasCost + printerTotal;
-  }, [formData.selectedCameraIds, formData.printCounts, formData.itemDiscounts, calculatedDays, cameras]);
+  }, [formData.selectedCameraIds, formData.printCounts, calculatedDays, formData.is6Hours, cameras]);
 
   const calculatedTotal = useMemo(() => {
     if (formData.customFinalPrice !== null && formData.customFinalPrice !== undefined) {
@@ -438,21 +338,44 @@ export default function BookingCalendar({
     }
   }, [calculatedRecommendedDeposit, prevRecommendedDeposit, formData.depositAmount, formData.customerDocType]);
 
-  // Synchronize dynamic reservation deposit tracking
+  // Synchronize dynamic reservation deposit value, defaulting to exactly 50% of calculated total price
   useEffect(() => {
     if (calculatedTotal !== prevCalculatedTotal) {
+      const prevHalfPrice = Math.round(prevCalculatedTotal * 0.5);
+      if (prevCalculatedTotal === 0 || formData.paidAmount === prevHalfPrice) {
+        setFormData(prev => ({
+          ...prev,
+          paidAmount: Math.round(calculatedTotal * 0.5)
+        }));
+      }
       setPrevCalculatedTotal(calculatedTotal);
     }
-  }, [calculatedTotal, prevCalculatedTotal]);
+  }, [calculatedTotal, prevCalculatedTotal, formData.paidAmount]);
 
   // Calculate grid info for the rendered month OR week (T2 đầu tuần, CN cuối tuần)
   const calendarDays = useMemo(() => {
     if (viewMode === 'month') {
+      // Get first day of the month (Monday-first: 0 is T2, 1 is T3, ..., 6 is CN)
+      const rawFirstDayIndex = new Date(currentYear, currentMonth - 1, 1).getDay(); // 0 is CN, 1 is T2...
+      const firstDayIndex = (rawFirstDayIndex + 6) % 7; // Convert to Monday-first (T2 = 0, ..., CN = 6)
       const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+      const prevMonthDays = new Date(currentYear, currentMonth - 1, 0).getDate();
 
       const days: { day: number; isCurrentMonth: boolean; dateString: string }[] = [];
 
-      // Chỉ fill ngày của tháng hiện tại — ngày 1 luôn ở ô đầu tiên góc trái
+      // Fill previous month padding days
+      for (let i = firstDayIndex - 1; i >= 0; i--) {
+        const prevDay = prevMonthDays - i;
+        const m = currentMonth === 1 ? 12 : currentMonth - 1;
+        const y = currentMonth === 1 ? currentYear - 1 : currentYear;
+        days.push({
+          day: prevDay,
+          isCurrentMonth: false,
+          dateString: `${y}-${String(m).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`
+        });
+      }
+
+      // Fill current month days
       for (let i = 1; i <= daysInMonth; i++) {
         days.push({
           day: i,
@@ -461,7 +384,7 @@ export default function BookingCalendar({
         });
       }
 
-      // Fill next month padding days để lưới luôn tròn hàng (bội số của 7)
+      // Fill next month padding days to round up to multiple of 7 (usually 35 or 42 cells)
       const remainingCells = (7 - (days.length % 7)) % 7;
       for (let i = 1; i <= remainingCells; i++) {
         const m = currentMonth === 12 ? 1 : currentMonth + 1;
@@ -501,7 +424,7 @@ export default function BookingCalendar({
 
   // Map each calendar day to contracts
   const dayBookingsMap = useMemo(() => {
-    const map: Record<string, { contract: RentalContract; cameraId: string; cameraShort: string; cameraName: string; cleanName?: string; color?: string; category?: string; size?: string; timeString: string; printCount?: number; isPrinter?: boolean }[]> = {};
+    const map: Record<string, { contract: RentalContract; cameraShort: string; cameraName: string; timeString: string; printCount?: number; isPrinter?: boolean }[]> = {};
 
     contracts.forEach(contract => {
       if (contract.status === 'Cancelled') return;
@@ -586,17 +509,10 @@ export default function BookingCalendar({
             timeString = '00:00-08:00';
           }
 
-          const cleanName = item.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || item.cameraName;
-
           map[dateStr].push({
             contract,
-            cameraId: item.cameraId,
             cameraShort: shortName,
             cameraName: item.cameraName,
-            cleanName,
-            color: item.color || cam?.color || '',
-            category: cam?.category || 'Áo dài',
-            size: item.size || cam?.size || 'M',
             timeString,
             printCount,
             isPrinter,
@@ -611,8 +527,77 @@ export default function BookingCalendar({
     return map;
   }, [contracts, cameras]);
 
+  // Dynamic Camera Real Time Status calculation for active devices (excluding Maintenance)
+  const systemStatusInfo = useMemo(() => {
+    // Chỉ hiển thị các thiết bị không ở trạng thái bảo trì
+    const displayCams = cameras.filter(cam => cam.status !== 'Maintenance');
+    
+    // Format "08:00-14:00" -> "8h-14h" hoặc "8h30-14h30"
+    const formatHourRange = (timeStr: string) => {
+      if (!timeStr || timeStr === '00:00-00:00') return '';
+      const [start, end] = timeStr.split('-');
+      if (!start || !end) return timeStr;
+      const fmt = (t: string) => {
+        const [h, m] = t.split(':');
+        const hNum = parseInt(h, 10);
+        return (!m || m === '00') ? `${hNum}h` : `${hNum}h${m}`;
+      };
+      return `${fmt(start)}-${fmt(end)}`;
+    };
+
+    return displayCams.map(cam => {
+      const activeBookingsToday = (dayBookingsMap[selectedDate] || []).filter(b => b.cameraShort === cam.shortName);
+      const isPrinterCam = cam.category === 'Printer' || 
+                           Boolean(cam.isPrinter) || 
+                           /^(in\s*film|in\s*ảnh|máy\s*in(\s*ảnh)?)$/i.test((cam.shortName || '').trim()) || 
+                           /máy\s*in(\s*ảnh)?/i.test(cam.name || '') ||
+                           activeBookingsToday.some(b => b.isPrinter);
+      
+      let statusText = 'Còn trống cả ngày';
+      let statusColor = 'bg-emerald-50 text-emerald-800 border-emerald-300';
+      let hoursLabel = '';
+      let is6h = false;
+      let totalPrints = 0;
+      
+      if (activeBookingsToday.length > 0) {
+        if (isPrinterCam) {
+          // For printers: show total prints count
+          totalPrints = activeBookingsToday.reduce((sum, b) => sum + (b.printCount || 1), 0);
+          statusText = `In ảnh: ${totalPrints} tấm`;
+          statusColor = 'bg-rose-50 text-rose-900 border-rose-300';
+        } else {
+          const hasFullDay = activeBookingsToday.some(b => (b.timeString === '00:00-00:00' && !b.contract.is6Hours));
+          if (hasFullDay) {
+            statusText = 'Kín lịch cả ngày';
+            statusColor = 'bg-rose-50 text-rose-900 border-rose-300';
+          } else {
+            is6h = activeBookingsToday.some(b => b.contract.is6Hours);
+            const hoursList = activeBookingsToday
+              .map(b => formatHourRange(b.timeString))
+              .filter(Boolean)
+              .join(', ');
+            hoursLabel = hoursList;
+            const times = activeBookingsToday.map(b => `${b.timeString}${b.contract.is6Hours ? ' (6h)' : ''}`).join(', ');
+            statusText = `Bận giờ: ${times}`;
+            statusColor = 'bg-amber-50 text-amber-900 border-amber-300';
+          }
+        }
+      }
+
+      return {
+        ...cam,
+        statusText,
+        statusColor,
+        hoursLabel,
+        is6h,
+        isPrinterCam,
+        totalPrints
+      };
+    });
+  }, [cameras, dayBookingsMap, selectedDate]);
+
   const handlePrev = () => {
-    if (viewMode === 'month' || viewMode === 'timeline') {
+    if (viewMode === 'month') {
       if (currentMonth === 1) {
         setCurrentMonth(12);
         setCurrentYear(currentYear - 1);
@@ -632,7 +617,7 @@ export default function BookingCalendar({
   };
 
   const handleNext = () => {
-    if (viewMode === 'month' || viewMode === 'timeline') {
+    if (viewMode === 'month') {
       if (currentMonth === 12) {
         setCurrentMonth(1);
         setCurrentYear(currentYear + 1);
@@ -657,9 +642,6 @@ export default function BookingCalendar({
   // Lock body scroll whenever any modal is open to prevent background scrolling on mobile
   useScrollLock(Boolean(showAddQuickModal || quickReceiptContract || deleteConfirmId || customAlertMessage || showBankSettings));
 
-  // Detect iOS / iPhone / iPad Safari
-  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-
   const handleExportReceiptImage = async (elementId: string, filename: string) => {
     const element = document.getElementById(elementId);
     if (!element) {
@@ -668,9 +650,7 @@ export default function BookingCalendar({
     }
     
     setIsExportingReceipt(true);
-    setEditingTerms(false);
-    // iOS Safari needs extra time to render fonts and external assets
-    await new Promise(resolve => setTimeout(resolve, isIOS ? 600 : 250));
+    await new Promise(resolve => setTimeout(resolve, 250));
     
     const prevMarginLeft = element.style.marginLeft;
     const prevMarginRight = element.style.marginRight;
@@ -685,54 +665,18 @@ export default function BookingCalendar({
     element.style.maxWidth = '420px';
     
     try {
-      // iOS Safari "double-render" trick:
-      // First pass warms up the canvas (often blank on iOS),
-      // second pass produces the correct output.
-      const toPngOptions = {
+      const dataUrl = await toPng(element, {
         backgroundColor: '#ffffff',
-        pixelRatio: isIOS ? 1.5 : 2, // lower ratio on iOS to prevent memory crash
+        pixelRatio: 2,
         width: 420,
-        cacheBust: true,             // force reload cross-origin images
-      };
-
-      if (isIOS) {
-        // Warm-up pass (result discarded)
-        await toPng(element, toPngOptions).catch(() => {});
-        // Short pause for Safari to settle
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-
-      const dataUrl = await toPng(element, toPngOptions);
-
-      if (isIOS) {
-        // iOS Safari does NOT support the `download` attribute on <a> tags.
-        // Open image in a new tab — user can long-press → Save Image.
-        const newTab = window.open();
-        if (newTab) {
-          newTab.document.write(
-            `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title></head>` +
-            `<body style="margin:0;background:#111;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding-bottom:80px;">` +
-            `<div style="position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">` +
-            `<span style="color:#fff;font-family:sans-serif;font-size:13px;flex:1;">📥 Nhấn giữ ảnh bên dưới → <b>Lưu vào Ảnh</b></span>` +
-            `<button onclick="window.close()" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:14px;font-weight:bold;cursor:pointer;font-family:sans-serif;white-space:nowrap;">✕ Đóng</button>` +
-            `</div>` +
-            `<div style="margin-top:56px;width:100%;display:flex;justify-content:center;padding:16px;box-sizing:border-box;">` +
-            `<img src="${dataUrl}" style="max-width:100%;height:auto;border-radius:12px;box-shadow:0 4px 32px rgba(0,0,0,.5);" />` +
-            `</div>` +
-            `</body></html>`
-          );
-          newTab.document.close();
-        } else {
-          setCustomAlertMessage('Trình duyệt đã chặn cửa sổ. Vui lòng cho phép popup và thử lại!');
-        }
-      } else {
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      });
+      
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err) {
       console.error('Lỗi khi xuất ảnh:', err);
       setCustomAlertMessage('Không thể tạo file ảnh. Vui lòng thử lại!');
@@ -746,83 +690,22 @@ export default function BookingCalendar({
     }
   };
 
-  const handlePrintReceipt = (elementId: string) => {
-    const element = document.getElementById(elementId);
-    if (!element) {
-      setCustomAlertMessage('Không tìm thấy dữ liệu hóa đơn để in!');
-      return;
-    }
-
-    const printFrame = document.createElement('iframe');
-    printFrame.style.position = 'fixed';
-    printFrame.style.right = '0';
-    printFrame.style.bottom = '0';
-    printFrame.style.width = '0';
-    printFrame.style.height = '0';
-    printFrame.style.border = '0';
-    document.body.appendChild(printFrame);
-
-    const frameDoc = printFrame.contentWindow?.document;
-    if (!frameDoc) return;
-
-    const headContent = Array.from(document.head.querySelectorAll('link[rel="stylesheet"], style'))
-      .map(el => el.outerHTML)
-      .join('\n');
-
-    frameDoc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Hóa đơn ${quickReceiptContract?.contractCode || 'hợp đồng'}</title>
-          ${headContent}
-          <style>
-            @page { size: auto; margin: 8mm; }
-            body { 
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-              background: #fff !important; 
-              color: #000 !important;
-              padding: 0;
-              margin: 0;
-            }
-            .no-print, [data-no-export="true"], button { display: none !important; }
-            #${elementId} {
-              box-shadow: none !important;
-              border: none !important;
-              width: 100% !important;
-              max-width: 650px !important;
-              margin: 0 auto !important;
-              padding: 5px !important;
-            }
-          </style>
-        </head>
-        <body>
-          ${element.outerHTML}
-        </body>
-      </html>
-    `);
-    frameDoc.close();
-
-    setTimeout(() => {
-      printFrame.contentWindow?.focus();
-      printFrame.contentWindow?.print();
-      setTimeout(() => {
-        document.body.removeChild(printFrame);
-      }, 1000);
-    }, 400);
-  };
-
   const handleQuickBookingSubmit = (e?: React.FormEvent, exportReceiptAfterSave = false) => {
     if (e) e.preventDefault();
     if (formData.selectedCameraIds.length === 0) {
-      setCustomAlertMessage('Vui lòng chọn ít nhất một trang phục!');
+      setCustomAlertMessage('Vui lòng chọn ít nhất một thiết bị!');
       return;
     }
-    if (!formData.startDate || !formData.endDate) {
+    if (!formData.is6Hours && (!formData.startDate || !formData.endDate)) {
       setCustomAlertMessage('Vui lòng nhập ngày bắt đầu và ngày kết thúc!');
       return;
     }
+    if (formData.is6Hours && !formData.startDate) {
+      setCustomAlertMessage('Vui lòng nhập ngày thuê!');
+      return;
+    }
 
-    if (formData.endDate < formData.startDate) {
+    if (!formData.is6Hours && formData.endDate < formData.startDate) {
       setCustomAlertMessage('Ngày trả dự kiến không thể nhỏ hơn ngày bắt đầu!');
       return;
     }
@@ -830,26 +713,15 @@ export default function BookingCalendar({
     const conflict = checkBookingConflict(
       formData.selectedCameraIds,
       formData.startDate,
-      formData.endDate,
-      false,
-      contracts
+      formData.is6Hours ? formData.startDate : formData.endDate,
+      formData.is6Hours,
+      contracts,
+      undefined,
+      formData.is6Hours ? (formData.startTime || '08:00') : undefined,
+      formData.is6Hours ? (formData.returnTime || '14:00') : undefined
     );
     if (conflict.hasConflict) {
       setCustomAlertMessage(conflict.message);
-      return;
-    }
-
-    const unavailableCam = formData.selectedCameraIds
-      .map(id => cameras.find(c => c.id === id))
-      .find(c => c && (c.cleaningStatus === 'Laundry' || c.cleaningStatus === 'Mending' || c.status === 'Maintenance'));
-
-    if (unavailableCam) {
-      const reason = unavailableCam.cleaningStatus === 'Laundry' 
-        ? 'đang giặt hấp' 
-        : unavailableCam.cleaningStatus === 'Mending' 
-        ? 'đang sửa chữa' 
-        : 'đang bảo dưỡng';
-      setCustomAlertMessage(`Trang phục "${unavailableCam.name}" (Size ${unavailableCam.size || 'FS'}) ${reason}, không thể tạo đơn thuê!`);
       return;
     }
 
@@ -857,23 +729,16 @@ export default function BookingCalendar({
       const cam = cameras.find(c => c.id === id);
       const isPrinter = cam?.category === 'Printer' || Boolean(cam?.isPrinter);
       const prints = isPrinter ? (formData.printCounts?.[id] || 5) : undefined;
-      const itemDisc = formData.itemDiscounts?.[id] || 0;
       const rate = isPrinter && cam
         ? getPrintPrice(cam, prints!).totalPrice
-        : (cam ? getCameraRateForDuration(cam, calculatedDays) : 100000);
-      const finalRate = itemDisc > 0 ? Math.round(rate * Math.max(0, 1 - itemDisc / 100)) : rate;
+        : (cam ? getCameraRateForDuration(cam, calculatedDays, formData.is6Hours) : 100000);
 
       return {
         cameraId: id,
-        cameraName: isPrinter
-          ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)`
-          : (cam?.name?.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || 'Trang phục'),
-        dailyRate: finalRate,
+        cameraName: isPrinter ? `${cam?.name || 'Máy in ảnh'} (${prints} tấm)` : (cam?.name || 'Thiết bị'),
+        dailyRate: rate,
         quantity: 1,
-        printCount: prints,
-        size: cam?.size,
-        color: cam?.color,
-        discountPercent: itemDisc > 0 ? itemDisc : undefined
+        printCount: prints
       };
     });
 
@@ -891,7 +756,10 @@ export default function BookingCalendar({
       customerDocNote: formData.customerDocNote,
       items,
       startDate: formData.startDate,
-      endDate: formData.endDate,
+      endDate: formData.is6Hours ? formData.startDate : formData.endDate,
+      is6Hours: formData.is6Hours,
+      startTime: formData.is6Hours ? (formData.startTime || '08:00') : undefined,
+      returnTime: formData.is6Hours ? (formData.returnTime || '14:00') : undefined,
       totalPrice,
       discountPercent: formData.discountPercent,
       paidAmount: formData.paidAmount,
@@ -908,22 +776,21 @@ export default function BookingCalendar({
       setQuickReceiptContract(newContract);
     }
 
-    // Reset form and clear draft
-    try { sessionStorage.removeItem(DRAFT_KEY_BOOKING); } catch {}
+    // Reset form
     setFormData({
       customerId: '',
       customerName: '',
       customerPhone: '',
-      customerDocType: 'CCCD',
+      customerDocType: 'CCCD_And_1M',
       customerDocNote: '',
       selectedCameraIds: [],
-      printCounts: {},
       startDate: '',
       endDate: '',
-      depositAmount: 0,
+      is6Hours: false,
+      returnTime: '18:00',
+      depositAmount: 1000000,
       paidAmount: 0,
       discountPercent: 0,
-      itemDiscounts: {},
       customFinalPrice: null,
       note: '',
     });
@@ -938,8 +805,111 @@ export default function BookingCalendar({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-            {/* MAIN FOCUS: Calendar Section (Theo dõi lịch thuê trang phục) */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-5 shadow-sm">
+      {/* Real-time Camera Status & Filter Bar - Ultra Compact */}
+      <div className="bg-white border border-gray-150/70 rounded-xl sm:rounded-2xl p-2 sm:p-2.5 shadow-3xs">
+        <div className="flex items-center justify-between gap-2 mb-1.5 pb-1.5 border-b border-gray-100">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-orange-600 animate-pulse shrink-0"></span>
+            <span className="text-[11px] sm:text-xs font-black text-gray-800 uppercase tracking-wider truncate">
+              Trạng thái máy ({formatDMY(selectedDate)})
+            </span>
+            <span className="text-[10px] text-gray-400 font-bold hidden sm:inline-block shrink-0">
+              • {systemStatusInfo.filter(c => c.statusText === 'Còn trống cả ngày').length} trống / {systemStatusInfo.length} máy
+            </span>
+          </div>
+          {selectedCameraFilter !== 'ALL' && (
+            <button
+              type="button"
+              onClick={() => setSelectedCameraFilter('ALL')}
+              className="text-[10px] text-orange-600 hover:text-orange-800 font-bold bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 shrink-0"
+            >
+              ✕ Bỏ lọc ({selectedCameraFilter})
+            </button>
+          )}
+        </div>
+
+        {systemStatusInfo.length === 0 ? (
+          <div className="p-2 text-center text-xs text-gray-400 italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
+            Tất cả thiết bị hiện đang ở trạng thái bảo trì hoặc chưa có thiết bị sẵn sàng.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-10 gap-1 sm:gap-1.5">
+            {systemStatusInfo.map(cam => {
+              const isFilterActive = selectedCameraFilter === cam.shortName;
+              const isAvailable = cam.statusText === 'Còn trống cả ngày';
+              const isFull = cam.statusText === 'Kín lịch cả ngày';
+              const isPrinter = Boolean((cam as any).isPrinterCam);
+
+              // Modern soft surface style: clean neutral for available, soft color accent for busy/6h
+              let chipClass = 'bg-white hover:bg-slate-50/80 border border-slate-200/70 text-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.02)]';
+              let dotColor = 'bg-emerald-500 ring-2 ring-emerald-100';
+              let badgeStyle = 'text-emerald-700 bg-emerald-50';
+
+              if (isPrinter && !isAvailable) {
+                chipClass = 'bg-rose-50/60 hover:bg-rose-100/60 border border-rose-200/70 text-rose-900 shadow-[0_1px_2px_rgba(0,0,0,0.02)]';
+                dotColor = 'bg-rose-500 ring-2 ring-rose-200';
+                badgeStyle = 'text-rose-700 bg-rose-100/80 font-extrabold';
+              } else if (isFull) {
+                chipClass = 'bg-rose-50/60 hover:bg-rose-100/60 border border-rose-200/70 text-rose-900 shadow-[0_1px_2px_rgba(0,0,0,0.02)]';
+                dotColor = 'bg-rose-500 ring-2 ring-rose-200';
+                badgeStyle = 'text-rose-700 bg-rose-100/70 font-extrabold';
+              } else if (!isAvailable) {
+                chipClass = 'bg-amber-50/60 hover:bg-amber-100/60 border border-amber-200/70 text-amber-900 shadow-[0_1px_2px_rgba(0,0,0,0.02)]';
+                dotColor = 'bg-amber-500 ring-2 ring-amber-200';
+                badgeStyle = 'text-amber-700 bg-amber-100/70 font-extrabold';
+              }
+
+              if (isFilterActive) {
+                chipClass += ' ring-2 ring-orange-500 border-orange-400 bg-orange-50/70 font-black';
+              }
+
+              const totalPrints = (cam as any).totalPrints || 1;
+
+              return (
+                <button
+                  type="button"
+                  key={cam.id}
+                  onClick={() => setSelectedCameraFilter(prev => prev === cam.shortName ? 'ALL' : cam.shortName)}
+                  className={`px-2 py-1 rounded-xl text-[11px] sm:text-xs flex items-center justify-between gap-1 transition-all cursor-pointer select-none active:scale-97 ${chipClass}`}
+                  title={`${cam.cameraName} (${cam.serialNumber || 'Không serial'}) - ${cam.statusText}. Bấm để lọc.`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor} shrink-0`} />
+                    <span className="font-extrabold truncate text-slate-800">{cam.shortName}</span>
+                  </div>
+                  {isAvailable && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${badgeStyle} shrink-0 leading-tight`}>
+                      Trống
+                    </span>
+                  )}
+                  {!isAvailable && isPrinter && (
+                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md text-rose-700 bg-rose-100/80 shrink-0 leading-tight flex items-center gap-0.5">
+                      <span>🖨️</span>
+                      <span>{totalPrints} tấm</span>
+                    </span>
+                  )}
+                  {!isAvailable && !isPrinter && isFull && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${badgeStyle} shrink-0 leading-tight`}>
+                      Kín
+                    </span>
+                  )}
+                  {!isAvailable && !isPrinter && !isFull && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${badgeStyle} shrink-0 leading-tight flex items-center gap-1`}>
+                      <span>6h</span>
+                      {cam.hoursLabel && (
+                        <span className="font-mono text-[8px] sm:text-[8.5px] opacity-90">({cam.hoursLabel})</span>
+                      )}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Main Calendar Section */}
+      <div className="bg-white border border-gray-150/70 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm">
         {/* Calendar Header with Navigation */}
         <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3.5 mb-3 sm:mb-4 border-b border-gray-100 pb-3.5 sm:pb-4">
           {/* Title & Today on Mobile */}
@@ -949,32 +919,11 @@ export default function BookingCalendar({
                 <CalendarIcon className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
               </span>
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-sm sm:text-base font-extrabold text-gray-900 tracking-tight select-none">
-                    {viewMode === 'month' 
-                      ? `Lịch thuê tháng ${String(currentMonth).padStart(2, '0')}/${currentYear}` 
-                      : viewMode === 'timeline'
-                      ? `Tiến độ trang phục tháng ${String(currentMonth).padStart(2, '0')}/${currentYear}`
-                      : `Lịch thuê trong tuần`}
-                  </h2>
-                  {selectedCameraFilter !== 'ALL' && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-orange-100 text-orange-800 border border-orange-300">
-                      Đang lọc: {cameras.find(c => c.id === selectedCameraFilter)?.name || cameras.find(c => c.id === selectedCameraFilter)?.shortName || selectedCameraFilter}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCameraFilter('ALL')}
-                        className="ml-0.5 hover:text-red-700 font-bold"
-                        title="Bỏ lọc"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] sm:text-xs text-gray-500 leading-normal hidden sm:block">
-                  {viewMode === 'timeline'
-                    ? 'Biểu đồ tiến độ chi tiết từng mẫu áo/váy và size theo các ngày trong tháng'
-                    : 'Theo dõi lịch nhận đồ, ngày trả và tình trạng trang phục đã đặt'}
+                <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight select-none">
+                  {viewMode === 'month' ? `Tháng ${String(currentMonth).padStart(2, '0')}, ${currentYear}` : `Lịch tuần`}
+                </h2>
+                <p className="text-xs text-gray-500 leading-normal hidden sm:block">
+                  Theo dõi lịch trống, lịch bận và nhận máy chính xác theo từng mốc
                 </p>
               </div>
             </div>
@@ -991,9 +940,9 @@ export default function BookingCalendar({
             </button>
           </div>
 
-          {/* Controls: Navigator + Switcher + Quick Filter + Prominent CTA */}
+          {/* Controls: Navigator + Switcher + Prominent CTA */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
-            {/* Today Jump Button (Desktop) */}
+            {/* Today Jump Button (Desktop / Web - Placed next to Tháng / Tuần) */}
             <button
               type="button"
               onClick={goToToday}
@@ -1005,12 +954,12 @@ export default function BookingCalendar({
             </button>
 
             <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
-              {/* View Switcher: Tháng / Tuần / Tiến độ trang phục */}
+              {/* View Switcher: Tháng / Tuần */}
               <div className="flex items-center bg-gray-100 p-0.5 rounded-xl border border-gray-200/80 text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setViewMode('month')}
-                  className={`flex-1 sm:flex-none px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap text-center ${
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap text-center ${
                     viewMode === 'month'
                       ? 'bg-white text-orange-600 shadow-3xs font-black'
                       : 'text-gray-500 hover:text-gray-800'
@@ -1021,25 +970,13 @@ export default function BookingCalendar({
                 <button
                   type="button"
                   onClick={() => setViewMode('week')}
-                  className={`flex-1 sm:flex-none px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap text-center ${
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap text-center ${
                     viewMode === 'week'
                       ? 'bg-white text-orange-600 shadow-3xs font-black'
                       : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
                   Tuần
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('timeline')}
-                  className={`flex-1 sm:flex-none px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap text-center flex items-center justify-center gap-1 ${
-                    viewMode === 'timeline'
-                      ? 'bg-white text-orange-600 shadow-3xs font-black'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                  title="Chế độ tiến độ theo từng mẫu đồ (Gantt timeline)"
-                >
-                  <span>👗 Tiến độ</span>
                 </button>
               </div>
 
@@ -1049,13 +986,13 @@ export default function BookingCalendar({
                   type="button"
                   onClick={handlePrev}
                   className="p-1.5 text-gray-650 hover:bg-white hover:text-gray-900 rounded-lg transition-all cursor-pointer shrink-0"
-                  title={viewMode === 'week' ? "Tuần trước" : "Tháng trước"}
+                  title={viewMode === 'month' ? "Tháng trước" : "Tuần trước"}
                 >
                   <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
                 </button>
 
                 <span className="px-1.5 font-black text-gray-800 text-xs text-center select-none font-mono truncate flex-1 sm:min-w-[80px]">
-                  {viewMode === 'week' ? 'Tuần này' : `${String(currentMonth).padStart(2, '0')}/${currentYear}`}
+                  {viewMode === 'month' ? `${String(currentMonth).padStart(2, '0')}/${currentYear}` : 'Tuần này'}
                 </span>
 
                 <button
@@ -1069,7 +1006,7 @@ export default function BookingCalendar({
               </div>
             </div>
 
-            {/* Quick Booking Button */}
+            {/* Quick Booking Button - Prominent & Full Width on Mobile */}
             <button
               type="button"
               onClick={() => {
@@ -1080,7 +1017,7 @@ export default function BookingCalendar({
                 }));
                 setShowAddQuickModal(true);
               }}
-              className="w-full sm:w-auto px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-[13px] flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 active:scale-[0.98] bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white cursor-pointer uppercase tracking-wider whitespace-nowrap transition-all"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 active:scale-[0.98] bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white cursor-pointer uppercase tracking-wider whitespace-nowrap transition-all"
               title="Đặt lịch nhanh"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
@@ -1089,430 +1026,120 @@ export default function BookingCalendar({
           </div>
         </div>
 
-        {/* Conditional View: Month/Week Calendar Grid OR Outfit Gantt Timeline */}
-        {viewMode === 'timeline' ? (
-          /* =========================================================================
-             CHẾ ĐỘ TIẾN ĐỘ THEO TỪNG MẪU TRANG PHỤC & SIZE (GANTT TIMELINE)
-             ========================================================================= */
-          <div className="w-full pb-1 overflow-x-auto select-none border border-gray-200/90 rounded-2xl shadow-inner bg-slate-50/50">
-            {(() => {
-              const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-              const dayNumbers = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+        {/* Calendar Grid Container */}
+        <div className="w-full pb-1">
+          {/* Day Grid Headers: T2 ở đầu, CN ở cuối */}
+          <div className="grid grid-cols-7 gap-1 bg-slate-100/70 py-2 px-1 rounded-xl text-center font-black text-gray-600 text-[11px] sm:text-xs tracking-wider mb-2 select-none">
+            <div>T2</div>
+            <div>T3</div>
+            <div>T4</div>
+            <div>T5</div>
+            <div>T6</div>
+            <div>T7</div>
+            <div className="text-rose-600 font-black">CN</div>
+          </div>
 
-              const nonMaintenanceCams = cameras.filter(c => c.status !== 'Maintenance');
-              const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Freesize', 'FS'];
-              const sortedCams = [...nonMaintenanceCams].sort((a, b) => {
-                const nameCompare = (a.name || '').localeCompare(b.name || '');
-                if (nameCompare !== 0) return nameCompare;
-                const ai = SIZE_ORDER.indexOf(a.size || 'FS');
-                const bi = SIZE_ORDER.indexOf(b.size || 'FS');
-                return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
-              });
+          {/* Calendar Day Cells */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            {calendarDays.map(({ day, isCurrentMonth, dateString }) => {
+              const allBookings = dayBookingsMap[dateString] || [];
+              const bookings = selectedCameraFilter === 'ALL'
+                ? allBookings
+                : allBookings.filter(b => b.cameraShort.toUpperCase().includes(selectedCameraFilter.toUpperCase()));
+              
+              const bookingCount = bookings.length;
+              const isSelected = selectedDate === dateString;
+              const isToday = (systemDate || new Date().toISOString().split('T')[0]) === dateString;
+
+              // Determine status and style matching the legend
+              let statusStyle = 'bg-white border-gray-200 hover:border-emerald-400';
+              if (bookingCount > 0) {
+                const hasFullDayBooking = bookings.some(b => !b.contract.is6Hours);
+                if (bookingCount >= 2 && hasFullDayBooking) {
+                  statusStyle = 'bg-rose-50/80 border-rose-300 hover:border-rose-400';
+                } else {
+                  statusStyle = 'bg-amber-50/80 border-amber-300 hover:border-amber-400';
+                }
+              }
+
+              // Subdued styling if the day belongs to another month
+              const monthStyle = isCurrentMonth ? 'text-gray-900' : 'text-gray-300 bg-gray-50/40 border-gray-150';
 
               return (
-                <div className="min-w-[860px]">
-                  {/* Timeline Header Row (Days of Month) */}
-                  <div className="flex border-b border-gray-200 bg-white sticky top-0 z-20 shadow-xs">
-                    <div className="w-48 sm:w-60 p-2.5 font-black text-xs text-gray-750 uppercase tracking-wide border-r border-gray-200 bg-gray-50/90 shrink-0 flex items-center justify-between">
-                      <span>Mẫu đồ & Size</span>
-                      <span className="text-[10px] text-gray-600 font-bold">({sortedCams.length} món)</span>
-                    </div>
-
-                    <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(26px, 1fr))` }}>
-                      {dayNumbers.map(d => {
-                        const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                        const dayOfWeek = new Date(currentYear, currentMonth - 1, d).getDay();
-                        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                        const isSelected = selectedDate === dateStr;
-                        const isToday = (systemDate || new Date().toISOString().split('T')[0]) === dateStr;
-
-                        return (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => handleDayClick(dateStr)}
-                            className={`p-1 text-center transition-all cursor-pointer border-r border-gray-150/70 last:border-r-0 flex flex-col items-center justify-center ${
-                              isSelected
-                                ? 'bg-orange-500 text-white font-black ring-1 ring-orange-500'
-                                : isToday
-                                ? 'bg-orange-100/90 text-orange-950 font-black'
-                                : isWeekend
-                                ? 'bg-slate-100/80 text-rose-700 font-bold'
-                                : 'hover:bg-orange-50/50 text-gray-700'
-                            }`}
-                            title={`Ngày ${d}/${currentMonth}. Bấm để chọn ngày.`}
-                          >
-                            <span className="text-[8px] uppercase tracking-tighter opacity-80">
-                              {dayOfWeek === 0 ? 'CN' : `T${dayOfWeek + 1}`}
-                            </span>
-                            <span className="text-[11px] font-black leading-tight font-mono">
-                              {d}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                <div
+                  key={dateString}
+                  onClick={() => handleDayClick(dateString)}
+                  className={`border rounded-xl p-1 sm:p-2 cursor-pointer transition-all flex flex-col justify-start gap-1 sm:gap-1.5 ${statusStyle} ${monthStyle} ${
+                    isSelected ? 'ring-2 ring-orange-500 border-orange-500 bg-orange-50/30 shadow-xs' : 'hover:shadow-3xs'
+                  } ${viewMode === 'week' ? 'min-h-[85px] sm:min-h-[160px]' : 'min-h-[56px] sm:min-h-[96px]'}`}
+                >
+                  {/* Cell Header: Day number + count badge */}
+                  <div className="flex justify-between items-center pb-0.5 sm:pb-1">
+                    <span className={`text-[11px] sm:text-xs font-black inline-flex items-center justify-center ${
+                      isToday 
+                        ? 'w-5 h-5 rounded-full bg-orange-600 text-white shadow-3xs' 
+                        : (isCurrentMonth ? (isSelected ? 'text-orange-700' : 'text-gray-800') : 'text-gray-400')
+                    }`}>
+                      {day}
+                    </span>
+                    {bookingCount > 0 && (
+                      <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-3xs leading-none">
+                        {bookingCount}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Timeline Rows: Each Outfit & Size */}
-                  <div className="divide-y divide-gray-150/80 bg-white">
-                    {sortedCams.map(cam => {
-                      const colors = getCameraColorProps(cam.shortName);
-                      const isFilterActive = selectedCameraFilter === cam.id;
-                      const baseName = (cam.name || '').replace(/\s*\(Size\s+\S+\)\s*$/i, '').replace(/\s*\(Freesize\)\s*$/i, '').trim();
-
+                  {/* Mobile View: High-contrast micro-labels - Show all booked devices */}
+                  <div className="flex md:hidden flex-col gap-0.5 mt-0.5 select-none w-full">
+                    {bookings.map((b, idx) => {
+                      const colors = getCameraColorProps(b.cameraShort);
                       return (
                         <div
-                          key={cam.id}
-                          className={`flex items-stretch hover:bg-orange-50/30 transition-colors ${
-                            isFilterActive ? 'bg-orange-50/60 ring-1 ring-orange-400 inset-0' : ''
-                          }`}
+                          key={idx}
+                          className={`px-1 py-0.5 rounded-[4px] text-[8px] font-black tracking-tight leading-tight border-0 border-l-[2.5px] ${colors.border} ${colors.bgClass} flex items-center justify-between truncate w-full shadow-3xs`}
+                          title={`${b.cameraName}`}
                         >
-                          {/* Column 1: Outfit Label Info */}
-                          <div
-                            onClick={() => setSelectedCameraFilter(prev => prev === cam.id ? 'ALL' : cam.id)}
-                            className="w-48 sm:w-60 p-2 border-r border-gray-200 shrink-0 flex items-center justify-between gap-1.5 cursor-pointer bg-white group hover:bg-orange-50/40"
-                            title={`Bấm để ${isFilterActive ? 'bỏ lọc' : 'lọc'} riêng mẫu này`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-mono text-[9px] font-black px-1.5 py-0.2 rounded bg-gray-100 text-gray-700 shrink-0">
-                                  #{cam.shortName}
-                                </span>
-                                <span className="text-xs font-black text-gray-900 truncate group-hover:text-orange-600 transition-colors">
-                                  {baseName}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1 mt-0.5 text-[9.5px]">
-                                <span className="font-black px-1.5 py-0.2 rounded bg-slate-100 text-slate-800 border border-slate-200 shrink-0">
-                                  Size {cam.size || 'FS'}
-                                </span>
-                                {cam.color && (
-                                  <span className="text-gray-500 truncate" title={cam.color}>
-                                    🎨 {cam.color}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <span className="text-[9px] text-gray-400 font-bold shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {isFilterActive ? '✓ Đang lọc' : 'Lọc'}
-                            </span>
-                          </div>
+                          <span className="truncate">{b.cameraShort}</span>
+                          {b.isPrinter ? (
+                            <span className="text-[7px] font-bold text-rose-800 shrink-0">{b.printCount ?? '?'}t</span>
+                          ) : b.contract.is6Hours ? (
+                            <span className="text-[7px] font-bold text-amber-800 shrink-0">6h</span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                          {/* Column 2: 31 Day Cells */}
-                          <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(26px, 1fr))` }}>
-                            {dayNumbers.map(d => {
-                              const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                              const bookingsOnThisDay = (dayBookingsMap[dateStr] || []).filter(b => b.cameraId === cam.id);
-                              const isBooked = bookingsOnThisDay.length > 0;
-                              const isSelected = selectedDate === dateStr;
-                              const dayOfWeek = new Date(currentYear, currentMonth - 1, d).getDay();
-                              const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-                              return (
-                                <div
-                                  key={d}
-                                  onClick={() => handleDayClick(dateStr)}
-                                  onDoubleClick={() => {
-                                    if (cam.cleaningStatus === 'Laundry' || cam.cleaningStatus === 'Mending' || cam.status === 'Maintenance') {
-                                      const reason = cam.cleaningStatus === 'Laundry' ? 'đang giặt hấp' : cam.cleaningStatus === 'Mending' ? 'đang sửa chữa' : 'đang bảo dưỡng';
-                                      setCustomAlertMessage(`Trang phục "${baseName}" (Size ${cam.size || 'FS'}) ${reason}, không thể đặt lịch!`);
-                                      return;
-                                    }
-                                    handleDayClick(dateStr);
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      startDate: dateStr,
-                                      endDate: dateStr,
-                                      selectedCameraIds: [cam.id]
-                                    }));
-                                    setShowAddQuickModal(true);
-                                  }}
-                                  className={`border-r border-gray-150/60 last:border-r-0 p-0.5 flex items-center justify-center transition-all cursor-pointer relative ${
-                                    isSelected
-                                      ? 'bg-orange-100/50'
-                                      : isWeekend && !isBooked
-                                      ? 'bg-slate-50/50'
-                                      : 'hover:bg-slate-100/60'
-                                  }`}
-                                  title={
-                                    isBooked
-                                      ? `${baseName} (Size ${cam.size}): Đã có khách thuê ngày ${d}/${currentMonth} (${bookingsOnThisDay[0]?.contract.customerName})`
-                                      : `${baseName} (Size ${cam.size}): Còn trống ngày ${d}/${currentMonth}. Nhấp đúp để tạo đơn ngay.`
-                                  }
-                                >
-                                  {isBooked ? (
-                                    <div
-                                      className={`w-full h-7 rounded-md border-0 border-l-[3px] ${colors.border} ${colors.bgClass} flex items-center justify-center shadow-3xs px-0.5 text-center transition-all hover:scale-105`}
-                                    >
-                                      <span className="text-[7.5px] font-black truncate leading-tight">
-                                        {bookingsOnThisDay[0]?.contract.customerName?.split(' ').slice(-1)[0] || 'Thuê'}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 opacity-30 hover:opacity-100 hover:scale-125 transition-all inline-block" />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                  {/* Desktop View: Booking item text blocks - Show all booked devices */}
+                  <div className="hidden md:block space-y-1 mt-0.5 flex-grow select-none">
+                    {bookings.map((b, idx) => {
+                      const colors = getCameraColorProps(b.cameraShort);
+                      const subLabel = b.isPrinter
+                        ? `🖨️ ${b.printCount ?? '?'} tấm`
+                        : b.contract.is6Hours
+                          ? '6h'
+                          : b.timeString === '00:00-00:00' ? 'Cả ngày' : b.timeString;
+                      return (
+                        <div
+                          key={idx}
+                          className={`shadow-3xs group flex items-center justify-between px-1.5 py-0.5 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-[5px] text-[10px] font-extrabold tracking-tight leading-normal truncate max-w-full transition-all`}
+                          title={`${b.cameraName} (${b.isPrinter ? `${b.printCount ?? '?'} tấm in ảnh` : b.contract.is6Hours ? `Lịch thuê 6 tiếng (Trả: ${b.contract.returnTime || '18:00'})` : b.timeString}) - ${b.contract.customerName}`}
+                        >
+                          <span className="truncate w-full text-[10px]">
+                            {b.cameraShort} <span className="opacity-85 font-semibold text-[9px]">({subLabel})</span>
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
               );
-            })()}
+            })}
           </div>
-        ) : (
-          /* =========================================================================
-             CHẾ ĐỘ LỊCH THÁNG / TUẦN (GRID CALENDAR)
-             ========================================================================= */
-          <div className="w-full pb-1">
-            {/* Calendar Day Cells — Thứ được tích hợp vào hàng đầu tiên của mỗi ô */}
-            <div className="grid grid-cols-7 gap-1 sm:gap-2">
-              {calendarDays.map(({ day, isCurrentMonth, dateString }, cellIndex) => {
-                const allBookings = dayBookingsMap[dateString] || [];
-                const bookings = selectedCameraFilter === 'ALL'
-                  ? allBookings
-                  : allBookings.filter(b => b.cameraId === selectedCameraFilter);
-                
-                const bookingCount = bookings.length;
-                const isSelected = selectedDate === dateString;
-                const isToday = (systemDate || new Date().toISOString().split('T')[0]) === dateString;
-
-                const dObj = new Date(dateString);
-                const isSunday = dObj.getDay() === 0;
-
-                // Determine status and style matching the legend
-                let statusStyle = 'bg-white border-gray-200 hover:border-emerald-400';
-                if (bookingCount > 0) {
-                  const hasFullDayBooking = bookings.some(b => !b.contract.is6Hours);
-                  if (bookingCount >= 3 && hasFullDayBooking) {
-                    statusStyle = 'bg-rose-50/80 border-rose-300 hover:border-rose-400'; // Nhiều lịch
-                  } else {
-                    statusStyle = 'bg-amber-50/80 border-amber-300 hover:border-amber-400'; // Đã có lịch
-                  }
-                }
-
-                // Subdued styling if the day belongs to another month
-                const monthStyle = isCurrentMonth ? 'text-gray-900' : 'text-gray-300 bg-gray-50/40 border-gray-150';
-
-                return (
-                  <div
-                    key={dateString}
-                    onClick={() => { handleDayClick(dateString); setMobileDetailDate(dateString); }}
-                    onDoubleClick={() => {
-                      handleDayClick(dateString);
-                      setFormData(prev => ({
-                        ...prev,
-                        startDate: dateString,
-                        endDate: dateString
-                      }));
-                      setShowAddQuickModal(true);
-                    }}
-                    className={`border rounded-xl p-1 sm:p-2 cursor-pointer transition-all flex flex-col justify-start gap-1 sm:gap-1.5 ${statusStyle} ${monthStyle} ${
-                      isSelected ? 'ring-2 ring-orange-500 border-orange-500 bg-orange-50/30 shadow-xs' : 'hover:shadow-3xs'
-                    } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
-                    title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
-                  >
-                    {/* Cell Header: Thứ (mọi ô) + Số ngày + badge booking */}
-                    <div className="flex flex-col gap-0 pb-0.5 sm:pb-1">
-                      {/* Nhãn Thứ — hiện trong mọi ô, tính từ ngày thực tế */}
-                      {(() => {
-                        const WEEKDAY_MAP: Record<number, { short: string; full: string; color: string }> = {
-                          1: { short: 'T2', full: 'Thứ 2',    color: 'text-slate-400' },
-                          2: { short: 'T3', full: 'Thứ 3',    color: 'text-slate-400' },
-                          3: { short: 'T4', full: 'Thứ 4',    color: 'text-slate-400' },
-                          4: { short: 'T5', full: 'Thứ 5',    color: 'text-slate-400' },
-                          5: { short: 'T6', full: 'Thứ 6',    color: 'text-slate-400' },
-                          6: { short: 'T7', full: 'Thứ 7',    color: 'text-blue-400 font-black' },
-                          0: { short: 'CN', full: 'Chủ Nhật', color: 'text-rose-400 font-black' },
-                        };
-                        const w = WEEKDAY_MAP[dObj.getDay()];
-                        return (
-                          <div className={`font-bold tracking-tight leading-none mb-0.5 select-none ${w.color} text-[7px] sm:text-[9px] text-center sm:text-left`}>
-                            <span className="sm:hidden">{w.short}</span>
-                            <span className="hidden sm:inline">{w.full}</span>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Số ngày + badge */}
-                      <div className="flex justify-between items-center">
-                        <span className={`text-xs sm:text-sm font-black inline-flex items-center justify-center leading-none ${
-                          isToday
-                            ? 'w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-orange-600 text-white shadow-3xs'
-                            : (isCurrentMonth ? (isSelected ? 'text-orange-700 font-black' : (isSunday ? 'text-rose-600' : 'text-gray-900')) : 'text-gray-300')
-                        }`}>
-                          {day}
-                        </span>
-                        {bookingCount > 0 && (
-                          <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.2 rounded-full shadow-3xs leading-none shrink-0">
-                            {bookingCount}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Booking item text blocks: Gộp theo từng Hợp Đồng / Khách Hàng */}
-                    <div className="space-y-1 mt-0.5 flex-grow select-none w-full">
-                      {(() => {
-                        // Nhóm các booking theo contract.id để gộp cùng 1 khách lại
-                        const groupedByContract: { contract: RentalContract; items: typeof bookings }[] = [];
-                        bookings.forEach(b => {
-                          const existing = groupedByContract.find(g => g.contract.id === b.contract.id);
-                          if (existing) {
-                            existing.items.push(b);
-                          } else {
-                            groupedByContract.push({ contract: b.contract, items: [b] });
-                          }
-                        });
-
-                        // Mobile: giới hạn số contract hiển thị trong ô ngày để tránh tràn
-                        const MAX_MOBILE_CONTRACTS = 3;
-                        const MAX_MOBILE_TAGS = 2;       // Số tag tối đa mỗi contract trên mobile
-                        const MAX_DESKTOP_ITEMS = 3;     // Số món tối đa trước khi collapse trên desktop
-
-                        // Mobile: chỉ hiện tối đa MAX_MOBILE_CONTRACTS thẻ, phần còn lại gom vào badge
-                        const isMobileView = typeof window !== 'undefined' && window.innerWidth < 640;
-                        const visibleContracts = isMobileView
-                          ? groupedByContract.slice(0, MAX_MOBILE_CONTRACTS)
-                          : groupedByContract;
-                        const hiddenContractCount = isMobileView
-                          ? Math.max(0, groupedByContract.length - MAX_MOBILE_CONTRACTS)
-                          : 0;
-
-                        return (
-                          <>
-                            {visibleContracts.map(({ contract, items }, groupIdx) => {
-                              const firstBooking = items[0];
-                              const colors = getCameraColorProps(firstBooking.cameraShort);
-                              const custName = (contract.customerName || '').trim();
-
-                              // Desktop: hiển thị TẤT CẢ món (không collapse)
-                              const visibleDesktopItems = items;
-
-                              // Mobile: giới hạn số tag hiển thị trong mỗi contract
-                              const visibleMobileTags = items.slice(0, MAX_MOBILE_TAGS);
-                              const hiddenMobileTagCount = Math.max(0, items.length - MAX_MOBILE_TAGS);
-
-                              return (
-                                <div
-                                  key={contract.id || groupIdx}
-                                  className={`group flex flex-col justify-center px-1.5 py-1 border-0 border-l-[3.5px] ${colors.border} ${colors.bgClass} rounded-lg shadow-3xs transition-all hover:scale-[1.01] hover:z-50 relative ${!isCurrentMonth ? 'opacity-40 hover:opacity-90' : ''}`}
-                                  title={`Khách: ${contract.customerName || 'Chưa có tên'} | ${contract.customerPhone || 'Chưa có SĐT'}\n${items.length} món: ${items.map(it => it.cameraName).join(', ')}`}
-                                >
-                                  {/* Mobile: 1 dòng compact — Tên ngắn + badge số món */}
-                                  <div className="flex sm:hidden items-center justify-between gap-0.5 leading-none min-w-0">
-                                    <span className="font-black text-[8px] truncate text-gray-900 leading-tight flex-1 min-w-0">
-                                      {custName
-                                        ? custName.split(' ').slice(-2).join(' ')
-                                        : 'Khách'}
-                                    </span>
-                                    {items.length > 1 && (
-                                      <span className="text-[7px] font-black bg-white/80 border border-black/10 px-1 py-0.2 rounded shrink-0 leading-tight">
-                                        {items.length}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {/* Desktop: Header Khách hàng (Tên + SĐT) CHỈ HIỆN 1 LẦN */}
-                                  <div className="hidden sm:flex flex-col gap-1">
-                                    <div className="flex items-center justify-between gap-1 leading-tight pb-1 border-b border-black/10">
-                                      <span className="font-black text-[11px] truncate tracking-tight text-gray-900" title={custName}>
-                                        {custName || 'Khách thuê'}
-                                      </span>
-                                      {items.length > 1 && (
-                                        <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-white/95 text-gray-700 rounded-full border border-gray-200/80 shadow-3xs shrink-0">
-                                          {items.length} món
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* Danh sách từng món — tất cả, có tooltip ảnh khi hover */}
-                                    <div className="divide-y divide-black/10 divide-dashed">
-                                      {visibleDesktopItems.map((it, itIdx) => {
-                                        const mCam = cameras.find(c => c.id === it.cameraId)
-                                          || cameras.find(c => c.serialNumber && it.cameraShort && c.serialNumber.toLowerCase() === it.cameraShort.toLowerCase())
-                                          || cameras.find(c => c.shortName && it.cameraShort && c.shortName.toLowerCase() === it.cameraShort.toLowerCase())
-                                          || cameras.find(c => c.name && it.cameraName && c.name.toLowerCase() === it.cameraName.toLowerCase());
-                                        
-                                        const code = (mCam?.serialNumber || it.cameraShort || mCam?.shortName || it.cleanName || it.cameraName || 'Đồ thuê').trim();
-                                        const rawName = (it.cleanName || mCam?.name || it.cameraName || '').trim();
-                                        const name = rawName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
-                                        const sizeLbl = it.isPrinter
-                                          ? `🖨️ ${it.printCount ?? '?'}t`
-                                          : (it.size === 'Freesize' || it.size === 'FS' ? 'FS' : `Size ${it.size || 'M'}`);
-                                        const imgUrl = mCam?.image || null;
-
-                                        return (
-                                          <div key={itIdx} className="group/item relative flex items-center gap-1 text-[9px] font-semibold text-gray-700 leading-tight min-w-0 py-1">
-                                            <span className="bg-white/95 px-1 py-0.5 rounded font-black text-gray-900 shadow-3xs shrink-0 font-mono border border-gray-200/60" title={code}>
-                                              {code}
-                                            </span>
-                                            {name && name.toLowerCase() !== code.toLowerCase() && (
-                                              <span className="text-[9.5px] font-bold text-gray-900 truncate flex-1 min-w-0" title={name}>
-                                                {name}
-                                              </span>
-                                            )}
-                                            <span className="bg-white/95 px-1 py-0.5 rounded font-bold text-gray-800 shadow-3xs shrink-0">
-                                              {sizeLbl}
-                                            </span>
-                                            {/* Tooltip ảnh khi hover — chỉ hiện nếu có ảnh */}
-                                            {imgUrl && (
-                                              <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 z-[9999] hidden group-hover/item:flex flex-col items-start">
-                                                <div className="bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden w-32">
-                                                  <img
-                                                    src={imgUrl}
-                                                    alt={name || code}
-                                                    className="w-32 h-40 object-cover"
-                                                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                                                  />
-                                                  <div className="px-2 py-1 text-[9px] font-black text-gray-700 truncate border-t border-gray-100">
-                                                    {name || code}
-                                                  </div>
-                                                </div>
-                                                {/* Mũi tên nhỏ */}
-                                                <div className="ml-3 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-200" />
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-
-                                    {contract.customerPhone && (
-                                      <div className="text-[10px] font-bold text-gray-600 leading-none pt-1 border-t border-black/10 truncate font-mono">
-                                        📞 {contract.customerPhone}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-
-                            {/* Mobile: Badge tổng số contract bị ẩn */}
-                            {hiddenContractCount > 0 && (
-                              <div className="flex sm:hidden items-center justify-center py-0.5">
-                                <span className="text-[7.5px] font-black text-gray-600 bg-white/90 border border-gray-300/80 px-1.5 py-0.5 rounded-full shadow-3xs leading-none">
-                                  +{hiddenContractCount} khách nữa
-                                </span>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Legend Panel at Bottom */}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mt-4 text-[11px] sm:text-xs text-gray-700 font-semibold border-t border-gray-100 pt-3 select-none">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mt-4 text-[11px] sm:text-xs text-gray-600 border-t border-gray-100 pt-3 select-none">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md border border-gray-300 bg-white inline-block"></span>
@@ -1520,15 +1147,15 @@ export default function BookingCalendar({
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md border border-amber-300 bg-amber-100 inline-block"></span>
-              <span>Đã có lịch đặt</span>
+              <span>Có lịch lẻ / 6h</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md border border-rose-300 bg-rose-100 inline-block"></span>
-              <span>Nhiều lịch (≥3 đơn)</span>
+              <span>Kín lịch</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-md border-2 border-orange-500 bg-orange-100 inline-block"></span>
-              <span>Đang chọn ({formatDMY(selectedDate)})</span>
+              <span>Đang chọn</span>
             </div>
           </div>
 
@@ -1538,207 +1165,6 @@ export default function BookingCalendar({
           </div>
         </div>
 
-        {/* Mobile Day Detail Bottom Sheet */}
-        {mobileDetailDate !== null && typeof document !== 'undefined' && createPortal(
-          (() => {
-            const sheetBookings = dayBookingsMap[mobileDetailDate] || [];
-            const sheetDayOfWeek = (() => {
-              try {
-                const daysOfWeek = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-                const d = new Date(mobileDetailDate);
-                const parts = mobileDetailDate.split('-');
-                const dayNum = parseInt(parts[2] || '1');
-                const monthNum = parseInt(parts[1] || '1');
-                return `${daysOfWeek[d.getDay()]}, ${dayNum < 10 ? '0' + dayNum : dayNum}/${String(monthNum).padStart(2, '0')}`;
-              } catch (e) {
-                return mobileDetailDate;
-              }
-            })();
-            return (
-              <div 
-                className="md:hidden fixed inset-0 z-[9990] flex flex-col justify-end p-2.5 pb-[max(14px,calc(env(safe-area-inset-bottom,0px)+10px))]"
-                onClick={() => setMobileDetailDate(null)}
-              >
-                {/* Backdrop */}
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />
-                {/* Sheet */}
-                <div
-                  className="relative bg-white rounded-2xl shadow-2xl flex flex-col max-h-[82vh] overflow-hidden animate-slide-up w-full max-w-lg mx-auto border border-gray-150"
-                  onClick={e => e.stopPropagation()}
-                  style={{ animation: 'slideUpSheet 0.25s ease-out' }}
-                >
-                  {/* Drag handle */}
-                  <div className="flex justify-center pt-2.5 pb-1 select-none">
-                    <div className="w-10 h-1 rounded-full bg-gray-300" />
-                  </div>
-
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100">
-                    <div>
-                      <h3 className="font-black text-gray-900 text-sm">{sheetDayOfWeek}</h3>
-                      <p className="text-[11px] text-gray-500 font-medium">
-                        {sheetBookings.length > 0
-                          ? `${sheetBookings.length} bộ trang phục có lịch thuê`
-                          : 'Chưa có lịch thuê hôm này'}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setMobileDetailDate(null)}
-                      className="p-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors text-gray-500 cursor-pointer"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                  </div>
-
-                  {/* Booking list — Gộp theo khách/contract */}
-                  <div className="overflow-y-auto flex-1 px-4 py-3 space-y-3 scrollbar-none">
-                    {sheetBookings.length > 0 ? (() => {
-                      // Gộp theo contract.id
-                      const grouped: { contract: typeof sheetBookings[0]['contract']; items: typeof sheetBookings }[] = [];
-                      sheetBookings.forEach(b => {
-                        const ex = grouped.find(g => g.contract.id === b.contract.id);
-                        if (ex) ex.items.push(b);
-                        else grouped.push({ contract: b.contract, items: [b] });
-                      });
-
-                      return grouped.map((group, gIdx) => {
-                        const { contract, items } = group;
-                        const firstColors = getCameraColorProps(items[0].cameraShort);
-                        const statusLabel = contract.status === 'Active' ? 'Đang thuê' :
-                          contract.status === 'Completed' ? 'Đã trả' :
-                          contract.status === 'Cancelled' ? 'Đã hủy' : 'Đã đặt';
-                        const statusColor = contract.status === 'Active'
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : contract.status === 'Completed'
-                          ? 'bg-gray-100 text-gray-600 border-gray-200'
-                          : contract.status === 'Cancelled'
-                          ? 'bg-red-50 text-red-600 border-red-200'
-                          : 'bg-orange-50 text-orange-700 border-orange-200';
-
-                        return (
-                          <div
-                            key={contract.id || gIdx}
-                            className={`rounded-2xl border border-gray-100 shadow-sm overflow-hidden`}
-                          >
-                            {/* Header khách — nền màu nhẹ theo palette */}
-                            <div className={`px-3 py-2.5 flex items-center justify-between gap-2 border-b border-black/8 ${firstColors.bgClass}`}>
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <div className={`w-1 h-8 rounded-full shrink-0 ${firstColors.border.replace('border-', 'bg-')}`} />
-                                <div className="min-w-0">
-                                  <div className="font-black text-[13px] text-gray-900 truncate leading-tight">
-                                    {contract.customerName || 'Khách thuê'}
-                                  </div>
-                                  {contract.customerPhone && (
-                                    <a
-                                      href={`tel:${contract.customerPhone}`}
-                                      className="font-mono text-[10.5px] text-blue-600 underline underline-offset-2 leading-tight"
-                                      onClick={e => e.stopPropagation()}
-                                    >
-                                      📞 {contract.customerPhone}
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end gap-1 shrink-0">
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${statusColor}`}>
-                                  {statusLabel}
-                                </span>
-                                <span className="text-[9px] font-bold text-gray-500 bg-white/80 px-1.5 py-0.5 rounded border border-gray-200">
-                                  {items.length} món
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Danh sách từng món của khách này */}
-                            <div className="bg-white divide-y divide-gray-100">
-                              {items.map((b, bIdx) => {
-                                const colors = getCameraColorProps(b.cameraShort);
-                                const bCam = cameras.find(c => c.id === b.cameraId)
-                                  || cameras.find(c => c.serialNumber && b.cameraShort && c.serialNumber.toLowerCase() === b.cameraShort.toLowerCase())
-                                  || cameras.find(c => c.shortName && b.cameraShort && c.shortName.toLowerCase() === b.cameraShort.toLowerCase());
-                                const imgUrl = bCam?.image || null;
-                                return (
-                                  <div key={bIdx} className="px-3 py-2 flex items-center gap-2">
-                                    <div className={`w-0.5 h-full self-stretch rounded-full shrink-0 ${colors.border.replace('border-', 'bg-')}`} />
-                                    {/* Ảnh thumbnail — hiển thị thường trực nếu có */}
-                                    {imgUrl ? (
-                                      <img
-                                        src={imgUrl}
-                                        alt={b.cleanName || b.cameraName}
-                                        className="w-10 h-13 object-cover rounded-lg border border-gray-200 shrink-0 shadow-xs"
-                                        style={{ height: '52px', width: '40px' }}
-                                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                                      />
-                                    ) : (
-                                      <div className="w-10 shrink-0 flex items-center justify-center bg-gray-100 rounded-lg border border-gray-200" style={{ height: '52px', width: '40px' }}>
-                                        <span className="text-lg">👗</span>
-                                      </div>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="font-mono text-[10px] font-black text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 shrink-0">
-                                          {b.cameraShort}
-                                        </span>
-                                        <span className="text-[12px] font-black text-gray-900 truncate">
-                                          {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                        <span className="text-[9.5px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                                          {b.isPrinter ? `🖨️ ${b.printCount ?? '?'}t` : `Size ${b.size || 'FS'}`}
-                                        </span>
-                                        {b.color && (
-                                          <span className="text-[9.5px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 inline-flex items-center gap-1">
-                                            🎨 {b.color}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* Footer: ngày thuê */}
-                            {(contract.startDate || contract.endDate) && (
-                              <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-100">
-                                <span className="text-[9.5px] text-gray-400 font-mono">
-                                  📅 {contract.startDate} → {contract.endDate}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      });
-                    })() : (
-                      <div className="py-8 text-center text-gray-400 text-xs italic">
-                        Ngày này chưa có lịch thuê
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer action button */}
-                  <div className="px-4 py-3 border-t border-gray-100 bg-white">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, startDate: mobileDetailDate!, endDate: mobileDetailDate! }));
-                        setShowAddQuickModal(true);
-                        setMobileDetailDate(null);
-                      }}
-                      className="w-full py-3 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-sm rounded-xl transition-colors shadow-sm cursor-pointer"
-                    >
-                      + Đặt lịch ngày này
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })(),
-          document.body
-        )}
-
         {/* Mobile-Only Interactive Daily Agenda List */}
         {(() => {
           const calendarDaysWithBookings = calendarDays.filter(d => (dayBookingsMap[d.dateString] || []).length > 0);
@@ -1747,7 +1173,7 @@ export default function BookingCalendar({
               <div className="flex items-center justify-between mb-2.5 select-none">
                 <h3 className="text-xs font-black uppercase tracking-wider text-orange-800 flex items-center gap-1.5">
                   <span className="w-1.5 h-3.5 bg-orange-600 rounded-sm"></span>
-                  Lịch trang phục thuê {viewMode === 'month' ? `tháng ${currentMonth}/${currentYear}` : 'trong tuần'}
+                  Lịch máy thuê {viewMode === 'month' ? `tháng ${currentMonth}/${currentYear}` : 'trong tuần'}
                 </h3>
                 <span className="text-[10px] bg-orange-50 text-orange-700 font-black px-2 py-0.5 rounded-full border border-orange-200 leading-none">
                   {calendarDaysWithBookings.length} ngày có lịch
@@ -1781,49 +1207,28 @@ export default function BookingCalendar({
                         }`}
                       >
                         <div className="flex justify-between items-center mb-1.5 leading-none select-none">
-                          <span className="text-xs font-black text-gray-855 flex items-center gap-1.5">
+                          <span className="text-xs font-black text-gray-850 flex items-center gap-1.5">
                             <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-orange-600 animate-pulse' : 'bg-gray-400'}`}></span>
                             {formattedDate()}
                           </span>
                           <span className="text-[10px] font-bold text-gray-500 font-mono">
-                            {dayBookings.length} bộ thuê
+                            {dayBookings.length} máy thuê
                           </span>
                         </div>
 
-                        <div className="space-y-1.5">
+                        <div className="flex flex-wrap gap-1">
                           {dayBookings.map((b, bIdx) => {
                             const colors = getCameraColorProps(b.cameraShort);
                             return (
                               <div
                                 key={bIdx}
-                                className={`flex items-center justify-between p-2 rounded-lg border-0 border-l-[3.5px] ${colors.bgClass} ${colors.border} shadow-3xs`}
+                                className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border-0 border-l-[3px] text-[9.5px] font-black shadow-3xs ${colors.bgClass} ${colors.border}`}
                               >
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-mono text-[10px] font-black text-gray-800">
-                                      {b.cameraShort}
-                                    </span>
-                                    <span className="text-xs font-bold text-gray-900 truncate">
-                                      {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
-                                    </span>
-                                    <span className="bg-white/90 text-[9px] font-black px-1.5 py-0.2 rounded border border-gray-200">
-                                      Size {b.size || 'FS'}
-                                    </span>
-                                    {b.color && (
-                                      <span className="bg-rose-50 text-rose-700 text-[9px] font-black px-1.5 py-0.2 rounded border border-rose-200 inline-flex items-center gap-1">
-                                        🎨 {b.color}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-[10px] text-gray-600 font-medium flex items-center gap-2 mt-0.5">
-                                    <span>👤 {b.contract.customerName}</span>
-                                    {b.contract.customerPhone && (
-                                      <span className="font-mono text-gray-500">📞 {b.contract.customerPhone}</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-white/80 text-orange-700 border border-orange-200 shrink-0">
-                                  {b.contract.status === 'Active' ? 'Đang thuê' : 'Đã đặt'}
+                                <span>{b.cameraShort}</span>
+                                <span className="opacity-75 font-normal text-[8.5px]">
+                                  ({b.isPrinter
+                                    ? `🖨️ ${b.printCount ?? '?'} tấm`
+                                    : b.contract.is6Hours ? '6h' : b.timeString === '00:00-00:00' ? 'Cả ngày' : b.timeString})
                                 </span>
                               </div>
                             );
@@ -1843,8 +1248,6 @@ export default function BookingCalendar({
         })()}
       </div>
 
-
-
       {/* Selected Day Bookings Detail Inspector */}
       <div className="bg-white border border-gray-150/70 rounded-xl sm:rounded-2xl shadow-sm p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3 mb-4">
@@ -1857,7 +1260,7 @@ export default function BookingCalendar({
                 Chi tiết đặt lịch ngày {formatDMY(selectedDate)}
               </h3>
               <span className="text-xs text-gray-500">
-                {dayBookingsMap[selectedDate]?.length || 0} trang phục có lịch thuê trong ngày
+                {dayBookingsMap[selectedDate]?.length || 0} thiết bị có lịch thuê trong ngày
               </span>
             </div>
           </div>
@@ -1891,9 +1294,7 @@ export default function BookingCalendar({
                         <span className={`${colors.tagColor} text-xs font-black px-2 py-0.5 rounded-lg font-mono shrink-0`}>
                           {b.cameraShort}
                         </span>
-                        <h4 className="font-extrabold text-gray-900 text-sm truncate">
-                          {b.cleanName || b.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}
-                        </h4>
+                        <h4 className="font-extrabold text-gray-900 text-sm truncate">{b.cameraName}</h4>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border ${
                         b.contract.status === 'Active' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
@@ -1907,31 +1308,14 @@ export default function BookingCalendar({
 
                     <div className="bg-white p-2.5 rounded-xl border border-gray-150 space-y-1.5 text-xs">
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500">{b.isPrinter ? 'Số lượng in:' : 'Kích cỡ (Size):'}</span>
-                        <span className={`font-bold ${b.isPrinter ? 'text-rose-700 font-mono' : 'text-slate-900'}`}>
-                          {b.isPrinter ? (
-                            `🖨️ ${b.printCount ?? '?'} tấm ảnh`
-                          ) : (
-                            <span className="bg-slate-100 text-slate-800 font-black text-xs px-2 py-0.5 rounded border border-slate-200">
-                              Size {b.size || 'Freesize'}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      {b.color && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500">Màu sắc:</span>
-                          <span className="bg-rose-50 text-rose-700 font-bold text-xs px-2 py-0.5 rounded border border-rose-200 inline-flex items-center gap-1">
-                            🎨 {b.color}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500">Thời gian thuê:</span>
-                        <span className="font-semibold text-gray-800">
-                          {b.contract.startDate === b.contract.endDate
-                            ? `${b.contract.startDate} (1 ngày)`
-                            : `${b.contract.startDate} → ${b.contract.endDate}`}
+                        <span className="text-gray-500">{b.isPrinter ? 'Số lượng in:' : 'Thời gian thuê:'}</span>
+                        <span className={`font-bold font-mono ${b.isPrinter ? 'text-rose-700' : 'text-gray-800'}`}>
+                          {b.isPrinter
+                            ? `🖨️ ${b.printCount ?? '?'} tấm ảnh`
+                            : b.contract.is6Hours
+                              ? `Gói 6 tiếng (Trả: ${b.contract.returnTime || '18:00'})`
+                              : (b.timeString === '00:00-00:00' ? 'Cả ngày' : b.timeString)
+                          }
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
@@ -1978,7 +1362,7 @@ export default function BookingCalendar({
         ) : (
           <div className="p-6 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 text-center select-none space-y-2">
             <p className="text-sm text-gray-500 font-medium">
-              Không có lịch đặt nào cho ngày {formatDMY(selectedDate)}. Toàn bộ trang phục sẵn sàng cho thuê!
+              Không có lịch đặt nào cho ngày {formatDMY(selectedDate)}. Toàn bộ thiết bị sẵn sàng cho thuê!
             </p>
             <button
               type="button"
@@ -1999,7 +1383,6 @@ export default function BookingCalendar({
         )}
       </div>
 
-
       {showAddQuickModal && typeof document !== 'undefined' && createPortal(
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[9999] animate-fade-in"
@@ -2007,13 +1390,13 @@ export default function BookingCalendar({
             if (e.target === e.currentTarget) e.preventDefault();
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-lg md:max-w-5xl lg:max-w-6xl w-full overflow-hidden self-center animate-scale-up flex flex-col max-h-[92vh]">
-            <div className="bg-orange-600 px-4 py-3 sm:px-6 sm:py-4 text-white flex justify-between items-center shrink-0">
-              <h3 className="font-bold text-sm sm:text-base flex items-center gap-2">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-lg w-full overflow-hidden self-center animate-scale-up flex flex-col max-h-[90vh]">
+            <div className="bg-orange-600 px-6 py-4 text-white flex justify-between items-center shrink-0">
+              <h3 className="font-bold text-lg flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5" /> Đặt Lịch & Tạo Đơn Nhanh
               </h3>
               <button
-                onClick={() => handleCloseQuickModal()}
+                onClick={() => setShowAddQuickModal(false)}
                 className="text-white/80 hover:text-white font-bold text-xl cursor-pointer"
               >
                 &times;
@@ -2022,977 +1405,640 @@ export default function BookingCalendar({
 
             <form 
               onSubmit={handleQuickBookingSubmit} 
-              className="flex flex-col flex-1 overflow-hidden min-h-0"
+              className="p-6 space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
+              style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
             >
-              <div 
-                className="p-3 sm:p-5 lg:p-6 space-y-3.5 sm:space-y-4 flex-1 overflow-y-auto overscroll-contain modal-scrollable"
-                style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-              >
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 lg:gap-5 items-start">
-                
-                {/* === BƯỚC 1: THÔNG TIN KHÁCH HÀNG & THỜI GIAN THUÊ (Top Left trên PC, Đầu trang trên Mobile) === */}
-                <div className="lg:col-start-1 lg:col-span-5 lg:row-start-1 space-y-3 sm:space-y-3.5">
-                  {/* Khung Thông tin khách hàng & cọc - Viền cam mềm mại, đồng bộ, hoàn toàn không viền đen */}
-                  <div className="bg-white border-2 border-orange-200/90 rounded-2xl p-3 sm:p-3.5 space-y-3 shadow-2xs">
-                    <div className="flex items-center gap-2 border-b border-orange-100 pb-2">
-                      <User className="w-4 h-4 text-orange-600" />
-                      <span className="text-xs font-black text-gray-900 uppercase tracking-wide">Thông tin khách hàng & cọc</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Tên khách hàng *</label>
-                        {(() => {
-                          const inputName = formData.customerName.trim().toLowerCase();
-                          const nameSuggestions = inputName.length >= 1
-                            ? Array.from(
-                                new Map(
-                                  [
-                                    ...customers.map(c => ({ name: c.name, phone: c.phone })),
-                                    ...contracts.map(c => ({ name: c.customerName, phone: c.customerPhone }))
-                                  ]
-                                  .filter(item => item.name && item.name.toLowerCase().includes(inputName))
-                                  .map(item => [item.name.toLowerCase(), item])
-                                ).values()
-                              ).filter(item => item.name.toLowerCase() !== inputName)
-                            : [];
-
-                          return (
-                            <div className="relative">
-                              <input
-                                type="text"
-                                required
-                                value={formData.customerName}
-                                onChange={e => {
-                                  setFormData({ ...formData, customerName: e.target.value });
-                                  setHideCustomerSuggestions(false);
-                                }}
-                                className="w-full border border-gray-300 rounded-lg p-2 pr-8 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder:text-gray-400 font-medium"
-                                placeholder="VD: Nguyễn Văn A"
-                              />
-                              {formData.customerName && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setFormData({ ...formData, customerName: '' });
-                                    setHideCustomerSuggestions(true);
-                                  }}
-                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition cursor-pointer"
-                                  title="Xoá tên"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {nameSuggestions.length > 0 && !hideCustomerSuggestions && (
-                                <div className="absolute left-0 top-full mt-1 w-full bg-white border border-orange-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-48 overflow-y-auto">
-                                  <div className="px-3 py-1.5 text-[10px] font-extrabold text-orange-600 uppercase tracking-wider bg-orange-50 border-b border-orange-100 flex items-center justify-between">
-                                    <span className="flex items-center gap-1">👥 Khách cũ gợi ý</span>
-                                    <button
-                                      type="button"
-                                      onMouseDown={e => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setHideCustomerSuggestions(true);
-                                      }}
-                                      className="p-0.5 px-1.5 text-orange-500 hover:text-orange-800 hover:bg-orange-100/80 rounded transition cursor-pointer flex items-center gap-1 text-[10px] font-bold"
-                                      title="Bỏ qua gợi ý này"
-                                    >
-                                      <span className="text-[10px] font-semibold lowercase">bỏ qua</span>
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                  {nameSuggestions.slice(0, 6).map((sug, i) => (
-                                    <button
-                                      key={i}
-                                      type="button"
-                                      onMouseDown={e => {
-                                        e.preventDefault();
-                                        setFormData({ ...formData, customerName: sug.name, customerPhone: sug.phone || formData.customerPhone });
-                                        setHideCustomerSuggestions(true);
-                                      }}
-                                      className="w-full text-left px-3 py-2 hover:bg-orange-50 transition-colors flex items-center justify-between gap-2 cursor-pointer border-b border-gray-100 last:border-0"
-                                    >
-                                      <span className="font-semibold text-sm text-gray-850 truncate">{sug.name}</span>
-                                      {sug.phone && <span className="font-mono text-[11px] text-gray-500 shrink-0">{sug.phone}</span>}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Số điện thoại *</label>
-                        {(() => {
-                          const phone = formData.customerPhone.trim();
-                          const matchedCustomer = phone.length >= 8
-                            ? (customers.find(c => c.phone === phone) ||
-                               contracts.reduce((found: any, c) => found || (c.customerPhone === phone ? { name: c.customerName, phone: c.customerPhone } : null), null))
-                            : null;
-                          return (
-                            <div className="relative">
-                              <input
-                                type="tel"
-                                required
-                                value={formData.customerPhone}
-                                onChange={e => {
-                                  const newPhone = e.target.value;
-                                  const found = newPhone.trim().length >= 8
-                                    ? (customers.find(c => c.phone === newPhone.trim()) ||
-                                       contracts.reduce((f: any, c) => f || (c.customerPhone === newPhone.trim() ? { name: c.customerName } : null), null))
-                                    : null;
-                                  if (found && !formData.customerName) {
-                                    setFormData({ ...formData, customerPhone: newPhone, customerName: found.name });
-                                  } else {
-                                    setFormData({ ...formData, customerPhone: newPhone });
-                                  }
-                                }}
-                                className={`w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder:text-gray-400 font-medium font-mono ${matchedCustomer ? 'border-emerald-400 bg-emerald-50/50' : 'border-gray-300'}`}
-                                placeholder="VD: 0912345678"
-                              />
-                              {matchedCustomer && (
-                                <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700 font-semibold">
-                                  <span>✓</span>
-                                  <span>Khách cũ: <span className="font-bold">{matchedCustomer.name}</span></span>
-                                  {formData.customerName !== matchedCustomer.name && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setFormData({ ...formData, customerName: matchedCustomer.name })}
-                                      className="ml-1 px-1.5 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-bold cursor-pointer hover:bg-emerald-700 transition-colors"
-                                    >
-                                      Điền tên
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Giấy tờ thế chấp</label>
-                        <select
-                          value={formData.customerDocType}
-                          onChange={e => {
-                            const val = e.target.value as any;
-                            const nextData = { ...formData, customerDocType: val };
-                            if (val === 'CCCD_And_1M') {
-                              nextData.depositAmount = 1000000;
-                            } else if (val === 'Other') {
-                              nextData.depositAmount = 0;
-                              setTimeout(() => {
-                                quickDocNoteInputRef.current?.focus();
-                              }, 60);
-                            } else if (val === 'CashDeposit') {
-                              nextData.depositAmount = calculatedRecommendedDeposit > 0 ? calculatedRecommendedDeposit : 1000000;
-                            } else {
-                              nextData.depositAmount = 0;
-                            }
-                            if (nextData.customerDocNote === 'Giữ CCCD gốc + 1.000.000đ' || 
-                                nextData.customerDocNote === 'Giữ CCCD gốc' || 
-                                nextData.customerDocNote === 'Giữ GPLX gốc' || 
-                                nextData.customerDocNote === 'Giữ Hộ chiếu gốc' || 
-                                nextData.customerDocNote === 'Đặt cọc tiền mặt') {
-                              nextData.customerDocNote = '';
-                            }
-                            setFormData(nextData);
-                          }}
-                          className="w-full border border-gray-300 rounded-lg p-2 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-700 truncate"
-                        >
-                          <option value="CCCD">Căn cước công dân (CCCD)</option>
-                          <option value="CCCD_And_1M">Giữ CCCD + 1.000.000đ</option>
-                          <option value="GPLX">Bằng lái xe (GPLX)</option>
-                          <option value="Passport">Hộ chiếu (Passport)</option>
-                          <option value="CashDeposit">Đặt cọc tiền mặt</option>
-                          <option value="Other">Hình thức khác</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">
-                          Ghi chú thế chấp {formData.customerDocType === 'Other' && <span className="text-orange-600 font-bold">* (Viết rõ)</span>}
-                        </label>
-                        <input
-                          ref={quickDocNoteInputRef}
-                          type="text"
-                          value={formData.customerDocNote}
-                          onChange={e => setFormData({ ...formData, customerDocNote: e.target.value })}
-                          className={`w-full border rounded-lg p-2 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none transition-all ${
-                            formData.customerDocType === 'Other' ? 'border-orange-400 bg-orange-50/20' : 'border-gray-300'
-                          }`}
-                          placeholder={formData.customerDocType === 'Other' ? 'Ghi rõ đồ thế chấp (xe, thẻ SV...)' : 'VD: Wave S BKS 29-X... + Thẻ SV'}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Khung Thời gian thuê trang phục */}
-                  <div className="bg-gradient-to-br from-amber-50/50 via-orange-50/30 to-white border-2 border-orange-200/90 rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2.5 overflow-hidden">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-black text-gray-900 flex items-center gap-1.5 uppercase tracking-wide">
-                        <CalendarIcon className="w-4 h-4 text-orange-600" />
-                        <span>Thời gian thuê trang phục *</span>
-                      </label>
-                      <span className="text-[11px] font-extrabold text-orange-700 bg-orange-100/90 px-2.5 py-0.5 rounded-full shadow-3xs">
-                        📅 Thuê {calculatedDays > 0 ? calculatedDays : 1} ngày
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full min-w-0">
-                      <div className="w-full min-w-0">
-                        <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
-                          Ngày bắt đầu bàn giao *
-                        </label>
-                        <div className="relative w-full cursor-pointer group">
-                          <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-2.5 sm:px-3 flex items-center justify-between shadow-2xs transition-colors">
-                            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                              <CalendarIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-600 shrink-0" />
-                              <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
-                                {formData.startDate ? formatDMY(formData.startDate) : 'Chọn ngày'}
-                              </span>
-                            </div>
-                            <span className="text-[9.5px] sm:text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
-                              Đổi
-                            </span>
-                          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="relative">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Tên khách hàng *</label>
+                  {(() => {
+                    const query = formData.customerName.trim().toLowerCase();
+                    // Build deduplicated list from customers + contracts
+                    const allKnown: { name: string; phone: string }[] = [];
+                    const seen = new Set<string>();
+                    [...customers.map(c => ({ name: c.name, phone: c.phone })),
+                     ...contracts.map(c => ({ name: c.customerName, phone: c.customerPhone }))]
+                      .forEach(item => {
+                        const key = item.phone || item.name;
+                        if (!seen.has(key) && item.name) { seen.add(key); allKnown.push(item); }
+                      });
+                    const nameSuggestions = query.length >= 1
+                      ? allKnown.filter(k => k.name.toLowerCase().includes(query) && k.name !== formData.customerName)
+                      : [];
+                    return (
+                      <>
+                        <div className="relative">
                           <input
-                            type="date"
+                            type="text"
                             required
-                            value={formData.startDate}
+                            value={formData.customerName}
                             onChange={e => {
-                              const d = e.target.value;
-                              setFormData(prev => ({
-                                ...prev,
-                                startDate: d,
-                                endDate: prev.endDate < d ? d : prev.endDate
-                              }));
+                              setHideCustomerSuggestions(false);
+                              setFormData({ ...formData, customerName: e.target.value });
                             }}
-                            onClick={e => {
-                              try {
-                                (e.target as HTMLInputElement).showPicker?.();
-                              } catch {}
-                            }}
+                            onFocus={() => setHideCustomerSuggestions(false)}
                             onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                try {
-                                  (e.target as HTMLInputElement).showPicker?.();
-                                } catch {}
-                              }
+                              if (e.key === 'Escape') setHideCustomerSuggestions(true);
                             }}
-                            className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            className="w-full border border-gray-300 rounded-lg p-2 pr-8 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder:text-gray-400 font-medium"
+                            placeholder="VD: Nguyễn Văn Hải"
+                            autoComplete="off"
                           />
+                          {formData.customerName && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData({ ...formData, customerName: '' });
+                                setHideCustomerSuggestions(true);
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition cursor-pointer"
+                              title="Xoá tên"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
-                      </div>
-                      <div className="w-full min-w-0">
-                        <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
-                          Ngày trả dự kiến *
-                        </label>
-                        <div className="relative w-full cursor-pointer group">
-                          <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-2.5 sm:px-3 flex items-center justify-between shadow-2xs transition-colors">
-                            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                              <CalendarIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-600 shrink-0" />
-                              <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
-                                {formData.endDate ? formatDMY(formData.endDate) : 'Chọn ngày'}
-                              </span>
+                        {nameSuggestions.length > 0 && !hideCustomerSuggestions && (
+                          <div className="absolute left-0 top-full mt-1 w-full bg-white border border-orange-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-48 overflow-y-auto">
+                            <div className="px-3 py-1.5 text-[10px] font-extrabold text-orange-600 uppercase tracking-wider bg-orange-50 border-b border-orange-100 flex items-center justify-between">
+                              <span className="flex items-center gap-1">👥 Khách cũ gợi ý</span>
+                              <button
+                                type="button"
+                                onMouseDown={e => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setHideCustomerSuggestions(true);
+                                }}
+                                className="p-0.5 px-1.5 text-orange-500 hover:text-orange-800 hover:bg-orange-100/80 rounded transition cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                                title="Bỏ qua gợi ý này"
+                              >
+                                <span className="text-[10px] font-semibold lowercase">bỏ qua</span>
+                                <X className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                            <span className="text-[9.5px] sm:text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
-                              Đổi
-                            </span>
+                            {nameSuggestions.slice(0, 6).map((sug, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onMouseDown={e => {
+                                  e.preventDefault();
+                                  setFormData({ ...formData, customerName: sug.name, customerPhone: sug.phone || formData.customerPhone });
+                                  setHideCustomerSuggestions(true);
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-orange-50 transition-colors flex items-center justify-between gap-2 cursor-pointer border-b border-gray-100 last:border-0"
+                              >
+                                <span className="font-semibold text-sm text-gray-850 truncate">{sug.name}</span>
+                                {sug.phone && <span className="font-mono text-[11px] text-gray-500 shrink-0">{sug.phone}</span>}
+                              </button>
+                            ))}
                           </div>
-                          <input
-                            type="date"
-                            required
-                            min={formData.startDate}
-                            value={formData.endDate}
-                            onChange={e => setFormData({ ...formData, endDate: e.target.value })}
-                            onClick={e => {
-                              try {
-                                (e.target as HTMLInputElement).showPicker?.();
-                              } catch {}
-                            }}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                try {
-                                  (e.target as HTMLInputElement).showPicker?.();
-                                } catch {}
-                              }
-                            }}
-                            className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Số điện thoại *</label>
+                  {(() => {
+                    const phone = formData.customerPhone.trim();
+                    const matchedCustomer = phone.length >= 8
+                      ? (customers.find(c => c.phone === phone) ||
+                         contracts.reduce((found: any, c) => found || (c.customerPhone === phone ? { name: c.customerName, phone: c.customerPhone } : null), null))
+                      : null;
+                    return (
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          required
+                          value={formData.customerPhone}
+                          onChange={e => {
+                            const newPhone = e.target.value;
+                            const found = newPhone.trim().length >= 8
+                              ? (customers.find(c => c.phone === newPhone.trim()) ||
+                                 contracts.reduce((f: any, c) => f || (c.customerPhone === newPhone.trim() ? { name: c.customerName } : null), null))
+                              : null;
+                            if (found && !formData.customerName) {
+                              setFormData({ ...formData, customerPhone: newPhone, customerName: found.name });
+                            } else {
+                              setFormData({ ...formData, customerPhone: newPhone });
+                            }
+                          }}
+                          className={`w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder:text-gray-400 font-medium font-mono ${matchedCustomer ? 'border-emerald-400 bg-emerald-50/50' : 'border-gray-300'}`}
+                          placeholder="VD: 0912345678"
+                        />
+                        {matchedCustomer && (
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700 font-semibold">
+                            <span>✓</span>
+                            <span>Khách cũ: <span className="font-bold">{matchedCustomer.name}</span></span>
+                            {formData.customerName !== matchedCustomer.name && (
+                              <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, customerName: matchedCustomer.name })}
+                                className="ml-1 px-1.5 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-bold cursor-pointer hover:bg-emerald-700 transition-colors"
+                              >
+                                Điền tên
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
 
-                {/* === BƯỚC 2: CHỌN TRANG PHỤC CẦN THUÊ / LỊCH MÁY (Right Column trên PC, Bước 2 trên Mobile) === */}
-                <div className="lg:col-start-6 lg:col-span-7 lg:row-start-1 lg:row-span-2 space-y-3 sm:space-y-4">
-                  {/* Prominent Camera Selection Box (HERO HIGHLIGHT) */}
-                  <div className="bg-gradient-to-b from-orange-50/90 via-amber-50/40 to-orange-50/60 border-2 border-orange-300 rounded-2xl p-3 sm:p-4 shadow-sm ring-4 ring-orange-500/10">
-                <div className="flex items-center justify-between gap-2 mb-2.5">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Giấy tờ thế chấp</label>
+                  <select
+                    value={formData.customerDocType}
+                    onChange={e => {
+                      const val = e.target.value as any;
+                      const nextData = { ...formData, customerDocType: val };
+                      if (val === 'CCCD_And_1M') {
+                        nextData.depositAmount = 1000000;
+                      } else if (val === 'Other') {
+                        nextData.depositAmount = 0;
+                        setTimeout(() => {
+                          quickDocNoteInputRef.current?.focus();
+                        }, 60);
+                      } else if (val === 'CashDeposit') {
+                        nextData.depositAmount = calculatedRecommendedDeposit > 0 ? calculatedRecommendedDeposit : 1000000;
+                      } else {
+                        nextData.depositAmount = 0;
+                      }
+                      // Nếu ô ghi chú trước đó đang mang các câu tự động lặp lại cũ thì xóa sạch
+                      if (nextData.customerDocNote === 'Giữ CCCD gốc + 1.000.000đ' || 
+                          nextData.customerDocNote === 'Giữ CCCD gốc' || 
+                          nextData.customerDocNote === 'Giữ GPLX gốc' || 
+                          nextData.customerDocNote === 'Giữ Hộ chiếu gốc' || 
+                          nextData.customerDocNote === 'Đặt cọc tiền mặt') {
+                        nextData.customerDocNote = '';
+                      }
+                      setFormData(nextData);
+                    }}
+                    className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white font-medium text-gray-700"
+                  >
+                    <option value="CCCD">Căn cước công dân (CCCD)</option>
+                    <option value="CCCD_And_1M">Giữ căn cước (CCCD) và 1 triệu đồng</option>
+                    <option value="GPLX">Bằng lái xe (GPLX)</option>
+                    <option value="Passport">Hộ chiếu (Passport)</option>
+                    <option value="CashDeposit">Đặt cọc tiền mặt</option>
+                    <option value="Other">Hình thức khác</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Ghi chú thế chấp {formData.customerDocType === 'Other' && <span className="text-orange-600 font-bold">* (Viết ghi chú)</span>}
+                  </label>
+                  <input
+                    ref={quickDocNoteInputRef}
+                    type="text"
+                    value={formData.customerDocNote}
+                    onChange={e => setFormData({ ...formData, customerDocNote: e.target.value })}
+                    className={`w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none transition-all ${
+                      formData.customerDocType === 'Other' ? 'border-orange-400 bg-orange-50/20' : 'border-gray-300'
+                    }`}
+                    placeholder={formData.customerDocType === 'Other' ? 'Viết ghi chú thế chấp (VD: Xe máy, thẻ SV, laptop...)' : 'VD: Wave S BKS 29-X... + Thẻ SV'}
+                  />
+                </div>
+              </div>
+
+              {/* Prominent Camera Selection Box (HERO HIGHLIGHT) */}
+              <div className="bg-gradient-to-b from-orange-50/90 via-amber-50/40 to-orange-50/60 border-2 border-orange-300 rounded-2xl p-3 sm:p-3.5 shadow-sm ring-4 ring-orange-500/10">
+                <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div className="w-6 h-6 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-3xs shrink-0">
-                      <DressIcon className="w-4 h-4" />
+                      <CameraIcon className="w-3.5 h-3.5" />
                     </div>
                     <span className="text-xs sm:text-sm font-black text-gray-950 uppercase tracking-wide truncate">
-                      Chọn trang phục cần thuê *
+                      Chọn thiết bị cần thuê *
                     </span>
                   </div>
                   {formData.selectedCameraIds.length > 0 ? (
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (showOnlySelected) {
-                            setShowOnlySelected(false);
-                          } else {
-                            setQuickOutfitSearch('');
-                            setQuickSizeFilter('ALL');
-                            setQuickAvailabilityFilter('ALL');
-                            setShowOnlySelected(true);
-                          }
-                        }}
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer shadow-xs ${
-                          showOnlySelected
-                            ? 'bg-orange-600 text-white shadow-xs ring-2 ring-orange-300'
-                            : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50'
-                        }`}
-                        title="Bấm để lọc chỉ xem những trang phục đã chọn"
-                      >
-                        {showOnlySelected ? '👁️ Xem tất cả' : '📍 Xem đã chọn'}
-                      </button>
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-xs flex items-center gap-1">
-                        <Check className="w-3 h-3 stroke-[3]" />
-                        Đã chọn: {formData.selectedCameraIds.length} món
-                      </span>
-                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-xs flex items-center gap-1 shrink-0 animate-pulse">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                      Đã chọn: {formData.selectedCameraIds.length} máy
+                    </span>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-orange-600 border border-orange-200 shadow-3xs shrink-0">
-                      Chưa chọn trang phục nào
+                      Chưa chọn máy nào
                     </span>
                   )}
                 </div>
 
-                {/* Quick Search and Size Filter for Outfits */}
-                <div className="space-y-1.5 mb-2">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={quickOutfitSearch}
-                      onChange={e => {
-                        setQuickOutfitSearch(e.target.value);
-                        if (showOnlySelected) setShowOnlySelected(false);
-                      }}
-                      placeholder="🔍 Tìm nhanh mẫu đồ, mã số, màu sắc..."
-                      className="w-full bg-white border border-orange-200 rounded-xl px-3 py-1.5 text-xs text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs font-medium"
-                    />
-                    {quickOutfitSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setQuickOutfitSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs px-1"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
+                <div className="bg-white/95 border border-orange-200/90 rounded-xl p-2 max-h-[185px] overflow-y-auto space-y-1.5 shadow-inner">
+                  {cameras.filter(cam => cam.status !== 'Maintenance').length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-3">
+                      Hiện không có thiết bị khả dụng (toàn bộ thiết bị đang bảo trì).
+                    </p>
+                  ) : (
+                    cameras.filter(cam => cam.status !== 'Maintenance').map(cam => {
+                      const isSelected = formData.selectedCameraIds.includes(cam.id);
+                      const isPrinter = cam.category === 'Printer' || Boolean(cam.isPrinter);
+                      const printCount = formData.printCounts?.[cam.id] || 5;
+                      const printPricing = isPrinter ? getPrintPrice(cam, printCount) : null;
 
-                  {/* Filter Row: Size and Availability Filters */}
-                  <div className="space-y-1.5 pt-0.5">
-                    {/* Size Filter Pills */}
-                    <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-                      <span className="text-[10px] font-bold text-gray-500 shrink-0 uppercase tracking-tight">Size:</span>
-                      {['ALL', 'S', 'M', 'L', 'XL', 'XXL', 'Freesize'].map(sz => {
-                        const isActive = !showOnlySelected && quickSizeFilter === sz;
-                        return (
-                          <button
-                            key={sz}
-                            type="button"
-                            onClick={() => {
-                              setShowOnlySelected(false);
-                              setQuickSizeFilter(sz);
-                            }}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
-                              isActive
-                                ? 'bg-orange-600 text-white shadow-2xs'
-                                : 'bg-white/90 text-gray-600 hover:bg-orange-100 hover:text-orange-800 border border-orange-200/60'
-                            }`}
-                          >
-                            {sz === 'ALL' ? 'Tất cả' : sz}
-                          </button>
+                      const priceLabel = isPrinter
+                        ? (isSelected ? `${printPricing?.totalPrice.toLocaleString()}đ (${printCount} tấm)` : '40k/tấm (từ 33k)')
+                        : (formData.is6Hours 
+                          ? `${(cam.price6Hours ?? Math.round((cam.price1Day ?? cam.dailyRate) * 0.6)).toLocaleString()}đ/6h` 
+                          : (calculatedDays > 0 
+                            ? `${Math.round(getCameraRateForDuration(cam, calculatedDays, false)).toLocaleString()}đ/ngày (${calculatedDays}n)` 
+                            : `${(cam.price1Day ?? cam.dailyRate).toLocaleString()}đ/ngày`
+                          )
                         );
-                      })}
-                      {formData.selectedCameraIds.length > 0 && (
-                        <button
-                          type="button"
+                      return (
+                        <div
+                          key={cam.id}
                           onClick={() => {
-                            if (showOnlySelected) {
-                              setShowOnlySelected(false);
+                            if (isSelected) {
+                              setFormData({
+                                ...formData,
+                                selectedCameraIds: formData.selectedCameraIds.filter(id => id !== cam.id)
+                              });
                             } else {
-                              setQuickOutfitSearch('');
-                              setQuickSizeFilter('ALL');
-                              setQuickAvailabilityFilter('ALL');
-                              setShowOnlySelected(true);
+                              setFormData({
+                                ...formData,
+                                selectedCameraIds: [...formData.selectedCameraIds, cam.id],
+                                printCounts: {
+                                  ...formData.printCounts,
+                                  [cam.id]: formData.printCounts?.[cam.id] || 5
+                                }
+                              });
                             }
                           }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
-                            showOnlySelected
-                              ? 'bg-orange-600 text-white shadow-2xs'
-                              : 'bg-orange-100 text-orange-800 hover:bg-orange-200 border border-orange-300'
+                          className={`p-2 sm:p-2.5 rounded-xl cursor-pointer select-none transition-all ${
+                            isSelected
+                              ? 'bg-orange-50 border-2 border-orange-500 shadow-xs ring-1 ring-orange-400/40'
+                              : 'bg-white hover:bg-orange-50/40 border border-gray-200 hover:border-orange-200 shadow-3xs'
                           }`}
                         >
-                          ⭐ Đã chọn ({formData.selectedCameraIds.length})
-                        </button>
-                      )}
-                    </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <div className={`w-4.5 h-4.5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                                isSelected ? 'bg-orange-600 text-white shadow-3xs' : 'border-2 border-gray-300 bg-white'
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </div>
+                              <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-xs sm:text-sm font-extrabold truncate ${isSelected ? 'text-orange-950 font-black' : 'text-gray-900'}`}>
+                                  {cam.name}
+                                </span>
+                                {cam.serialNumber && (
+                                  <span className="bg-gray-150 text-gray-600 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0">
+                                    {cam.serialNumber}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
 
-                    {/* Availability Status Filter Pills */}
-                    <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-                      <span className="text-[10px] font-bold text-gray-500 shrink-0 uppercase tracking-tight">Tình trạng:</span>
-                      {[
-                        { id: 'ALL', label: 'Tất cả đồ' },
-                        { id: 'READY', label: '✓ Chỉ đồ sẵn sàng' },
-                        { id: 'BUSY', label: '🧺 Đang giặt / sửa' }
-                      ].map(st => {
-                        const isActive = !showOnlySelected && quickAvailabilityFilter === st.id;
-                        return (
-                          <button
-                            key={st.id}
-                            type="button"
-                            onClick={() => {
-                              setShowOnlySelected(false);
-                              setQuickAvailabilityFilter(st.id as any);
-                            }}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
-                              isActive
-                                ? (st.id === 'READY' ? 'bg-emerald-600 text-white shadow-2xs' : st.id === 'BUSY' ? 'bg-amber-600 text-white shadow-2xs' : 'bg-slate-700 text-white shadow-2xs')
-                                : 'bg-white/90 text-gray-600 hover:bg-orange-100 hover:text-orange-800 border border-orange-200/60'
-                            }`}
-                          >
-                            {st.label}
-                          </button>
-                        );
-                      })}
+                            <span className={`font-mono text-xs font-black shrink-0 px-2 py-0.5 rounded-lg ${
+                              isSelected 
+                                ? 'bg-orange-600 text-white shadow-3xs' 
+                                : 'bg-orange-50 text-orange-700 border border-orange-200/60'
+                            }`}>
+                              {priceLabel}
+                            </span>
+                          </div>
+
+                          {/* Print count controller when printer is selected */}
+                          {isSelected && isPrinter && (
+                            <div
+                              onClick={e => e.stopPropagation()}
+                              className="mt-2 pt-2 border-t border-orange-200/80 flex items-center justify-between flex-wrap gap-2 text-xs"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-bold text-gray-700">Số lượng in:</span>
+                                <div className="inline-flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden shadow-3xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const next = Math.max(1, printCount - 1);
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        printCounts: { ...prev.printCounts, [cam.id]: next }
+                                      }));
+                                    }}
+                                    className="px-2 py-0.5 text-xs font-bold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={printCount}
+                                    onChange={e => {
+                                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        printCounts: { ...prev.printCounts, [cam.id]: val }
+                                      }));
+                                    }}
+                                    className="w-12 text-center text-xs font-bold font-mono py-0.5 focus:outline-none border-x border-gray-200"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const next = printCount + 1;
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        printCounts: { ...prev.printCounts, [cam.id]: next }
+                                      }));
+                                    }}
+                                    className="px-2 py-0.5 text-xs font-bold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <span className="text-[11px] text-gray-500 font-medium">tấm</span>
+                              </div>
+
+                              <div className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                                {printPricing?.unitPrice.toLocaleString()}đ/tấm ({printPricing?.tierLabel}) = <strong>{printPricing?.totalPrice.toLocaleString()}đ</strong>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Rental type toggle */}
+              <div className="bg-gradient-to-r from-orange-50/50 via-amber-50/30 to-orange-50/50 p-3 rounded-2xl border-2 border-orange-100 shadow-xs">
+                <label className="block text-xs font-black text-gray-800 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+                  <span>⏱️ Hình thức thuê & thời gian:</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                       setFormData(prev => ({ ...prev, is6Hours: false }));
+                    }}
+                    className={`py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer border-2 text-center flex flex-col items-center justify-center gap-1 ${
+                      !formData.is6Hours
+                        ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white border-orange-600 shadow-md ring-2 ring-orange-300/60 scale-[1.01]'
+                        : 'bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-950 border-gray-200 hover:border-orange-300 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-black whitespace-nowrap">
+                      <CalendarIcon className={`w-4 h-4 shrink-0 ${!formData.is6Hours ? 'text-white' : 'text-orange-600'}`} />
+                      <span className={!formData.is6Hours ? 'text-white' : 'text-gray-800'}>Thuê theo ngày</span>
                     </div>
-                  </div>
+                    <span className={`text-[10px] sm:text-[11px] whitespace-nowrap leading-tight ${!formData.is6Hours ? 'text-orange-50 font-semibold' : 'text-gray-500 font-medium'}`}>
+                      Tính theo mốc ngày lũy tiến
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        is6Hours: true,
+                        endDate: prev.startDate,
+                        startTime: prev.startTime || '08:00',
+                        returnTime: add6Hours(prev.startTime || '08:00')
+                      }));
+                    }}
+                    className={`py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer border-2 text-center flex flex-col items-center justify-center gap-1 ${
+                      formData.is6Hours
+                        ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-300/60 scale-[1.01]'
+                        : 'bg-white hover:bg-amber-50 text-gray-700 hover:text-amber-950 border-gray-200 hover:border-amber-300 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-black whitespace-nowrap">
+                      <Zap className={`w-4 h-4 shrink-0 ${formData.is6Hours ? 'text-yellow-300 fill-yellow-300 drop-shadow-sm' : 'text-amber-600 fill-amber-500'}`} />
+                      <span className={formData.is6Hours ? 'text-white' : 'text-gray-800'}>Thuê nhanh 6 tiếng</span>
+                    </div>
+                    <span className={`text-[10px] sm:text-[11px] whitespace-nowrap leading-tight ${formData.is6Hours ? 'text-white font-semibold' : 'text-gray-500 font-medium'}`}>
+                      Mức phí ngắn hạn trong ngày
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Khung ngoài thời gian thuê máy */}
+              <div className="bg-gradient-to-br from-amber-50/40 via-orange-50/20 to-white border-2 border-orange-200/80 rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2.5 overflow-hidden">
+                {/* Header của khung ngoài */}
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-gray-800 flex items-center gap-1.5 uppercase tracking-wide">
+                    <CalendarIcon className="w-3.5 h-3.5 text-orange-600" />
+                    <span>Thời gian thuê máy:</span>
+                  </label>
+                  <span className="text-[11px] font-extrabold text-orange-700 bg-orange-100/90 px-2.5 py-0.5 rounded-full shadow-3xs">
+                    {formData.is6Hours 
+                      ? `⚡ Thuê 6h (${formData.startTime || '08:00'} - ${formData.returnTime || '14:00'})` 
+                      : `📅 Thuê ${calculatedDays > 0 ? calculatedDays : 1} ngày`}
+                  </span>
                 </div>
 
-                {/* Hộp ghim danh sách trang phục đã chọn để khách thấy ngay lập tức */}
-                {formData.selectedCameraIds.length > 0 && (
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50/90 border-2 border-orange-300 rounded-xl p-2.5 shadow-2xs space-y-1.5 mb-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-black text-orange-950 uppercase tracking-wide flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5 text-orange-600 stroke-[3]" />
-                        Mẫu đã chọn ({formData.selectedCameraIds.length} món):
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (showOnlySelected) {
-                            setShowOnlySelected(false);
-                          } else {
-                            setQuickOutfitSearch('');
-                            setQuickSizeFilter('ALL');
-                            setQuickAvailabilityFilter('ALL');
-                            setShowOnlySelected(true);
-                          }
-                        }}
-                        className="text-[10px] font-black px-2.5 py-0.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white transition cursor-pointer shadow-3xs"
-                      >
-                        {showOnlySelected ? '👁️ Hiện tất cả mẫu' : '🔍 Chỉ lọc mẫu đã chọn'}
-                      </button>
+                {/* Nội dung chọn ngày/giờ */}
+                {formData.is6Hours ? (
+                  <div className="space-y-2 w-full min-w-0">
+                    <div className="w-full min-w-0">
+                      <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
+                        Ngày thuê máy *
+                      </label>
+                      <div className="relative w-full cursor-pointer group">
+                        <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <CalendarIcon className="w-4 h-4 text-orange-600 shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
+                              {formData.startDate ? formatDMY(formData.startDate) : 'Chọn ngày'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
+                            Đổi
+                          </span>
+                        </div>
+                        <input
+                          type="date"
+                          required
+                          value={formData.startDate}
+                          onChange={e => {
+                            const d = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              startDate: d,
+                              endDate: d
+                            }));
+                          }}
+                          onClick={e => {
+                            try {
+                              (e.target as HTMLInputElement).showPicker?.();
+                            } catch {}
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              try {
+                                (e.target as HTMLInputElement).showPicker?.();
+                              } catch {}
+                            }
+                          }}
+                          className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-1.5 pt-0.5">
-                      {formData.selectedCameraIds.map(camId => {
-                        const cam = cameras.find(c => c.id === camId);
-                        if (!cam) return null;
-                        const baseName = cam.name.replace(/\s*\(Size\s+\S+\)\s*$/i, '').replace(/\s*\(Freesize\)\s*$/i, '').trim();
-                        return (
-                          <div
-                            key={camId}
-                            onClick={() => {
-                              setShowOnlySelected(false);
-                              setTimeout(() => {
-                                const cardEl = document.getElementById(`quick-outfit-card-${cam.id}`) || document.getElementById(`quick-outfit-group-${cam.shortName || cam.id}`);
-                                if (cardEl) {
-                                  cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  cardEl.classList.add('ring-4', 'ring-orange-500');
-                                  setTimeout(() => cardEl.classList.remove('ring-4', 'ring-orange-500'), 1500);
-                                }
-                              }, 100);
-                            }}
-                            className="inline-flex items-center gap-1.5 bg-white border border-orange-300 hover:border-orange-500 text-gray-900 pl-1.5 pr-2 py-1 rounded-lg text-xs font-bold shadow-3xs cursor-pointer group transition-all"
-                            title="Bấm để cuộn đến vị trí mẫu này trong danh sách"
-                          >
-                            {cam.image && (
-                              <img src={cam.image} alt={baseName} className="w-6 h-6 rounded-md object-cover object-top border border-gray-200 shrink-0" />
-                            )}
-                            <span className="text-orange-950 font-black max-w-[130px] sm:max-w-[180px] truncate">{baseName}</span>
-                            <span className="bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded shrink-0">
-                              Size {cam.size || 'FS'}
+                    <div className="grid grid-cols-2 gap-2 w-full min-w-0">
+                      <div className="min-w-0">
+                        <label className="block text-[11px] sm:text-xs font-bold text-amber-900 mb-1 truncate" title="Giờ lấy máy (HH:MM 24h)">
+                          Giờ lấy máy *
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          required
+                          maxLength={5}
+                          placeholder="08:00"
+                          pattern="^([01]\d|2[0-3]):[0-5]\d$"
+                          value={formData.startTime || '08:00'}
+                          onChange={e => {
+                            let t = e.target.value;
+                            if (/^\d{2}$/.test(t) && (formData.startTime || '').length === 1) {
+                              t = t + ':';
+                            }
+                            setFormData(prev => ({
+                              ...prev,
+                              startTime: t,
+                              returnTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? add6Hours(t) : prev.returnTime
+                            }));
+                          }}
+                          onBlur={e => {
+                            const t = e.target.value;
+                            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) {
+                              setFormData(prev => ({ ...prev, startTime: '08:00', returnTime: add6Hours('08:00') }));
+                            }
+                          }}
+                          className="block w-full max-w-full box-border h-10 border border-amber-300 bg-amber-50/50 rounded-xl px-2 py-1 text-xs sm:text-sm font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 focus:outline-none text-center tracking-wider shadow-2xs"
+                          title="Nhập giờ lấy máy theo định dạng 24h (VD: 08:00, 13:30)"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="block text-[11px] sm:text-xs font-bold text-amber-900 mb-1 truncate" title="Giờ trả máy (Tự +6h, định dạng 24h)">
+                          Giờ trả (+6h) *
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          required
+                          maxLength={5}
+                          placeholder="14:00"
+                          pattern="^([01]\d|2[0-3]):[0-5]\d$"
+                          value={formData.returnTime || '14:00'}
+                          onChange={e => {
+                            let t = e.target.value;
+                            if (/^\d{2}$/.test(t) && (formData.returnTime || '').length === 1) {
+                              t = t + ':';
+                            }
+                            setFormData(prev => ({ ...prev, returnTime: t }));
+                          }}
+                          onBlur={e => {
+                            const t = e.target.value;
+                            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) {
+                              setFormData(prev => ({ ...prev, returnTime: add6Hours(prev.startTime || '08:00') }));
+                            }
+                          }}
+                          className="block w-full max-w-full box-border h-10 border border-amber-300 bg-amber-50/50 rounded-xl px-2 py-1 text-xs sm:text-sm font-bold text-amber-950 focus:ring-2 focus:ring-amber-500 focus:outline-none text-center tracking-wider shadow-2xs"
+                          title="Giờ trả máy (định dạng 24h, tự động cộng 6 tiếng từ giờ lấy)"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-amber-800 font-semibold bg-amber-100/50 px-2.5 py-1 rounded-lg">
+                      ⏱️ Tự động tính: {formData.startTime || '08:00'} ➔ {formData.returnTime || '14:00'} (đủ 6 tiếng)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 w-full min-w-0">
+                    <div className="w-full min-w-0">
+                      <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
+                        Ngày bắt đầu bàn giao *
+                      </label>
+                      <div className="relative w-full cursor-pointer group">
+                        <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <CalendarIcon className="w-4 h-4 text-orange-600 shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
+                              {formData.startDate ? formatDMY(formData.startDate) : 'Chọn ngày'}
                             </span>
-                            {cam.color && (
-                              <span className="text-[10px] text-gray-500 font-medium truncate max-w-[70px]">({cam.color})</span>
-                            )}
-                            {formData.itemDiscounts?.[camId] ? (
-                              <span className={`text-[9.5px] font-black px-1.5 py-0.2 rounded ${
-                                formData.itemDiscounts[camId] === 100
-                                  ? 'bg-rose-600 text-white'
-                                  : 'bg-orange-100 text-orange-850 border border-orange-200'
-                              }`}>
-                                {formData.itemDiscounts[camId] === 100 ? 'Tặng 0đ' : `-${formData.itemDiscounts[camId]}%`}
-                              </span>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setFormData(prev => ({
-                                  ...prev,
-                                  selectedCameraIds: prev.selectedCameraIds.filter(id => id !== camId),
-                                  customFinalPrice: null, // Reset giá chốt để tính lại tự động
-                                }));
-                              }}
-                              className="text-gray-400 hover:text-rose-600 font-black text-xs ml-0.5 p-0.5 cursor-pointer"
-                              title="Bỏ chọn trang phục này"
-                            >
-                              ✕
-                            </button>
                           </div>
-                        );
-                      })}
+                          <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
+                            Đổi
+                          </span>
+                        </div>
+                        <input
+                          type="date"
+                          required
+                          value={formData.startDate}
+                          onChange={e => {
+                            const d = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              startDate: d,
+                              endDate: prev.is6Hours ? d : prev.endDate
+                            }));
+                          }}
+                          onClick={e => {
+                            try {
+                              (e.target as HTMLInputElement).showPicker?.();
+                            } catch {}
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              try {
+                                (e.target as HTMLInputElement).showPicker?.();
+                              } catch {}
+                            }
+                          }}
+                          className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                      </div>
+                    </div>
+                    <div className="w-full min-w-0">
+                      <label className="block text-[11px] sm:text-xs font-bold text-gray-700 mb-1">
+                        Ngày trả dự kiến *
+                      </label>
+                      <div className="relative w-full cursor-pointer group">
+                        <div className="w-full h-10 bg-white border border-gray-300 group-hover:border-orange-500 rounded-xl px-3 flex items-center justify-between shadow-2xs transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <CalendarIcon className="w-4 h-4 text-orange-600 shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-gray-850 tracking-wide truncate">
+                              {formData.endDate ? formatDMY(formData.endDate) : 'Chọn ngày'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-orange-700 bg-orange-50 group-hover:bg-orange-100 border border-orange-200/80 px-1.5 py-0.5 rounded shrink-0 transition-colors">
+                            Đổi
+                          </span>
+                        </div>
+                        <input
+                          type="date"
+                          required
+                          min={formData.startDate}
+                          value={formData.endDate}
+                          onChange={e => setFormData({ ...formData, endDate: e.target.value })}
+                          onClick={e => {
+                            try {
+                              (e.target as HTMLInputElement).showPicker?.();
+                            } catch {}
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              try {
+                                (e.target as HTMLInputElement).showPicker?.();
+                              } catch {}
+                            }
+                          }}
+                          className="date-picker-overlay absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
-
-                <div ref={outfitListScrollRef} className="bg-white/95 border border-orange-200/90 rounded-xl p-2 max-h-[300px] lg:max-h-[540px] overflow-y-auto space-y-2 shadow-inner">
-                  {(() => {
-                    const availableOutfits = cameras
-                      .filter(cam => {
-                        if (showOnlySelected) {
-                          return formData.selectedCameraIds.includes(cam.id);
-                        }
-                        const isLaundry = cam.cleaningStatus === 'Laundry';
-                        const isMending = cam.cleaningStatus === 'Mending';
-                        const isRented = cam.status === 'Rented';
-                        const isMaint = cam.status === 'Maintenance';
-                        const isReady = !isLaundry && !isMending && !isRented && !isMaint;
-                        if (quickAvailabilityFilter === 'READY' && !isReady) return false;
-                        if (quickAvailabilityFilter === 'BUSY' && isReady) return false;
-                        if (quickSizeFilter !== 'ALL') {
-                          if (quickSizeFilter === 'Freesize') {
-                            const isFs = (cam.availableSizes && cam.availableSizes.some(s => /free|fs/i.test(s))) || (cam.size && /free|fs/i.test(cam.size));
-                            if (!isFs) return false;
-                          } else {
-                            const hasSize = (cam.availableSizes && cam.availableSizes.some(s => s.toUpperCase() === quickSizeFilter.toUpperCase())) || (cam.size && cam.size.toUpperCase().includes(quickSizeFilter.toUpperCase()));
-                            if (!hasSize) return false;
-                          }
-                        }
-                        if (quickOutfitSearch.trim()) {
-                          const q = quickOutfitSearch.trim().toLowerCase();
-                          if (!(cam.name||'').toLowerCase().includes(q) && !(cam.shortName||'').toLowerCase().includes(q) && !(cam.serialNumber||'').toLowerCase().includes(q) && !(cam.color||'').toLowerCase().includes(q) && !(cam.size||'').toLowerCase().includes(q)) return false;
-                        }
-                        return true;
-                      });
-
-                    if (availableOutfits.length === 0) {
-                      return (
-                        <p className="text-xs text-gray-400 italic text-center py-4">
-                          {showOnlySelected
-                            ? 'Không tìm thấy trang phục đã chọn trong kho.'
-                            : quickOutfitSearch || quickSizeFilter !== 'ALL' || quickAvailabilityFilter !== 'ALL'
-                            ? 'Không tìm thấy trang phục nào phù hợp.'
-                            : 'Hiện không có trang phục khả dụng trong kho.'}
-                        </p>
-                      );
-                    }
-
-                    // Check if a cam has booking conflict on currently selected dates
-                    const isBookedOnDates = (camId: string): boolean => {
-                      if (!formData.startDate) return false;
-                      const endD = formData.endDate || formData.startDate;
-                      const getDR = (s: string, e: string) => { const d: string[] = []; const l = new Date(s+'T00:00:00'), ed = new Date(e+'T00:00:00'); while(l<=ed){d.push(l.toISOString().split('T')[0]);l.setDate(l.getDate()+1);} return d; };
-                      const cDates = getDR(formData.startDate, endD);
-                      return contracts.some(c => {
-                        if (c.status==='Cancelled') return false;
-                        if (!c.items.some((it:any) => it.cameraId===camId)) return false;
-                        const eDates = getDR(c.startDate, c.endDate||c.startDate);
-                        return cDates.some(d => eDates.includes(d));
-                      });
-                    };
-
-                    const printerCams = availableOutfits.filter(c => c.category === 'Printer' || Boolean(c.isPrinter));
-                    const outfitCams = availableOutfits.filter(c => c.category !== 'Printer' && !c.isPrinter);
-
-                    // Group by shortName (same for all sizes of same model)
-                    const groups = new Map<string, typeof outfitCams>();
-                    outfitCams.forEach(cam => {
-                      const baseShort = (cam.shortName || '')
-                        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
-                        .trim();
-                      const baseSerial = (cam.serialNumber || '')
-                        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
-                        .trim();
-                      const cleanName = (cam.name || '')
-                        .replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '')
-                        .trim();
-                      const k = baseShort || baseSerial || cleanName || cam.shortName || cam.id;
-                      if (!groups.has(k)) groups.set(k, []);
-                      groups.get(k)!.push(cam);
-                    });
-
-                    const SIZE_ORDER = ['XS','S','M','L','XL','XXL','3XL','4XL','Freesize','FS'];
-
-                    return (
-                      <>
-                        {[...groups.entries()].map(([groupKey, groupCams]) => {
-                          const sorted = [...groupCams].sort((a,b) => {
-                            const ai = SIZE_ORDER.indexOf(a.size||'FS'), bi = SIZE_ORDER.indexOf(b.size||'FS');
-                            return (ai<0?99:ai)-(bi<0?99:bi);
-                          });
-                          const first = sorted[0];
-                          const anySelected = sorted.some(c => formData.selectedCameraIds.includes(c.id));
-                          const selectedSizes = sorted.filter(c => formData.selectedCameraIds.includes(c.id));
-                          const basePrice = calculatedDays > 0
-                            ? `${Math.round(getCameraRateForDuration(first, calculatedDays, false)).toLocaleString()}đ/ngày`
-                            : `${(first.price1Day ?? first.dailyRate).toLocaleString()}đ/ngày`;
-                          const baseName = first.name.replace(/\s*\(Size\s+\S+\)\s*$/i, '').replace(/\s*\(Freesize\)\s*$/i, '').trim();
-                          const displayImage = sorted.find(c => formData.selectedCameraIds.includes(c.id) && c.image)?.image || sorted.find(c => c.image)?.image || first.image;
-
-                          return (
-                            <div
-                              key={groupKey}
-                              id={`quick-outfit-card-${sorted.find(c => formData.selectedCameraIds.includes(c.id))?.id || sorted[0].id}`}
-                              className={`p-3 rounded-2xl transition-all border ${anySelected ? 'bg-orange-50/70 border-orange-400 shadow-xs ring-1 ring-orange-300/60' : 'bg-white border-gray-200/90 hover:border-orange-300 hover:shadow-2xs shadow-3xs'}`}
-                            >
-                              <div className="flex gap-2.5 sm:gap-3 items-start">
-                                {/* Thumbnail ảnh đại diện trang phục */}
-                                <div 
-                                  style={{ width: '3.75rem', height: '4.75rem' }} className="sm:w-16 rounded-xl overflow-hidden bg-slate-100 border border-gray-200 shrink-0 relative group/thumb shadow-3xs flex items-center justify-center cursor-pointer"
-                                  onClick={(e) => {
-                                    if (displayImage) {
-                                      e.stopPropagation();
-                                      setPreviewImage({ url: displayImage, title: baseName || groupKey });
-                                    }
-                                  }}
-                                  title={displayImage ? "Nhấp để xem ảnh lớn" : undefined}
-                                >
-                                  {displayImage ? (
-                                    <>
-                                      <img
-                                        src={displayImage}
-                                        alt={baseName}
-                                        className="w-full h-full object-cover object-top hover:scale-105 transition-transform duration-200"
-                                        loading="lazy"
-                                        referrerPolicy="no-referrer"
-                                      />
-                                      <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-white text-[8px] px-1 py-0.2 rounded opacity-0 group-hover/thumb:opacity-100 transition">🔍</span>
-                                    </>
-                                  ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-slate-50">
-                                      <span className="text-xl">👗</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Thông tin trang phục */}
-                                <div className="flex-1 min-w-0">
-                                  {/* Dòng 1: Mã sản phẩm (hiển thị nổi bật ở đầu như trước) + Tên trang phục + Giá thuê */}
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1.5">
-                                      {/* Mã sản phẩm nổi bật ở đầu thẻ như trước */}
-                                      <span className={`font-mono text-[10.5px] sm:text-xs font-black px-2 py-0.5 rounded-md border shrink-0 ${
-                                        anySelected 
-                                          ? 'bg-orange-600 text-white border-orange-600 shadow-3xs' 
-                                          : 'bg-gray-100 text-gray-800 border-gray-250 shadow-3xs'
-                                      }`}>
-                                        #{groupKey}
-                                      </span>
-
-                                      {/* Tên trang phục đầy đủ */}
-                                      {baseName && baseName !== groupKey && (
-                                        <span className={`text-xs sm:text-sm font-extrabold leading-snug ${
-                                          anySelected ? 'text-orange-950 font-black' : 'text-gray-900'
-                                        }`}>
-                                          {baseName}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <div className="shrink-0 text-right">
-                                      <span className={`font-mono text-[11px] sm:text-xs font-black px-2.5 py-0.5 rounded-lg inline-block shadow-3xs ${
-                                        anySelected 
-                                          ? 'bg-orange-600 text-white' 
-                                          : 'bg-orange-50 text-orange-700 border border-orange-200'
-                                      }`}>
-                                        {basePrice}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  {/* Dòng 2: Phân loại + Màu sắc (co giãn tự nhiên, không bị cắt chữ) */}
-                                  <div className="flex items-center flex-wrap gap-1.5 mt-1.5 mb-1">
-                                    {first.category && first.category !== 'Printer' && (
-                                      <span className="bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                        {first.category}
-                                      </span>
-                                    )}
-                                    {(() => {
-                                      const uniqueCols = Array.from(new Set(sorted.map(c => c.color?.trim()).filter(Boolean)));
-                                      if (uniqueCols.length === 0) return null;
-                                      return (
-                                        <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-3xs" title={uniqueCols.join(', ')}>
-                                          <span>🎨</span>
-                                          <span>{uniqueCols.length > 1 ? `${uniqueCols.length} màu: ${uniqueCols.join(', ')}` : uniqueCols[0]}</span>
-                                        </span>
-                                      );
-                                    })()}
-                                    {(() => {
-                                      const availCount = sorted.filter(c => {
-                                        const isMnt = c.status === 'Maintenance';
-                                        const isLdry = c.cleaningStatus === 'Laundry';
-                                        const isMnd = c.cleaningStatus === 'Mending';
-                                        return !isMnt && !isLdry && !isMnd && !isBookedOnDates(c.id);
-                                      }).length;
-                                      return (
-                                        <span className={`text-[10px] font-bold ml-auto ${availCount > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
-                                          {availCount > 0 ? `• Còn ${availCount}/${sorted.length} size` : '• Hết size ngày này'}
-                                        </span>
-                                      );
-                                    })()}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Dòng 3: Danh sách các nút chọn Size */}
-                              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
-                                <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-gray-500">
-                                  <span>Chọn size:</span>
-                                  <span className="text-[9.5px] font-medium text-gray-400 capitalize">
-                                    (Bấm để chọn/bỏ)
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {sorted.map(cam => {
-                                    const isSel = formData.selectedCameraIds.includes(cam.id);
-                                    const isLdry = cam.cleaningStatus === 'Laundry';
-                                    const isMnd = cam.cleaningStatus === 'Mending';
-                                    const isMnt = cam.status === 'Maintenance';
-                                    const isDateBusy = isBookedOnDates(cam.id);
-                                    const isBlocked = isDateBusy || isMnt || isLdry || isMnd;
-                                    const szLabel = cam.size || 'FS';
-                                    return (
-                                      <button
-                                        key={cam.id}
-                                        type="button"
-                                        onClick={() => {
-                                          if (isSel) {
-                                            setFormData({...formData, selectedCameraIds: formData.selectedCameraIds.filter(id => id !== cam.id), customFinalPrice: null});
-                                            return;
-                                          }
-                                          if (isBlocked) {
-                                            const reason = isDateBusy 
-                                              ? 'Đã có lịch đặt trong ngày này!' 
-                                              : isMnt 
-                                              ? 'Đang bảo dưỡng - chưa khả dụng!' 
-                                              : isLdry 
-                                              ? 'Đang giặt hấp - không thể chọn!' 
-                                              : 'Đang sửa chữa - không thể chọn!';
-                                            setCustomAlertMessage(`"${itemTitle}" Size ${szLabel}: ${reason}`);
-                                            return;
-                                          }
-                                          setFormData({...formData, selectedCameraIds: [...formData.selectedCameraIds, cam.id]});
-                                        }}
-                                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all select-none border ${
-                                          isSel
-                                            ? 'bg-orange-50/95 text-orange-950 border-2 border-orange-500 ring-2 ring-orange-300/80 shadow-xs scale-102 font-black cursor-pointer'
-                                            : isBlocked
-                                            ? isDateBusy
-                                              ? 'bg-red-50 text-red-500 border-red-200 cursor-not-allowed opacity-75'
-                                              : isMnt
-                                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-60'
-                                              : isLdry
-                                              ? 'bg-blue-50 text-blue-700 border-blue-200 cursor-not-allowed opacity-65'
-                                              : 'bg-amber-50 text-amber-700 border-amber-200 cursor-not-allowed opacity-65'
-                                            : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-orange-100 hover:border-orange-400 hover:text-orange-950 shadow-3xs cursor-pointer active:scale-97'
-                                        }`}
-                                      >
-                                        {isSel ? (
-                                          <Check className="w-3.5 h-3.5 stroke-[3.5] text-orange-600 shrink-0" />
-                                        ) : isDateBusy ? (
-                                          <span className="text-[10px] shrink-0">📅</span>
-                                        ) : isMnt ? (
-                                          <span className="text-[10px] shrink-0">✕</span>
-                                        ) : isLdry ? (
-                                          <span className="text-[10px] shrink-0">🧺</span>
-                                        ) : isMnd ? (
-                                          <span className="text-[10px] shrink-0">🪡</span>
-                                        ) : (
-                                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block ring-2 ring-emerald-200" />
-                                        )}
-                                        <span className="font-extrabold whitespace-nowrap">Size {szLabel}</span>
-                                        {cam.color && (
-                                          <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md truncate max-w-[100px] shadow-3xs ${
-                                            isSel ? 'bg-white text-orange-950 border border-orange-300' : 'bg-white/90 text-gray-700 border border-gray-200/80'
-                                          }`}>
-                                            🎨 {cam.color}
-                                          </span>
-                                        )}
-                                        {isDateBusy && (
-                                          <span className="text-[9px] font-bold text-red-600 bg-red-100/80 px-1 py-0.2 rounded">
-                                            Đã đặt
-                                          </span>
-                                        )}
-                                        {isMnt && (
-                                          <span className="text-[9px] font-bold text-gray-500 bg-gray-200/80 px-1 py-0.2 rounded">
-                                            Bảo trì
-                                          </span>
-                                        )}
-                                        {!isDateBusy && isLdry && (
-                                          <span className="text-[9px] font-bold text-blue-600 bg-blue-100/80 px-1 py-0.2 rounded">
-                                            Đang giặt
-                                          </span>
-                                        )}
-                                        {!isDateBusy && isMnd && (
-                                          <span className="text-[9px] font-bold text-amber-600 bg-amber-100/80 px-1 py-0.2 rounded">
-                                            Đang sửa
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
-                              {/* Dòng 4: Tóm tắt khi đã chọn */}
-                              {selectedSizes.length > 0 && (
-                                <div className="mt-2.5 pt-2 border-t border-orange-200/80 flex flex-wrap gap-1.5 items-center bg-orange-100/50 -mx-3 -mb-3 p-2.5 rounded-b-2xl">
-                                  <span className="text-[10px] text-orange-800 font-black uppercase tracking-wide shrink-0">
-                                    ✓ Đã chọn ({selectedSizes.length}):
-                                  </span>
-                                  {selectedSizes.map(c => {
-                                    const itemDisc = formData.itemDiscounts?.[c.id] || 0;
-                                    const baseRate = getCameraRateForDuration(c, calculatedDays);
-                                    const cost = baseRate * calculatedDays;
-                                    const finalCost = Math.round(cost * (1 - itemDisc / 100));
-
-                                    return (
-                                      <div key={c.id} className="w-full flex items-center justify-between gap-1.5 bg-white p-1.5 px-2 rounded-xl border border-orange-200 shadow-3xs flex-wrap">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="font-mono font-black text-orange-950 text-[11px]">Size {c.size || 'FS'}</span>
-                                          {c.color && <span className="text-[10px] text-gray-500 font-bold">({c.color})</span>}
-                                          <span className="text-[10px] font-mono text-gray-600 font-bold">
-                                            {itemDisc > 0 ? (
-                                              <>
-                                                <span className="text-rose-600 font-black">{finalCost.toLocaleString()}đ</span>
-                                                <span className="line-through text-gray-400 text-[9px] ml-1">{cost.toLocaleString()}đ</span>
-                                              </>
-                                            ) : (
-                                              <span>{cost.toLocaleString()}đ</span>
-                                            )}
-                                          </span>
-                                        </div>
-
-                                        {/* Thanh chọn % giảm giá riêng cho Size này */}
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-[9.5px] font-extrabold text-rose-800">Giảm:</span>
-                                          {[0, 10, 20, 50, 100].map(pct => {
-                                            const active = itemDisc === pct;
-                                            return (
-                                              <button
-                                                key={pct}
-                                                type="button"
-                                                onClick={() => {
-                                                  setFormData(prev => ({
-                                                    ...prev,
-                                                    itemDiscounts: {
-                                                      ...prev.itemDiscounts,
-                                                      [c.id]: pct
-                                                    }
-                                                  }));
-                                                }}
-                                                className={`text-[9.5px] font-extrabold px-1.5 py-0.5 rounded cursor-pointer transition ${
-                                                  active
-                                                    ? pct === 100
-                                                      ? 'bg-rose-600 text-white font-black shadow-xs ring-1 ring-rose-400'
-                                                      : pct === 0
-                                                      ? 'bg-gray-200 text-gray-800 font-bold'
-                                                      : 'bg-orange-500 text-white font-black shadow-xs'
-                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                                                }`}
-                                              >
-                                                {pct === 0 ? 'Gốc' : pct === 100 ? 'Tặng 0đ (100%)' : `-${pct}%`}
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {/* Printers stay as individual cards */}
-                        {printerCams.map(cam => {
-                          const isSelected = formData.selectedCameraIds.includes(cam.id);
-                          const printCount = formData.printCounts?.[cam.id] || 5;
-                          const printPricing = getPrintPrice(cam, printCount);
-                          const isUnavailable = cam.cleaningStatus === 'Laundry' || cam.cleaningStatus === 'Mending' || cam.status === 'Rented' || cam.status === 'Maintenance';
-                          const priceLabel = isSelected ? `${printPricing.totalPrice.toLocaleString()}đ (${printCount} tấm)` : '40k/tấm (từ 33k)';
-                          return (
-                            <div key={cam.id} onClick={() => {
-                              if (isUnavailable) { setCustomAlertMessage(`Máy in "${cam.name}" không khả dụng!`); return; }
-                              if (isSelected) setFormData({...formData, selectedCameraIds: formData.selectedCameraIds.filter(id => id!==cam.id), customFinalPrice: null});
-                              else setFormData({...formData, selectedCameraIds: [...formData.selectedCameraIds, cam.id], printCounts: {...formData.printCounts, [cam.id]: formData.printCounts?.[cam.id]||5}});
-                            }} className={`p-2.5 rounded-xl select-none transition-all ${isUnavailable ? 'bg-gray-100/80 border border-gray-200 opacity-65 cursor-not-allowed' : isSelected ? 'bg-orange-50 border-2 border-orange-500 shadow-xs cursor-pointer' : 'bg-white hover:bg-orange-50/40 border border-gray-200 hover:border-orange-200 shadow-3xs cursor-pointer'}`}>
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <div className={`w-4.5 h-4.5 rounded-md flex items-center justify-center shrink-0 ${isUnavailable ? 'border-2 border-gray-300 bg-gray-200' : isSelected ? 'bg-orange-600 text-white' : 'border-2 border-gray-300 bg-white'}`}>
-                                    {isUnavailable ? <span className="text-[10px] font-black text-gray-500">✕</span> : isSelected ? <Check className="w-3 h-3 stroke-[3]" /> : null}
-                                  </div>
-                                  {cam.image && (
-                                    <img src={cam.image} alt={cam.name} className="w-9 h-9 rounded-lg object-cover border border-gray-200 shrink-0" />
-                                  )}
-                                  <span className={`text-sm font-extrabold truncate ${isUnavailable ? 'text-gray-500' : isSelected ? 'text-orange-950' : 'text-gray-900'}`}>{cam.name}</span>
-                                  <span className="bg-gray-100 text-gray-600 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0">🖨️ Máy in</span>
-                                </div>
-                                <span className={`font-mono text-xs font-black shrink-0 px-2 py-0.5 rounded-lg ${isUnavailable ? 'bg-gray-200 text-gray-500' : isSelected ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700 border border-orange-200/60'}`}>{priceLabel}</span>
-                              </div>
-                              {isSelected && (
-                                <div onClick={e => e.stopPropagation()} className="mt-2 pt-2 border-t border-orange-200/80 flex items-center justify-between flex-wrap gap-2 text-xs">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px] font-bold text-gray-700">Số lượng in:</span>
-                                    <div className="inline-flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
-                                      <button type="button" onClick={() => setFormData(prev => ({...prev, printCounts: {...prev.printCounts, [cam.id]: Math.max(1, printCount-1)}}))} className="px-2 py-0.5 text-xs font-bold text-gray-600 hover:bg-gray-100">-</button>
-                                      <input type="number" min={1} value={printCount} onChange={e => setFormData(prev => ({...prev, printCounts: {...prev.printCounts, [cam.id]: Math.max(1, parseInt(e.target.value)||1)}}))} className="w-12 text-center text-xs font-bold py-0.5 focus:outline-none border-x border-gray-200" />
-                                      <button type="button" onClick={() => setFormData(prev => ({...prev, printCounts: {...prev.printCounts, [cam.id]: printCount+1}}))} className="px-2 py-0.5 text-xs font-bold text-gray-600 hover:bg-gray-100">+</button>
-                                    </div>
-                                    <span className="text-[11px] text-gray-500">tấm</span>
-                                  </div>
-                                  <div className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
-                                    {printPricing.unitPrice.toLocaleString()}đ/tấm ({printPricing.tierLabel}) = <strong>{printPricing.totalPrice.toLocaleString()}đ</strong>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </>
-                  );
-                })()}
               </div>
-            </div>
-          </div>
-
-          {/* === BƯỚC 3: TIỀN CỌC, GIẢM GIÁ & BÁO GIÁ TẠM TÍNH (Bottom Left trên PC, Bước 3 trên Mobile) === */}
-          <div className="lg:col-start-1 lg:col-span-5 lg:row-start-2 space-y-3 sm:space-y-3.5">
 
               {/* Money & Deposit section */}
               <div className="bg-amber-50/30 border border-amber-200/60 rounded-2xl p-3 sm:p-3.5 space-y-2.5">
@@ -3023,10 +2069,10 @@ export default function BookingCalendar({
                     )}
                   </div>
 
-                  {/* Cột 2: Cọc giữ đồ trước */}
+                  {/* Cột 2: Cọc giữ máy trước */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-1">
-                      <label className="text-xs font-bold text-gray-750 whitespace-nowrap">Cọc giữ trang phục (VND)</label>
+                      <label className="text-xs font-bold text-gray-750 whitespace-nowrap">Cọc giữ máy (VND)</label>
                       {formData.paidAmount > 0 && calculatedTotal > 0 && (
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                           formData.paidAmount === Math.round(calculatedTotal * 0.5)
@@ -3067,7 +2113,7 @@ export default function BookingCalendar({
                             ? 'bg-gray-700 border-gray-800 text-white shadow-xs font-black'
                             : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-250'
                         }`}
-                        title="Không thu cọc giữ đồ (0 đ)"
+                        title="Không thu cọc giữ máy (0 đ)"
                       >
                         Không cọc (0đ)
                       </button>
@@ -3167,8 +2213,8 @@ export default function BookingCalendar({
                     </div>
                   </div>
 
-                  {/* 6 nút chọn nhanh: 3 cột trên mobile, 6 cột trên PC */}
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 mt-2">
+                  {/* 6 nút chọn nhanh trải đều 100% bằng grid grid-cols-6, không bị tràn hay scrollbar */}
+                  <div className="grid grid-cols-6 gap-1 mt-2">
                     {[0, 5, 10, 15, 20, 50].map((pct) => (
                       <button
                         key={pct}
@@ -3181,7 +2227,7 @@ export default function BookingCalendar({
                             customFinalPrice: newFinal
                           }));
                         }}
-                        className={`py-1.5 sm:py-1 text-xs sm:text-[11px] font-bold rounded-lg border transition-all cursor-pointer text-center ${
+                        className={`py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer text-center ${
                           formData.discountPercent === pct
                             ? 'bg-orange-500 border-orange-500 text-white shadow-xs font-black'
                             : 'bg-white hover:bg-gray-100 text-gray-650 border-gray-250'
@@ -3204,54 +2250,50 @@ export default function BookingCalendar({
                     value={formData.note}
                     onChange={e => setFormData({ ...formData, note: e.target.value })}
                     className="w-full bg-white border border-gray-250 rounded-xl p-2.5 text-xs sm:text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none resize-none flex-1 min-h-[68px]"
-                    placeholder="Ghi chú thêm: giờ lấy đồ, số đo, yêu cầu chỉnh sửa, phụ kiện mượn kèm..."
+                    placeholder="Nhu cầu lấy máy sớm, lens lọc UV, phụ kiện kèm theo..."
                   />
                 </div>
               </div>
 
-                {/* Calculated price breakdown card */}
-                {calculatedDays > 0 && calculatedTotal > 0 && (
-                  <div className="bg-gradient-to-r from-orange-50 to-amber-50/40 border border-orange-100/85 rounded-xl p-2.5 sm:p-3 text-xs text-orange-850 flex items-center justify-between gap-3 font-medium shadow-2xs">
-                    <div className="min-w-0 flex-1 leading-snug">
-                      <span className="font-extrabold text-orange-950">Báo giá tạm tính:</span>{' '}
-                      <span>
-                        {formData.selectedCameraIds.length} món trang phục &times;{' '}
-                        {calculatedDays} ngày (Đã áp dụng giảm giá)
-                      </span>
-                    </div>
-                    <div className="font-mono font-black text-sm sm:text-base text-orange-700 shrink-0 whitespace-nowrap text-right">
-                      {calculatedTotal.toLocaleString()}&nbsp;đ
-                    </div>
+              {/* Calculated price breakdown card */}
+              {calculatedDays > 0 && calculatedTotal > 0 && (
+                <div className="bg-gradient-to-r from-orange-50 to-amber-50/40 border border-orange-100/85 rounded-xl p-2.5 sm:p-3 text-xs text-orange-850 flex items-center justify-between gap-3 font-medium shadow-2xs">
+                  <div className="min-w-0 flex-1 leading-snug">
+                    <span className="font-extrabold text-orange-950">Báo giá tạm tính:</span>{' '}
+                    <span>
+                      {formData.selectedCameraIds.length} thiết bị &times;{' '}
+                      {formData.is6Hours ? 'Gói thuê 6 tiếng' : `${calculatedDays} ngày (Đã áp dụng giảm giá)`}
+                    </span>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
+                  <div className="font-mono font-black text-sm sm:text-base text-orange-700 shrink-0 whitespace-nowrap text-right">
+                    {calculatedTotal.toLocaleString()}&nbsp;đ
+                  </div>
+                </div>
+              )}
 
-            {/* Fixed Footer - Luôn cố định ở đáy, không bao giờ bị cuộn mất */}
-            <div className="bg-gray-50/95 px-4 py-3 sm:px-6 sm:py-3.5 border-t border-gray-200 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0 shadow-xs">
-              <button
-                type="button"
-                onClick={() => handleCloseQuickModal()}
-                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickBookingSubmit(undefined, true)}
-                className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-              >
-                <ImageIcon className="w-4 h-4 shrink-0" />
-                <span>Lưu & Xuất hóa đơn</span>
-              </button>
-              <button
-                type="submit"
-                className="w-full sm:w-auto bg-orange-600 text-white font-bold px-5 sm:px-6 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap shadow-md shadow-orange-500/20 active:scale-[0.98]"
-              >
-                Xác nhận đặt lịch
-              </button>
-            </div>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddQuickModal(false)}
+                  className="px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-650 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer text-center whitespace-nowrap"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickBookingSubmit(undefined, true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                >
+                  <ImageIcon className="w-4 h-4 shrink-0" />
+                  <span>Lưu & Xuất hóa đơn</span>
+                </button>
+                <button
+                  type="submit"
+                  className="bg-orange-600 text-white font-bold px-4 sm:px-5 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm hover:bg-orange-700 transition-all cursor-pointer text-center whitespace-nowrap"
+                >
+                  Xác nhận đặt lịch
+                </button>
+              </div>
             </form>
           </div>
         </div>,
@@ -3291,7 +2333,7 @@ export default function BookingCalendar({
               <div id="calendar-contract-receipt-capture" className="bg-white p-3 sm:p-4 rounded-2xl space-y-3 font-sans text-gray-900 w-full box-border">
                 {/* Visual Invoice Title for image export */}
                 <div className="text-center space-y-1 border-b border-gray-200 pb-2.5">
-                  <h3 className="text-sm sm:text-base font-extrabold text-gray-900 uppercase tracking-wide">
+                  <h3 className="text-base sm:text-lg font-black text-gray-900 uppercase tracking-wide">
                     HÓA ĐƠN BÀN GIAO & THANH TOÁN
                   </h3>
                   <div className="flex items-center justify-center gap-2 text-[10.5px] sm:text-[11px] text-gray-500 font-mono whitespace-nowrap">
@@ -3301,22 +2343,17 @@ export default function BookingCalendar({
                   </div>
                 </div>
 
-                {/* Section 1: Customer details & Timings in Compact Layout */}
-                <div className="bg-slate-50/80 p-2.5 sm:p-3 border border-slate-200/80 rounded-xl" style={{overflow: 'visible'}}>
-                  {/* Customer Info, Timing & QR Code Row */}
+                {/* Section 1: Customer details & Timings */}
+                <div className="bg-slate-50/80 p-2 sm:p-3.5 border border-slate-200/80 rounded-xl space-y-3" style={{overflow: 'visible'}}>
+                  {/* Customer Info & QR Code Row (Synchronized side-by-side on both mobile and desktop) */}
                   <div className="flex flex-row flex-nowrap gap-2 sm:gap-3 items-start justify-between">
-                    {/* Customer Info & Timings */}
-                    <div className="space-y-1.5 min-w-0 flex-1 overflow-hidden">
-                      <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-0.5">THÔNG TIN KHÁCH THUÊ</h4>
-                      <div>
-                        <p className="font-black text-gray-900 text-sm sm:text-base leading-tight truncate">{quickReceiptContract.customerName}</p>
-                        <p className="text-[11px] sm:text-xs text-gray-600 font-mono font-bold mt-0.5">SĐT: {quickReceiptContract.customerPhone}</p>
-                      </div>
-
-                      {/* Thế chấp (ngay dưới SĐT) */}
-                      <div>
+                    <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
+                      <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">THÔNG TIN KHÁCH THUÊ</h4>
+                      <p className="font-black text-gray-900 text-sm sm:text-base">{quickReceiptContract.customerName}</p>
+                      <p className="text-xs text-gray-600 font-mono font-bold">SĐT: {quickReceiptContract.customerPhone}</p>
+                      <div className="pt-0.5">
                         <div className="inline-flex items-center gap-1.5 bg-amber-50/90 border border-amber-200/90 px-2 py-0.5 rounded-lg text-amber-950 max-w-full">
-                          <span className="text-[9.5px] font-extrabold text-amber-800 uppercase shrink-0">Thế chấp:</span>
+                          <span className="text-[10px] font-extrabold text-amber-800 uppercase shrink-0">Thế chấp:</span>
                           <span className="text-[10.5px] font-bold font-mono text-gray-800 truncate">
                             {quickReceiptContract.customerDocType === 'Other'
                               ? (quickReceiptContract.customerDocNote?.trim() || 'Tài sản khác')
@@ -3329,28 +2366,16 @@ export default function BookingCalendar({
                           </span>
                         </div>
                       </div>
-
-                      {/* Thời hạn thuê lồng ghép gọn gàng */}
-                      <div className="bg-white/90 border border-slate-200/90 rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs space-y-0.5">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Bắt đầu:</span>
-                          <strong className="font-bold font-mono text-gray-900 whitespace-nowrap">{formatDMY(quickReceiptContract.startDate)}</strong>
-                        </div>
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[10px] text-gray-500 font-semibold whitespace-nowrap">Hạn trả:</span>
-                          <strong className="font-bold font-mono text-orange-600 whitespace-nowrap">{formatDMY(quickReceiptContract.endDate)}</strong>
-                        </div>
-                      </div>
                     </div>
 
-                    {/* QR Code Block on the Right */}
+                    {/* QR Code Block on the Right (Always side-by-side on both mobile and desktop) */}
                     <div 
-                      className="shrink-0 flex flex-col items-center bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/90 w-[114px] sm:w-[126px]" 
+                      className="shrink-0 flex flex-col items-center bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/90 w-[114px] sm:w-[130px]" 
                       style={{ borderRadius: '12px', boxShadow: 'none' }}
                     >
                       {/* Header row */}
-                      <div className={`w-full flex items-center ${isExportingReceipt ? 'justify-center' : 'justify-between'} mb-1 px-0.5`}>
-                        <span className="text-[8.5px] sm:text-[9.5px] font-black uppercase text-gray-700 tracking-wider whitespace-nowrap">
+                      <div className={`w-full flex items-center ${isExportingReceipt ? 'justify-center' : 'justify-between'} mb-1.5 px-0.5`}>
+                        <span className="text-[8px] sm:text-[9.5px] font-black uppercase text-gray-700 tracking-wider whitespace-nowrap">
                           QR THANH TOÁN
                         </span>
                         {!isExportingReceipt && (
@@ -3370,7 +2395,7 @@ export default function BookingCalendar({
                       </div>
 
                       <div 
-                        className="w-[82px] h-[82px] sm:w-[94px] sm:h-[94px] bg-white rounded-lg border border-gray-200 flex items-center justify-center p-0.5" 
+                        className="w-[84px] h-[84px] sm:w-[100px] sm:h-[100px] bg-white rounded-lg border border-gray-200 flex items-center justify-center p-0.5" 
                         style={{ overflow: 'hidden', borderRadius: '8px', boxShadow: 'none' }}
                       >
                         <QrDisplay
@@ -3389,13 +2414,13 @@ export default function BookingCalendar({
                             setShowBankSettings(true);
                           }
                         }}
-                        className={`w-full mt-1 pt-1 border-t border-dashed border-gray-200 flex flex-col items-center justify-center text-center ${!isExportingReceipt ? 'cursor-pointer hover:bg-orange-50/70 p-0.5 rounded-lg transition' : ''}`}
+                        className={`w-full mt-1.5 pt-1 border-t border-dashed border-gray-200 flex flex-col items-center justify-center text-center ${!isExportingReceipt ? 'cursor-pointer hover:bg-orange-50/70 p-0.5 rounded-lg transition' : ''}`}
                         title="Bấm để cài đặt Số tài khoản & Tên tài khoản"
                       >
                         <div className="w-full flex items-center justify-center gap-0.5 flex-wrap leading-tight">
-                          <span className="text-[8px] sm:text-[8.5px] font-bold text-gray-400 uppercase tracking-tight">STK:</span>
+                          <span className="text-[8px] sm:text-[9px] font-bold text-gray-400 uppercase tracking-tight">STK:</span>
                           <span 
-                            className="text-[9.5px] sm:text-[10.5px] font-black font-mono text-gray-900 tracking-tight select-all break-all"
+                            className="text-[10px] sm:text-[11px] font-black font-mono text-gray-900 tracking-tight select-all break-all"
                             title="Số tài khoản"
                           >
                             {bankConfig.accountNo?.trim() || 'Chưa nhập'}
@@ -3403,7 +2428,7 @@ export default function BookingCalendar({
                         </div>
                         <div className="w-full mt-0.5">
                           <span 
-                            className="text-[8px] sm:text-[8.5px] font-extrabold uppercase text-gray-700 tracking-tight leading-tight line-clamp-1 truncate max-w-full block" 
+                            className="text-[8px] sm:text-[9px] font-extrabold uppercase text-gray-700 tracking-tight leading-tight line-clamp-1 truncate max-w-full block" 
                             title={bankConfig.accountName || 'Tên chủ tài khoản'}
                           >
                             {bankConfig.accountName?.trim() || '(Bấm thêm tên)'}
@@ -3412,42 +2437,39 @@ export default function BookingCalendar({
                       </div>
                     </div>
                   </div>
+
+                  <div className="space-y-1 pt-2.5 border-t border-gray-200">
+                    <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">THÔNG TIN THỜI HẠN</h4>
+                    <div className="space-y-1.5 text-xs sm:text-[13px]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-500 font-medium whitespace-nowrap">Bắt đầu:</span>
+                        <strong className="text-gray-900 font-bold font-mono whitespace-nowrap">{formatDMY(quickReceiptContract.startDate)}</strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-500 font-medium whitespace-nowrap">Hạn trả máy:</span>
+                        <strong className="text-gray-900 font-bold font-mono whitespace-nowrap">
+                          {quickReceiptContract.is6Hours ? `Gói 6h (${quickReceiptContract.startTime || '08:00'} - ${quickReceiptContract.returnTime || '14:00'})` : formatDMY(quickReceiptContract.endDate)}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Rental Items Detail - ONLY item name, no price */}
                 <div className="space-y-1.5">
-                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DANH SÁCH TRANG PHỤC & PHỤ KIỆN</h4>
+                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DANH SÁCH THIẾT BỊ THUÊ</h4>
                   <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-white">
-                    {quickReceiptContract.items.map((i, idx) => {
-                      const matchedCam = cameras.find(c => c.id === i.cameraId || c.name.toLowerCase() === i.cameraName.toLowerCase());
-                      const displaySize = i.size || matchedCam?.size;
-                      const displayColor = i.color || matchedCam?.color;
-                      return (
-                        <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
-                          <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
-                            {matchedCam?.image ? (
-                              <img src={matchedCam.image} alt="" className="w-6 h-7 rounded object-cover border border-gray-200 shrink-0" />
-                            ) : (
-                              <span className="text-orange-500 text-xs shrink-0">👗</span>
-                            )}
-                            <span className="truncate">{i.cameraName.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim()}</span>
-                            {displaySize && (
-                              <span className="bg-slate-100 text-slate-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded shrink-0 border border-slate-200">
-                                Size {displaySize}
-                              </span>
-                            )}
-                            {displayColor && (
-                              <span className="bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 border border-rose-200">
-                                🎨 {displayColor}
-                              </span>
-                            )}
-                            {i.quantity > 1 && (
-                              <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} món)</span>
-                            )}
-                          </div>
+                    {quickReceiptContract.items.map((i, idx) => (
+                      <div key={idx} className="p-2.5 px-3.5 flex items-center text-xs sm:text-sm bg-white">
+                        <div className="font-bold text-gray-900 truncate flex-1 min-w-0 flex items-center gap-2">
+                          <span className="text-orange-500 text-xs">📷</span>
+                          <span className="truncate">{i.cameraName}</span>
+                          {i.quantity > 1 && (
+                            <span className="text-gray-500 font-mono text-[11px] font-medium">({i.quantity} chiếc)</span>
+                          )}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -3471,7 +2493,7 @@ export default function BookingCalendar({
                   </div>
                   
                   <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-2 text-gray-700 gap-2">
-                    <span className="font-medium text-amber-900">Khách cọc đặt giữ đồ trước ({quickReceiptContract.totalPrice > 0 ? Math.round((quickReceiptContract.paidAmount / quickReceiptContract.totalPrice) * 100) : 0}%):</span>
+                    <span className="font-medium text-amber-900">Khách cọc đặt giữ máy trước ({quickReceiptContract.totalPrice > 0 ? Math.round((quickReceiptContract.paidAmount / quickReceiptContract.totalPrice) * 100) : 0}%):</span>
                     <span className="font-bold text-amber-700 font-mono shrink-0">{quickReceiptContract.paidAmount.toLocaleString()}đ</span>
                   </div>
                   <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-200/60 pt-2 text-gray-700 gap-2">
@@ -3479,85 +2501,9 @@ export default function BookingCalendar({
                     <span className="font-bold text-gray-400 font-mono shrink-0">0đ <span className="text-[10px] font-normal">(Chưa cọc)</span></span>
                   </div>
                   <div className="flex justify-between items-center text-xs sm:text-sm border-t border-orange-300 pt-2 font-bold text-gray-900 gap-2">
-                    <span>Còn lại cần thanh toán khi nhận đồ:</span>
+                    <span>Còn lại cần thanh toán khi nhận máy:</span>
                     <span className="text-rose-600 text-sm sm:text-base font-black font-mono shrink-0">{(quickReceiptContract.totalPrice - quickReceiptContract.paidAmount).toLocaleString()}đ</span>
                   </div>
-                </div>
-
-                {/* Section: Lưu ý & Quy định thuê trang phục (Có thể chỉnh sửa) */}
-                <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-3 sm:p-3.5 space-y-2 text-left">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
-                    <div className="flex items-center gap-1.5 text-slate-900 font-extrabold text-[11px] sm:text-xs uppercase tracking-wide">
-                      <ShieldAlert className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-                      <span>Lưu ý & Quy định thuê trang phục</span>
-                    </div>
-                    {!isExportingReceipt && (
-                      <div>
-                        {editingTerms ? (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setTermsDraft(DEFAULT_RENTAL_TERMS)}
-                              className="text-[10px] text-gray-500 hover:text-gray-800 underline cursor-pointer mr-1"
-                            >
-                              Mặc định
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingTerms(false)}
-                              className="text-[10.5px] font-bold text-gray-600 bg-gray-200/80 hover:bg-gray-300 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                            >
-                              Hủy
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const trimmed = termsDraft.trim() || DEFAULT_RENTAL_TERMS;
-                                setRentalTerms(trimmed);
-                                localStorage.setItem('shop_rental_terms', trimmed);
-                                setEditingTerms(false);
-                              }}
-                              className="text-[10.5px] font-bold text-white bg-orange-600 hover:bg-orange-700 px-2.5 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-3xs"
-                            >
-                              <Save className="w-3 h-3" /> Lưu
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            data-no-export="true"
-                            onClick={() => {
-                              setTermsDraft(rentalTerms);
-                              setEditingTerms(true);
-                            }}
-                            className="no-export-item flex items-center gap-1 text-[10px] font-bold text-orange-600 hover:bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                            title="Sửa nội dung lưu ý quy định thuê"
-                          >
-                            <Edit2 className="w-3 h-3" /> Sửa lưu ý
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {editingTerms ? (
-                    <div className="space-y-1.5 pt-1">
-                      <textarea
-                        value={termsDraft}
-                        onChange={e => setTermsDraft(e.target.value)}
-                        rows={7}
-                        className="w-full border border-orange-300 rounded-lg p-2 text-[11px] font-normal focus:ring-2 focus:ring-orange-500 focus:outline-none bg-white text-gray-900 leading-relaxed"
-                        placeholder="Nhập nội dung lưu ý & quy định thuê đồ..."
-                      />
-                      <p className="text-[10px] text-gray-400 italic">
-                        * Nội dung này sẽ được lưu dùng chung cho tất cả các hóa đơn in ra và xuất ảnh.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="text-[10px] sm:text-[10.5px] text-gray-700 space-y-1 leading-relaxed whitespace-pre-line">
-                      {rentalTerms}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -3566,12 +2512,10 @@ export default function BookingCalendar({
             <div className="bg-gray-50 px-4 sm:px-5 py-3.5 flex flex-wrap gap-2.5 justify-center items-center border-t border-gray-150 shrink-0">
               <button
                 type="button"
-                className="bg-white hover:bg-gray-100 border border-gray-250 text-gray-750 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"
-                onClick={() => handlePrintReceipt('calendar-contract-receipt-capture')}
-                title="In hóa đơn hợp đồng bản cứng ra máy in"
+                className="bg-white hover:bg-gray-100 border border-gray-250 text-gray-750 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px]"
+                onClick={() => setCustomAlertMessage(`Đang chuẩn bị in hợp đồng ${quickReceiptContract.contractCode}... Vui lòng kết nối máy in để in bản cứng kèm chữ ký.`)}
               >
-                <Printer className="w-4 h-4 text-gray-600" />
-                <span>In Hóa Đơn (Bản cứng)</span>
+                In Hợp Đồng (Bản cứng)
               </button>
 
               <button
@@ -3608,7 +2552,7 @@ export default function BookingCalendar({
             </div>
             
             <p className="text-sm text-gray-500">
-              Bạn có chắc chắn muốn xóa vĩnh viễn hợp đồng này? Hành động này sẽ cập nhật lại trạng thái trang phục và hồ sơ khách hàng, bản ghi này sẽ bị gỡ bỏ hoàn toàn khỏi hệ thống.
+              Bạn có chắc chắn muốn xóa vĩnh viễn hợp đồng này? Hành động này sẽ cập nhật lại trạng thái thiết bị và hồ sơ khách hàng, bản ghi này sẽ bị gỡ bỏ hoàn toàn khỏi hệ thống.
             </p>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -3780,43 +2724,6 @@ export default function BookingCalendar({
         </div>,
         document.body
       )}
-
-      {/* Image Zoom Preview Modal */}
-      {previewImage && typeof document !== 'undefined' && createPortal(
-        <div 
-          className="fixed inset-0 z-[10000] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div 
-            className="relative max-w-md w-full bg-white rounded-2xl overflow-hidden shadow-2xl animate-scale-up border border-gray-150 flex flex-col max-h-[90vh]"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/80">
-              <h4 className="text-sm font-extrabold text-gray-900 truncate pr-2 flex items-center gap-1.5">
-                <span>👗</span>
-                <span className="truncate">{previewImage.title}</span>
-              </h4>
-              <button
-                type="button"
-                onClick={() => setPreviewImage(null)}
-                className="w-7 h-7 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition flex items-center justify-center cursor-pointer text-base"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-3 overflow-auto flex items-center justify-center bg-slate-900/5">
-              <img
-                src={previewImage.url}
-                alt={previewImage.title}
-                className="max-h-[75vh] w-auto max-w-full rounded-xl object-contain shadow-sm"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
-

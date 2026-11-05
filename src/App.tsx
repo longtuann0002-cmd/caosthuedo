@@ -10,25 +10,13 @@ import {
   INITIAL_CONTRACTS,
   INITIAL_EXPENSES
 } from './utils/mockData';
-import { 
-  isSupabaseConfigured, 
-  syncToSupabase, 
-  syncToSupabaseChunked,
-  fetchFromSupabase,
-  getSupabaseCredentials,
-  saveCustomSupabaseCredentials,
-  testSupabaseConnection,
-  deleteOutfitImageFromStorage,
-  cleanOrphanStorageImages
-} from './utils/supabase';
+import { isSupabaseConfigured, syncToSupabase, fetchFromSupabase } from './utils/supabase';
 import { formatDMY } from './utils/dateUtils';
 import { sendOrderCreatedNotification, checkAndTriggerMorningBriefing, showPushNotification, updateAppBadge, clearAppBadge } from './utils/pushNotification';
-import { broadcastToAllDevices, listenToCrossDeviceAlerts, initFirebaseMessaging, syncContractsToCloud, registerDeviceFCMToken, playNotificationSound } from './utils/firebasePush';
-import { registerAppleWebPushSubscription } from './utils/appleWebPush';
-import { matchContract, matchCamera, matchCustomer, smartMatch } from './utils/searchUtils';
+import { broadcastToAllDevices, listenToCrossDeviceAlerts, initFirebaseMessaging, syncContractsToCloud, registerDeviceFCMToken } from './utils/firebasePush';
+import { matchContract, matchCamera, matchCustomer } from './utils/searchUtils';
 import { compressImageFile } from './utils/imageUtils';
 import { deduplicateContracts, generateNextContractCode } from './utils/contractUtils';
-import { normalizeOutfitsBySize } from './utils/outfitUtils';
 
 
 // Component imports
@@ -40,7 +28,6 @@ import CustomerManager from './components/CustomerManager';
 import ExpenseTracker from './components/ExpenseTracker';
 import NotificationCenter from './components/NotificationCenter';
 import { ToastContainer, Toast as ToastType } from './components/ToastNotification';
-import { DressIcon } from './components/DressIcon';
 
 // Icons
 import {
@@ -86,12 +73,7 @@ import {
   Bell,
   Palette,
   ChevronDown,
-  Plus,
-  Cloud,
-  CloudUpload,
-  CloudDownload,
-  Copy,
-  ExternalLink
+  Plus
 } from 'lucide-react';
 
 const DEFAULT_USERS = [
@@ -240,41 +222,6 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Cloud Database (Supabase) States
-  const [supabaseUrlInput, setSupabaseUrlInput] = useState(() => getSupabaseCredentials().url);
-  const [supabaseKeyInput, setSupabaseKeyInput] = useState(() => getSupabaseCredentials().anonKey);
-  const [supabaseStatusMsg, setSupabaseStatusMsg] = useState<{ type: 'idle' | 'testing' | 'success' | 'error'; text: string; needSchema?: boolean }>({
-    type: 'idle',
-    text: ''
-  });
-  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
-  const [cloudSyncState, setCloudSyncState] = useState<'synced' | 'syncing' | 'error' | 'offline'>(() => isSupabaseConfigured ? 'synced' : 'offline');
-  const lastSyncedCamerasRef = useRef<string>('');
-  const computeCamerasSyncHash = (cams: Camera[]): string => {
-    return JSON.stringify(cams.map(c => [
-      c.id,
-      c.name,
-      c.status,
-      c.cleaningStatus,
-      c.dailyRate || 0,
-      c.price1Day || 0,
-      c.price2Days || 0,
-      c.price3Days || 0,
-      c.price4DaysPlus || 0,
-      c.purchasePrice || 0,
-      c.depositAmount || 0,
-      c.salePrice || 0,
-      c.color || '',
-      c.image || '',
-      c.size || '',
-      c.category || '',
-      c.serialNumber || '',
-      c.shortName || '',
-      (c.availableSizes || []).join(',')
-    ].join('|')));
-  };
-  const [copiedSql, setCopiedSql] = useState(false);
-
   // Forgot Password States
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [forgotUsername, setForgotUsername] = useState('');
@@ -295,13 +242,9 @@ export default function App() {
   const [changePasswordSuccess, setChangePasswordSuccess] = useState('');
 
   // Load states from localStorage or use rich mock dataset
-  // If Supabase is configured, start with empty array to avoid showing stale localStorage cache
-  // The useEffect below will fill from Supabase immediately
-  const [cameras, setCameras] = useState<Camera[]>(() => {
-    const loaded = loadStoredData('cameras', INITIAL_CAMERAS);
-    const { normalized } = normalizeOutfitsBySize(loaded);
-    return normalized;
-  });
+  const [cameras, setCameras] = useState<Camera[]>(() =>
+    loadStoredData('cameras', INITIAL_CAMERAS)
+  );
   const [contracts, setContracts] = useState<RentalContract[]>(() => {
     const loaded = loadStoredData('contracts', INITIAL_CONTRACTS);
     const migrationKey = 'camlease_historical_contracts_migrated_v1';
@@ -339,15 +282,6 @@ export default function App() {
   // Active view tab state (default to 'calendar' as shown in screenshot)
   const [activeTab, setActiveTab] = useState<'calendar' | 'contracts' | 'equipment' | 'revenue' | 'customers' | 'expenses'>('calendar');
 
-  const handleTabChange = (newTab: 'calendar' | 'contracts' | 'equipment' | 'revenue' | 'customers' | 'expenses') => {
-    // Nếu người dùng chủ động chuyển tab (ví dụ bấm menu Kho đồ, Lịch, v.v.), xóa bộ lọc tạm thời của đồ giặt
-    if (newTab !== 'equipment') {
-      setEquipmentTrackerCleaningFilter('ALL');
-      setEquipmentTrackerStatusFilter('ALL');
-    }
-    setActiveTab(newTab);
-  };
-
   // Modern Sidebar Collapsible State (remembered in localStorage)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('camlease_sidebar_collapsed') === 'true';
@@ -364,24 +298,10 @@ export default function App() {
   // Modern Spotlight Search State
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
-  const [searchFilterTab, setSearchFilterTab] = useState<'all' | 'outfits' | 'contracts' | 'customers'>('all');
+  const [searchFilterTab, setSearchFilterTab] = useState<'all' | 'contracts' | 'equipment' | 'customers'>('all');
   const [contractManagerSearch, setContractManagerSearch] = useState('');
   const [equipmentTrackerSearch, setEquipmentTrackerSearch] = useState('');
-  const [equipmentTrackerCleaningFilter, setEquipmentTrackerCleaningFilter] = useState('ALL');
-  const [equipmentTrackerStatusFilter, setEquipmentTrackerStatusFilter] = useState('ALL');
   const [customerManagerSearch, setCustomerManagerSearch] = useState('');
-  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string>('ALL');
-  const [inventoryOnlyAvailable, setInventoryOnlyAvailable] = useState<boolean>(false);
-  const [inventoryStatusFilter, setInventoryStatusFilter] = useState<'ALL' | 'READY' | 'LAUNDRY' | 'MENDING' | 'BUSY'>('ALL');
-  const [calendarBookingIntent, setCalendarBookingIntent] = useState<{
-    startDate?: string;
-    endDate?: string;
-    selectedCameraIds?: string[];
-    is6Hours?: boolean;
-    note?: string;
-  } | null>(null);
-  const [selectedCardSizes, setSelectedCardSizes] = useState<Record<string, string>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -418,16 +338,13 @@ export default function App() {
 
   // Logo & Branding customization states
   const [logoText, setLogoText] = useState<string>(() =>
-    loadStoredData('logoText', 'TIỆM NHÀ CAO')
-  );
-  const [logoTextCase, setLogoTextCase] = useState<'lowercase' | 'uppercase' | 'normal'>(() =>
-    loadStoredData('logoTextCase', 'normal')
+    loadStoredData('logoText', 'TIỆM ẢNH NHÀ CAOS')
   );
   const [logoFontSize, setLogoFontSize] = useState<number>(() =>
     loadStoredData('logoFontSize', 15.5)
   );
   const [logoSubtitle, setLogoSubtitle] = useState<string>(() =>
-    loadStoredData('logoSubtitle', 'cho thuê trang phục & phụ kiện')
+    loadStoredData('logoSubtitle', 'CHO THUÊ MÁY ẢNH GIÁ RẺ')
   );
   const [logoSubtitleCase, setLogoSubtitleCase] = useState<'lowercase' | 'uppercase' | 'normal'>(() =>
     loadStoredData('logoSubtitleCase', 'lowercase')
@@ -435,8 +352,8 @@ export default function App() {
   const [logoSubtitleFontSize, setLogoSubtitleFontSize] = useState<number>(() =>
     loadStoredData('logoSubtitleFontSize', 9)
   );
-  const [logoIconType, setLogoIconType] = useState<'dress' | 'camera' | 'aperture' | 'film' | 'sparkles' | 'smile' | 'image' | 'upload'>(() =>
-    loadStoredData('logoIconType', 'dress')
+  const [logoIconType, setLogoIconType] = useState<'camera' | 'aperture' | 'film' | 'sparkles' | 'smile' | 'image' | 'upload'>(() =>
+    loadStoredData('logoIconType', 'upload')
   );
   const [logoIconColor, setLogoIconColor] = useState<string>(() =>
     loadStoredData('logoIconColor', '#ea580c')
@@ -455,17 +372,6 @@ export default function App() {
   const [systemDate, setSystemDate] = useState<string>(
     () => new Date().toLocaleDateString('sv') // YYYY-MM-DD real-time today
   );
-
-  // Costume inventory check date for search & quick availability inspect
-  const [inventoryCheckDate, setInventoryCheckDate] = useState<string>(
-    () => new Date().toLocaleDateString('sv')
-  );
-
-  useEffect(() => {
-    if (systemDate) {
-      setInventoryCheckDate(systemDate);
-    }
-  }, [systemDate]);
 
   // Currently focused date highlights (Default to today's real-time date)
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -525,255 +431,35 @@ export default function App() {
 
   // Listen to cross-device notification broadcasts from other devices/staff
   useEffect(() => {
-    // Tự động kiểm tra và nâng cấp FCM Token sang hạ tầng chuẩn tiem-anh-nha-caos-d827f
-    try {
-      const fcmVer = localStorage.getItem('thuedo_fcm_version');
-      if (fcmVer !== 'v4_d827f_official') {
-        localStorage.removeItem('thuedo_fcm_device_token');
-        localStorage.removeItem('thuedo_firebase_config');
-        localStorage.setItem('thuedo_fcm_version', 'v4_d827f_official');
-      }
-    } catch (e) {}
-
     initFirebaseMessaging();
 
-    // Auto-register device FCM token & Apple WebPush if permission was already granted
+    // Auto-register device FCM token if permission was already granted
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       registerDeviceFCMToken().catch(() => {});
-      registerAppleWebPushSubscription().catch(() => {});
     }
 
     const unsubscribe = listenToCrossDeviceAlerts((alert) => {
-      // 1. Toast trong ứng dụng
+      // App is OPEN: only show in-app toast (no extra push — FCM already delivered it outside)
       addToast(alert.title, 'info', alert.body);
-      // 2. Kêu chuông báo hiệu
-      playNotificationSound();
-      // 3. Nảy banner thông báo & rung ra ngoài màn hình thiết bị
-      showPushNotification(alert.title, alert.body).catch(() => {});
-      // 4. Tự động đồng bộ ngay hợp đồng mới từ Supabase để lịch tự cập nhật
-      fetchFromSupabase('contracts').then(cloudContracts => {
-        if (Array.isArray(cloudContracts) && cloudContracts.length > 0) {
-          const raw = cloudContracts.map(c => ({ ...c, note: cleanSystemNote(c.note) }));
-          const { deduplicated } = deduplicateContracts(raw);
-          setContracts(deduplicated);
-          saveStoredData('contracts', deduplicated);
-        }
-      }).catch(() => {});
     });
-
-    // Tầng 2 (Bảo hiểm kép): Định kỳ quét hợp đồng mới từ Supabase mỗi 4 giây
-    const contractsCheckInterval = setInterval(async () => {
-      try {
-        const cloud = await fetchFromSupabase('contracts');
-        if (Array.isArray(cloud) && cloud.length > 0) {
-          setContracts(prev => {
-            if (!prev || prev.length === 0) return prev;
-            const prevIds = new Set(prev.map(c => c.id || c.contractCode));
-            const newOrders = cloud.filter(c => !prevIds.has(c.id || c.contractCode));
-            if (newOrders.length > 0) {
-              const newest = newOrders[0];
-              const itemsText = (newest.items || []).map((i: any) => i.cameraName).join(', ') || 'Trang phục thuê';
-              const title = `📋 Đơn đặt mới: ${newest.contractCode}`;
-              const body = `Khách: ${newest.customerName} • ${itemsText} • ${newest.totalPrice?.toLocaleString('vi-VN')}đ`;
-
-              addToast(title, 'info', body);
-              playNotificationSound();
-              showPushNotification(title, body).catch(() => {});
-
-              const raw = cloud.map(c => ({ ...c, note: cleanSystemNote(c.note) }));
-              const { deduplicated } = deduplicateContracts(raw);
-              saveStoredData('contracts', deduplicated);
-              return deduplicated;
-            }
-            return prev;
-          });
-        }
-      } catch (e) {}
-    }, 4000);
 
     return () => {
       unsubscribe();
-      clearInterval(contractsCheckInterval);
     };
   }, []);
 
-    // Real-time costume availability on target date (default: systemDate)
-  const outfitsAvailability = useMemo(() => {
-    const targetDate = inventoryCheckDate || systemDate;
-    const activeContractsOnDate = (contracts || []).filter(c => {
-      if (c.status === 'Cancelled') return false;
-      const s = c.startDate;
-      const e = c.endDate || c.startDate;
-      return s <= targetDate && e >= targetDate;
-    });
-
-    const allCams = cameras || [];
-    const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Freesize', 'FS'];
-
-    const groupsMap = new Map<string, any>();
-    allCams.forEach(cam => {
-      const baseShort = (cam.shortName || '')
-        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
-        .trim();
-      const baseSerial = (cam.serialNumber || '')
-        .replace(/[-_.\s]+(XS|S|M|L|XL|XXL|3XL|4XL|FS|Freesize)$/i, '')
-        .trim();
-      const cleanName = cam.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim();
-      const groupKey = baseShort || baseSerial || cleanName || cam.shortName || cam.id;
-      if (!groupsMap.has(groupKey)) {
-        groupsMap.set(groupKey, {
-          groupKey,
-          name: cleanName || cam.name,
-          shortName: baseShort || baseSerial || cam.shortName,
-          category: cam.category || 'Trang phục',
-          color: cam.color,
-          dailyRate: cam.dailyRate,
-          image: cam.image,
-          serialNumber: cam.serialNumber,
-          items: []
-        });
-      }
-
-      const bookedInContracts = activeContractsOnDate.filter(c =>
-        (c.items || []).some(item => item.cameraId === cam.id)
-      );
-
-      const isLaundry = cam.cleaningStatus === 'Laundry';
-      const isMending = cam.cleaningStatus === 'Mending';
-      const isBooked = bookedInContracts.length > 0 || cam.status === 'Rented';
-      const isMaint = cam.status === 'Maintenance';
-      const isCleanAndReady = !isLaundry && !isMending && !isBooked && !isMaint;
-
-      groupsMap.get(groupKey)!.items.push({
-        cam,
-        size: cam.size || 'FS',
-        isAvailable: isCleanAndReady,
-        isLaundry,
-        isMending,
-        isRented: isBooked,
-        isMaintenance: isMaint,
-        bookedContracts: bookedInContracts
-      });
-    });
-
-    return Array.from(groupsMap.values()).map(g => {
-      const sortedItems = [...g.items].sort((a, b) => {
-        const ai = SIZE_ORDER.indexOf(a.size);
-        const bi = SIZE_ORDER.indexOf(b.size);
-        return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
-      });
-      const uniqueColors = Array.from(new Set(sortedItems.map((i: any) => i.cam?.color?.trim()).filter(Boolean)));
-      const totalSizes = sortedItems.length;
-      const availableCount = sortedItems.filter(i => i.isAvailable).length;
-      const laundryCount = sortedItems.filter(i => i.isLaundry).length;
-      const mendingCount = sortedItems.filter(i => i.isMending).length;
-      const rentedCount = sortedItems.filter(i => i.isRented).length;
-      return {
-        ...g,
-        items: sortedItems,
-        uniqueColors,
-        totalSizes,
-        availableCount,
-        laundryCount,
-        mendingCount,
-        rentedCount,
-        hasAvailable: availableCount > 0,
-        hasLaundry: laundryCount > 0,
-        hasMending: mendingCount > 0
-      };
-    });
-  }, [cameras, contracts, inventoryCheckDate, systemDate]);
-
-  const totalOutfitCount = useMemo(() => {
-    return outfitsAvailability.reduce((acc, g) => acc + g.totalSizes, 0);
-  }, [outfitsAvailability]);
-
-  const totalAvailableCount = useMemo(() => {
-    return outfitsAvailability.reduce((acc, g) => acc + g.availableCount, 0);
-  }, [outfitsAvailability]);
-
-  const totalLaundryCount = useMemo(() => {
-    return outfitsAvailability.reduce((acc, g) => acc + (g.laundryCount || 0), 0);
-  }, [outfitsAvailability]);
-
-  const totalMendingCount = useMemo(() => {
-    return outfitsAvailability.reduce((acc, g) => acc + (g.mendingCount || 0), 0);
-  }, [outfitsAvailability]);
-
-  const inventoryCategories = useMemo(() => {
-    return ['ALL', ...Array.from(new Set(outfitsAvailability.map(g => g.category).filter(Boolean)))];
-  }, [outfitsAvailability]);
-
-  // Filtered outfit groups by query, category, and available status
-  const filteredOutfitGroups = useMemo(() => {
-    const q = headerSearchQuery.trim();
-    return outfitsAvailability.filter(g => {
-      if (inventoryCategoryFilter !== 'ALL' && g.category !== inventoryCategoryFilter) {
-        return false;
-      }
-      if (inventoryOnlyAvailable && !g.hasAvailable) {
-        return false;
-      }
-      if (inventoryStatusFilter === 'READY' && !g.hasAvailable) {
-        return false;
-      }
-      if (inventoryStatusFilter === 'LAUNDRY' && !g.hasLaundry) {
-        return false;
-      }
-      if (inventoryStatusFilter === 'MENDING' && !g.hasMending) {
-        return false;
-      }
-      if (inventoryStatusFilter === 'BUSY' && g.hasAvailable && !g.hasLaundry && !g.hasMending) {
-        return false;
-      }
-      if (q) {
-        const cleanQuery = q.toLowerCase().replace(/[\s\-_.]/g, '');
-        const matchName = smartMatch(g.name, q);
-        const matchShort = smartMatch(g.shortName || '', q);
-        const matchCat = smartMatch(g.category, q);
-        const matchColor = smartMatch(g.color || '', q);
-        const matchSize = g.items.some((i: any) => smartMatch(i.size, q) || smartMatch(`size ${i.size}`, q));
-        const matchSerial = g.items.some((i: any) => {
-          const serial = (i.cam.serialNumber || '').toLowerCase().replace(/[\s\-_.]/g, '');
-          const short = (i.cam.shortName || '').toLowerCase().replace(/[\s\-_.]/g, '');
-          return smartMatch(i.cam.serialNumber || '', q) || serial.includes(cleanQuery) || short.includes(cleanQuery);
-        });
-        const matchLaundry = (smartMatch('giặt', q) || smartMatch('đang giặt', q) || smartMatch('chưa giặt', q)) && g.hasLaundry;
-        const matchMending = (smartMatch('sửa', q) || smartMatch('đang sửa', q) || smartMatch('may vá', q)) && g.hasMending;
-        if (!matchName && !matchShort && !matchCat && !matchColor && !matchSize && !matchSerial && !matchLaundry && !matchMending) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    if (q) {
-      const cleanQuery = q.toLowerCase().replace(/[\s\-_.]/g, '');
-      return [...filtered].sort((a, b) => {
-        const aExact = a.items.some((i: any) => (i.cam.serialNumber || '').toLowerCase().replace(/[\s\-_.]/g, '') === cleanQuery);
-        const bExact = b.items.some((i: any) => (i.cam.serialNumber || '').toLowerCase().replace(/[\s\-_.]/g, '') === cleanQuery);
-        if (aExact && !bExact) return -1;
-        if (!aExact && bExact) return 1;
-        return 0;
-      });
-    }
-
-    return filtered;
-  }, [outfitsAvailability, headerSearchQuery, inventoryCategoryFilter, inventoryOnlyAvailable, inventoryStatusFilter]);
-
   const searchResults = useMemo(() => {
     const q = headerSearchQuery.trim();
-    if (!q) {
-      return {
-        contracts: [],
-        outfits: filteredOutfitGroups,
-        customers: [],
-        total: filteredOutfitGroups.length
-      };
-    }
+    if (!q) return { contracts: [], cameras: [], customers: [], total: 0 };
 
     const matchedContracts = (contracts || [])
       .map(c => ({ item: c, ...matchContract(c, q) }))
+      .filter(r => r.matched)
+      .sort((a, b) => b.score - a.score)
+      .map(r => r.item);
+
+    const matchedCameras = (cameras || [])
+      .map(c => ({ item: c, ...matchCamera(c, q) }))
       .filter(r => r.matched)
       .sort((a, b) => b.score - a.score)
       .map(r => r.item);
@@ -786,11 +472,11 @@ export default function App() {
 
     return {
       contracts: matchedContracts,
-      outfits: filteredOutfitGroups,
+      cameras: matchedCameras,
       customers: matchedCustomers,
-      total: matchedContracts.length + filteredOutfitGroups.length + matchedCustomers.length
+      total: matchedContracts.length + matchedCameras.length + matchedCustomers.length
     };
-  }, [headerSearchQuery, contracts, filteredOutfitGroups, customers]);
+  }, [headerSearchQuery, contracts, cameras, customers]);
 
   const pendingOrOverdueContractsCount = useMemo(() => {
     return contracts.filter(c => c.status === 'Pending' || c.status === 'Overdue').length;
@@ -806,61 +492,12 @@ export default function App() {
     }
   }, [loaded, pendingOrOverdueContractsCount]);
 
-  // Cảnh báo nếu đồng bộ dữ liệu lên Cloud Supabase gặp sự cố quá tải
-  useEffect(() => {
-    const handleSyncError = (e: any) => {
-      const { key, message } = e.detail || {};
-      if (key === 'cameras') {
-        addToast(
-          'Chưa thể đồng bộ kho đồ lên Cloud!',
-          'error',
-          `Máy chủ Cloud từ chối nhận dữ liệu (${message || 'dung lượng ảnh quá lớn'}). Hãy vào Cài đặt -> Tải tệp sao lưu (.json) để lưu dữ liệu an toàn.`
-        );
-      }
-    };
-    window.addEventListener('supabase-sync-error', handleSyncError);
-    return () => window.removeEventListener('supabase-sync-error', handleSyncError);
-  }, []);
-
-  // Cảnh báo khi người dùng tắt tab trong lúc Cloud đang gửi dữ liệu
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (cloudSyncState === 'syncing') {
-        e.preventDefault();
-        e.returnValue = 'Dữ liệu đồ vừa nhập đang được tải lên máy chủ Cloud, bạn vui lòng đợi 2-3 giây trước khi thoát!';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [cloudSyncState]);
-
-  // Sync data states to local storage and Supabase with 1.2s Debounce (Chống nghẽn mạng khi nhập nhanh)
+  // Sync data states to local storage and Supabase
   useEffect(() => {
     if (!loaded) return;
     saveStoredData('cameras', cameras);
     if (isSupabaseConfigured) {
-      // Chỉ đồng bộ lên Cloud khi dữ liệu thực sự có sự thay đổi (tránh vòng lặp tải lên khi vừa kéo về)
-      const currentHash = computeCamerasSyncHash(cameras);
-      if (lastSyncedCamerasRef.current && currentHash === lastSyncedCamerasRef.current) {
-        setCloudSyncState('synced');
-        return;
-      }
-
-      setCloudSyncState('syncing');
-      const timer = setTimeout(async () => {
-        try {
-          const success = await syncToSupabaseChunked('cameras', cameras);
-          if (success) {
-            lastSyncedCamerasRef.current = currentHash;
-            setCloudSyncState('synced');
-          } else {
-            setCloudSyncState('error');
-          }
-        } catch {
-          setCloudSyncState('error');
-        }
-      }, 1500);
-      return () => clearTimeout(timer);
+      syncToSupabase('cameras', cameras);
     }
   }, [loaded, cameras]);
 
@@ -1004,7 +641,6 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     saveStoredData('logoText', logoText);
-    saveStoredData('logoTextCase', logoTextCase);
     saveStoredData('logoFontSize', logoFontSize);
     saveStoredData('logoSubtitle', logoSubtitle);
     saveStoredData('logoSubtitleCase', logoSubtitleCase);
@@ -1016,7 +652,6 @@ export default function App() {
 
     const brandData = {
       logoText,
-      logoTextCase,
       logoFontSize,
       logoSubtitle,
       logoSubtitleCase,
@@ -1044,7 +679,6 @@ export default function App() {
   }, [
     loaded,
     logoText,
-    logoTextCase,
     logoFontSize,
     logoSubtitle,
     logoSubtitleCase,
@@ -1058,7 +692,7 @@ export default function App() {
   // Sync document title dynamically with brand settings
   useEffect(() => {
     if (logoText) {
-      document.title = `${logoText} - ${logoSubtitle || 'Cho Thuê Trang Phục & Phụ Kiện'}`;
+      document.title = `${logoText} - ${logoSubtitle || 'Cho Thuê Máy Ảnh'}`;
     }
   }, [logoText, logoSubtitle]);
 
@@ -1087,12 +721,7 @@ export default function App() {
   useEffect(() => {
     const loadInitialData = async () => {
       if (!isSupabaseConfigured) {
-        const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
-        const { normalized, splitCount } = normalizeOutfitsBySize(localCams);
-        setCameras(normalized);
-        if (splitCount > 0) {
-          saveStoredData('cameras', normalized);
-        }
+        setCameras(loadStoredData('cameras', INITIAL_CAMERAS));
         setContracts(loadStoredData('contracts', INITIAL_CONTRACTS));
         setCustomers(loadStoredData('customers', INITIAL_CUSTOMERS));
         setExpenses(loadStoredData('expenses', INITIAL_EXPENSES));
@@ -1107,26 +736,9 @@ export default function App() {
         const cloudExpenses = await fetchFromSupabase('expenses');
 
         if (cloudCameras !== null) {
-          const { normalized, splitCount } = normalizeOutfitsBySize(cloudCameras as Camera[]);
-          setCameras(normalized);
-          // Always update localStorage cache with the authoritative cloud data
-          saveStoredData('cameras', normalized);
-          // Đánh dấu hash đã đồng bộ từ Cloud để tránh kích hoạt upload ngược lại
-          lastSyncedCamerasRef.current = computeCamerasSyncHash(normalized);
-          setCloudSyncState('synced');
-          if (splitCount > 0) {
-            console.log(`[Auto-Repair] Đã tự động tách ${splitCount} trang phục có size gộp thành từng size độc lập.`);
-            syncToSupabaseChunked('cameras', normalized);
-          }
+          setCameras(cloudCameras);
         } else {
-          const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
-          const { normalized, splitCount } = normalizeOutfitsBySize(localCams);
-          setCameras(normalized);
-          lastSyncedCamerasRef.current = computeCamerasSyncHash(normalized);
-          setCloudSyncState('synced');
-          if (splitCount > 0) {
-            saveStoredData('cameras', normalized);
-          }
+          setCameras(loadStoredData('cameras', INITIAL_CAMERAS));
         }
 
         if (cloudContracts !== null) {
@@ -1172,7 +784,6 @@ export default function App() {
         const cloudBrand = await fetchFromSupabase('brand_settings');
         if (cloudBrand) {
           if (cloudBrand.logoText !== undefined) { setLogoText(cloudBrand.logoText); saveStoredData('logoText', cloudBrand.logoText); }
-          if (cloudBrand.logoTextCase !== undefined) { setLogoTextCase(cloudBrand.logoTextCase); saveStoredData('logoTextCase', cloudBrand.logoTextCase); }
           if (cloudBrand.logoFontSize !== undefined) { setLogoFontSize(cloudBrand.logoFontSize); saveStoredData('logoFontSize', cloudBrand.logoFontSize); }
           if (cloudBrand.logoSubtitle !== undefined) { setLogoSubtitle(cloudBrand.logoSubtitle); saveStoredData('logoSubtitle', cloudBrand.logoSubtitle); }
           if (cloudBrand.logoSubtitleCase !== undefined) { setLogoSubtitleCase(cloudBrand.logoSubtitleCase); saveStoredData('logoSubtitleCase', cloudBrand.logoSubtitleCase); }
@@ -1445,160 +1056,6 @@ export default function App() {
     addToast('Đã xóa bản ghi sao lưu', 'info', `Yêu cầu gỡ bỏ "${name}" đã được thực hiện.`);
   };
 
-  // Operations: CLOUD DATABASE (SUPABASE)
-  const handleTestSupabase = async () => {
-    setSupabaseStatusMsg({ type: 'testing', text: 'Đang kiểm tra kết nối tới máy chủ Supabase...' });
-    const res = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
-    if (res.success) {
-      setSupabaseStatusMsg({ type: 'success', text: res.message });
-      addToast('Kết nối thành công!', 'success', res.message);
-    } else {
-      setSupabaseStatusMsg({ type: 'error', text: res.message, needSchema: res.needSchema });
-      addToast('Kiểm tra thất bại', 'error', res.message);
-    }
-  };
-
-  const handleSaveSupabaseConfig = async () => {
-    saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
-    addToast('Đã lưu cấu hình Cloud', 'success', 'Thông tin Supabase đã được lưu vào trình duyệt.');
-    await handleTestSupabase();
-  };
-
-  const handlePushAllToCloud = async () => {
-    if (!supabaseUrlInput || !supabaseKeyInput) {
-      addToast('Chưa có thông tin Cloud', 'warning', 'Vui lòng nhập Supabase URL và Anon Key trước khi đẩy dữ liệu.');
-      return;
-    }
-    setIsSyncingCloud(true);
-    try {
-      saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
-      const resTest = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
-      if (!resTest.success) {
-        throw new Error(resTest.message);
-      }
-      await Promise.all([
-        syncToSupabaseChunked('cameras', cameras),
-        syncToSupabase('contracts', contracts),
-        syncToSupabase('customers', customers),
-        syncToSupabase('expenses', expenses),
-        syncToSupabase('registeredUsers', registeredUsers),
-        syncToSupabase('brand_settings', {
-          logoText,
-          logoTextCase,
-          logoFontSize,
-          logoSubtitle,
-          logoSubtitleCase,
-          logoSubtitleFontSize,
-          logoIconType,
-          logoIconColor,
-          logoBase64,
-          accountSectionTitle
-        })
-      ]);
-      addToast('Tải lên Cloud thành công!', 'success', `Đã đồng bộ toàn bộ ${cameras.length} đồ và dữ liệu lên máy chủ đám mây!`);
-      setSupabaseStatusMsg({ type: 'success', text: `Đã đẩy toàn bộ dữ liệu (${cameras.length} đồ) lên Cloud thành công!` });
-      // Tự động quét dọn ảnh rác trên Storage
-      cleanOrphanStorageImages(cameras).catch(() => {});
-    } catch (err: any) {
-      addToast('Lỗi đồng bộ Cloud', 'error', err?.message || 'Có lỗi khi đồng bộ');
-      setSupabaseStatusMsg({ type: 'error', text: err?.message || 'Có lỗi khi đồng bộ' });
-    } finally {
-      setIsSyncingCloud(false);
-    }
-  };
-
-  const [isCleaningStorage, setIsCleaningStorage] = useState(false);
-  const handleCleanCloudStorage = async () => {
-    setIsCleaningStorage(true);
-    try {
-      const res = await cleanOrphanStorageImages(cameras);
-      if (res.deletedCount > 0) {
-        addToast(
-          'Dọn dẹp thành công!',
-          'success',
-          `Đã xóa sạch ${res.deletedCount} file ảnh rác (${res.freedKB} KB) khỏi Supabase Storage!`
-        );
-      } else {
-        addToast(
-          'Cloud hoàn toàn sạch sẽ!',
-          'info',
-          'Tất cả ảnh trên Storage đều đang được dùng bởi các trang phục trong kho, không có ảnh rác nào.'
-        );
-      }
-    } catch {
-      addToast('Lỗi dọn dẹp', 'error', 'Không thể kết nối để dọn dẹp Storage.');
-    } finally {
-      setIsCleaningStorage(false);
-    }
-  };
-
-  const handlePullAllFromCloud = async () => {
-    if (!supabaseUrlInput || !supabaseKeyInput) {
-      addToast('Chưa có thông tin Cloud', 'warning', 'Vui lòng nhập Supabase URL và Anon Key trước khi kéo dữ liệu.');
-      return;
-    }
-    setIsSyncingCloud(true);
-    try {
-      saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
-      const resTest = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
-      if (!resTest.success) {
-        throw new Error(resTest.message);
-      }
-      const [cams, conts, custs, exps, users, brand] = await Promise.all([
-        fetchFromSupabase('cameras'),
-        fetchFromSupabase('contracts'),
-        fetchFromSupabase('customers'),
-        fetchFromSupabase('expenses'),
-        fetchFromSupabase('registeredUsers'),
-        fetchFromSupabase('brand_settings')
-      ]);
-
-      let count = 0;
-      if (cams && Array.isArray(cams)) {
-        const { normalized } = normalizeOutfitsBySize(cams);
-        setCameras(normalized);
-        saveStoredData('cameras', normalized);
-        count = normalized.length;
-      }
-      if (conts && Array.isArray(conts)) {
-        const { deduplicated } = deduplicateContracts(conts);
-        setContracts(deduplicated);
-        saveStoredData('contracts', deduplicated);
-      }
-      if (custs && Array.isArray(custs)) {
-        setCustomers(custs);
-        saveStoredData('customers', custs);
-      }
-      if (exps && Array.isArray(exps)) {
-        setExpenses(exps);
-        saveStoredData('expenses', exps);
-      }
-      if (users && Array.isArray(users)) {
-        setRegisteredUsers(users);
-        saveStoredData('registeredUsers', users);
-      }
-      if (brand) {
-        if (brand.logoText !== undefined) { setLogoText(brand.logoText); saveStoredData('logoText', brand.logoText); }
-        if (brand.logoTextCase !== undefined) { setLogoTextCase(brand.logoTextCase); saveStoredData('logoTextCase', brand.logoTextCase); }
-        if (brand.logoFontSize !== undefined) { setLogoFontSize(brand.logoFontSize); saveStoredData('logoFontSize', brand.logoFontSize); }
-        if (brand.logoSubtitle !== undefined) { setLogoSubtitle(brand.logoSubtitle); saveStoredData('logoSubtitle', brand.logoSubtitle); }
-        if (brand.logoSubtitleCase !== undefined) { setLogoSubtitleCase(brand.logoSubtitleCase); saveStoredData('logoSubtitleCase', brand.logoSubtitleCase); }
-        if (brand.logoSubtitleFontSize !== undefined) { setLogoSubtitleFontSize(brand.logoSubtitleFontSize); saveStoredData('logoSubtitleFontSize', brand.logoSubtitleFontSize); }
-        if (brand.logoIconType !== undefined) { setLogoIconType(brand.logoIconType); saveStoredData('logoIconType', brand.logoIconType); }
-        if (brand.logoIconColor !== undefined) { setLogoIconColor(brand.logoIconColor); saveStoredData('logoIconColor', brand.logoIconColor); }
-        if (brand.logoBase64 !== undefined) { setLogoBase64(brand.logoBase64); saveStoredData('logoBase64', brand.logoBase64); }
-        if (brand.accountSectionTitle !== undefined) { setAccountSectionTitle(brand.accountSectionTitle); saveStoredData('accountSectionTitle', brand.accountSectionTitle); }
-      }
-      addToast('Kéo dữ liệu thành công!', 'success', `Đã đồng bộ ${count} trang phục từ Cloud về máy này.`);
-      setSupabaseStatusMsg({ type: 'success', text: `Đã nạp ${count} trang phục từ Cloud về máy này thành công!` });
-    } catch (err: any) {
-      addToast('Lỗi kéo dữ liệu', 'error', err?.message || 'Có lỗi khi kéo dữ liệu');
-      setSupabaseStatusMsg({ type: 'error', text: err?.message || 'Có lỗi khi kéo dữ liệu' });
-    } finally {
-      setIsSyncingCloud(false);
-    }
-  };
-
   // Operations: CONTRACTS
   const handleAddContract = (newContract: RentalContract) => {
     let contractToAdd = newContract;
@@ -1685,10 +1142,6 @@ export default function App() {
     broadcastToAllDevices(title, body, { contractId: newContract.id }).catch(err => {
       console.warn('Broadcast to all devices error:', err);
     });
-
-    // Hiển thị thông báo local ngay lập tức (không phụ thuộc Firebase)
-    playNotificationSound();
-    sendOrderCreatedNotification(contractToAdd).catch(() => {});
   };
 
   const handleFixDuplicateContracts = () => {
@@ -1711,24 +1164,16 @@ export default function App() {
       const statusLabels: Record<ContractStatus, string> = {
         'Pending': 'Chờ duyệt',
         'Active': 'Đang thuê',
-        'Completed': 'Hoàn thành (Đã tất toán & chuyển giặt)',
+        'Completed': 'Hoàn thành',
         'Overdue': 'Quá hạn',
         'Cancelled': 'Đã hủy'
       };
       const label = statusLabels[status] || status;
-      if (status === 'Completed') {
-        addToast(
-          'Tất toán hợp đồng thành công',
-          'success',
-          `Hợp đồng ${targetContract.contractCode} đã tất toán xong. Toàn bộ trang phục thuê đã được tự động chuyển sang trạng thái "🧺 Đang giặt hấp" trong kho!`
-        );
-      } else {
-        addToast(
-          'Cập nhật trạng thái hợp đồng',
-          'info',
-          `Hợp đồng ${targetContract.contractCode} đã chuyển sang trạng thái: "${label}"`
-        );
-      }
+      addToast(
+        'Cập nhật trạng thái hợp đồng',
+        'info',
+        `Hợp đồng ${targetContract.contractCode} đã chuyển sang trạng thái: "${label}"`
+      );
     }
 
     // If the contract is completed, make sure the customer enters the profiles directory
@@ -1783,25 +1228,11 @@ export default function App() {
             paidAmount: finalPaidAmount
           };
 
-          // Adjust camera/outfit statuses based on contract transition
-          if (status === 'Completed') {
+          // Adjust camera statuses based on contract transition
+          if (status === 'Completed' || status === 'Cancelled') {
             setCameras(prevCams =>
               prevCams.map(cam => {
-                const wasRented = c.items.some(i => i.cameraId === cam.id || (cam.serialNumber && i.cameraId === cam.serialNumber));
-                if (wasRented) {
-                  return {
-                    ...cam,
-                    status: 'Available' as const, // Đã hoàn trả về kho
-                    cleaningStatus: 'Laundry' as const // Tự động về trạng thái đang giặt hấp trong kho
-                  };
-                }
-                return cam;
-              })
-            );
-          } else if (status === 'Cancelled') {
-            setCameras(prevCams =>
-              prevCams.map(cam => {
-                const wasRented = c.items.some(i => i.cameraId === cam.id || (cam.serialNumber && i.cameraId === cam.serialNumber));
+                const wasRented = c.items.some(i => i.cameraId === cam.id);
                 if (wasRented) {
                   return { ...cam, status: 'Available' as const };
                 }
@@ -1811,7 +1242,7 @@ export default function App() {
           } else if (status === 'Active') {
             setCameras(prevCams =>
               prevCams.map(cam => {
-                const isRented = c.items.some(i => i.cameraId === cam.id || (cam.serialNumber && i.cameraId === cam.serialNumber));
+                const isRented = c.items.some(i => i.cameraId === cam.id);
                 if (isRented) {
                   return { ...cam, status: 'Rented' as const };
                 }
@@ -1837,60 +1268,6 @@ export default function App() {
       })
     );
   };
-
-  const handleUpdateContractSurcharge = (
-    id: string,
-    surchargeAmount: number,
-    surchargeReason: string,
-    markAsPaid: boolean = true
-  ) => {
-    setContracts(prev =>
-      prev.map(c => {
-        if (c.id === id) {
-          const oldSurcharge = c.surchargeAmount || 0;
-          const diff = surchargeAmount - oldSurcharge;
-          // If contract is Completed or markAsPaid is true, update paidAmount to include the surcharge
-          let newPaid = c.paidAmount;
-          if (c.status === 'Completed' || markAsPaid) {
-            newPaid = Math.max(0, (c.paidAmount || 0) + diff);
-          }
-
-          return {
-            ...c,
-            surchargeAmount: surchargeAmount > 0 ? surchargeAmount : undefined,
-            surchargeReason: surchargeReason?.trim() || undefined,
-            paidAmount: newPaid
-          };
-        }
-        return c;
-      })
-    );
-    addToast(
-      'Cập nhật phụ thu & Doanh thu',
-      'success',
-      surchargeAmount > 0
-        ? `Đã cập nhật phụ thu +${surchargeAmount.toLocaleString()}đ (${surchargeReason || 'Phát sinh'}) và cộng vào doanh thu!`
-        : 'Đã xóa phụ thu khỏi hợp đồng.'
-    );
-  };
-
-  // Tự động đồng bộ doanh thu cho các hợp đồng Đã hoàn thành (Completed) có phụ thu
-  useEffect(() => {
-    setContracts(prev => {
-      let changed = false;
-      const updated = prev.map(c => {
-        if (c.status === 'Completed' && (c.surchargeAmount || 0) > 0) {
-          const expectedFull = c.totalPrice + (c.surchargeAmount || 0);
-          if ((c.paidAmount || 0) < expectedFull) {
-            changed = true;
-            return { ...c, paidAmount: expectedFull };
-          }
-        }
-        return c;
-      });
-      return changed ? updated : prev;
-    });
-  }, []);
 
   const handleUpdateContractCustomer = (
     id: string,
@@ -1949,21 +1326,8 @@ export default function App() {
     );
   };
 
-  const handleUpdateContractDates = (id: string, startDate: string, endDate: string, newTotalPrice: number) => {
-    setContracts(prev =>
-      prev.map(c => c.id === id ? { ...c, startDate, endDate, totalPrice: newTotalPrice } : c)
-    );
-    addToast('Cập nhật ngày thuê', 'info', `Đã cập nhật ngày thuê cho hợp đồng.`);
-  };
-
-  const handleUpdateContractItems = (id: string, items: RentalContract['items'], newTotalPrice: number) => {
-    setContracts(prev =>
-      prev.map(c => c.id === id ? { ...c, items, totalPrice: newTotalPrice } : c)
-    );
-    addToast('Cập nhật trang phục', 'info', `Đã cập nhật danh sách trang phục của hợp đồng.`);
-  };
-
-  const handleDeleteContract = (id: string) => {    const contractToDelete = contracts.find(c => c.id === id);
+  const handleDeleteContract = (id: string) => {
+    const contractToDelete = contracts.find(c => c.id === id);
     if (!contractToDelete) return;
 
     // Remove the contract from the list
@@ -2003,6 +1367,11 @@ export default function App() {
           return true;
         })
       );
+      addToast(
+        'Đã xóa hợp đồng và thông tin khách hàng',
+        'info',
+        `Đã xóa hợp đồng ${contractToDelete.contractCode} và tự động xóa hồ sơ khách hàng "${contractToDelete.customerName}" do không còn đơn thuê nào.`
+      );
     } else {
       // Customer still has other contracts -> update their rentalCount and totalSpent
       const newTotalSpent = remainingContractsForCust.reduce((sum, c) => sum + (c.paidAmount || 0), 0);
@@ -2018,249 +1387,24 @@ export default function App() {
           return cust;
         })
       );
-    }
-  };
-
-
-  // Khôi phục trang phục bị mất trực tiếp từ các khoản chi đã ghi nhận
-  const handleRestoreFromExpenses = () => {
-    const outfitExpenses = expenses.filter(e => e.description && e.description.includes('Vốn nhập trang phục:'));
-    if (outfitExpenses.length === 0) {
-      addToast('Không có dữ liệu', 'warning', 'Trong mục Khoản chi chưa có khoản vốn nhập trang phục nào.');
-      return;
-    }
-
-    const currentSerials = new Set(cameras.map(c => (c.serialNumber || '').trim().toUpperCase()));
-    const addedSerials = new Set(currentSerials);
-    const restoredCams: Camera[] = [];
-
-    const defaultImages: Record<string, string> = {
-      'Áo dài': 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&q=80&w=600',
-      'Váy': 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=600',
-      'Dạ hội': 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&fit=crop&q=80&w=600',
-      'Phụ kiện': 'https://images.unsplash.com/photo-1535295972055-1c762f4483e5?auto=format&fit=crop&q=80&w=600',
-      'Khác': 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=600'
-    };
-
-    outfitExpenses.forEach((e, idx) => {
-      const match = e.description.match(/Vốn nhập trang phục:\s*(.*?)(?:\s*\(#([^)]+)\))?$/);
-      if (!match) return;
-      const fullName = match[1].trim();
-      const serial = match[2] ? match[2].trim() : `SP-${idx + 1}`;
-      const serialUpper = serial.toUpperCase();
-
-      if (addedSerials.has(serialUpper)) return; // Bỏ qua nếu đã có trong kho
-      addedSerials.add(serialUpper);
-
-      // Nhận diện danh mục
-      const n = (fullName + ' ' + serial).toLowerCase();
-      let category: Camera['category'] = 'Khác';
-      if (n.includes('áo dài') || n.startsWith('ad ') || n.startsWith('ad-')) category = 'Áo dài';
-      else if (n.includes('quạt') || n.includes('guốc') || n.includes('túi') || n.includes('phụ kiện') || n.startsWith('qg') || n.startsWith('qtq') || n.startsWith('gbn') || n.startsWith('tx') || n.startsWith('gm')) category = 'Phụ kiện';
-      else if (n.includes('đầm') || n.includes('dạ hội')) category = 'Dạ hội';
-      else if (n.includes('váy') || n.includes('yếm') || n.includes('set')) category = 'Váy';
-
-      // Nhận diện kích cỡ
-      let size = 'Freesize';
-      const sizeMatch = (fullName + ' ' + serial).match(/\(Size\s+([A-Z0-9]+)\)/i) || (fullName + ' ' + serial).match(/-([XS|S|M|L|XL|XXL|FS]+)(?:-\d+)?$/i);
-      if (sizeMatch) {
-        size = sizeMatch[1].toUpperCase();
-      } else if (category === 'Phụ kiện') {
-        size = 'Freesize';
-      }
-
-      const purchasePrice = e.amount || 0;
-      let dailyRate = 0;
-      if (purchasePrice > 0) {
-        if (category === 'Phụ kiện') {
-          dailyRate = Math.max(30000, Math.round((purchasePrice * 0.25) / 5000) * 5000);
-        } else {
-          dailyRate = Math.max(70000, Math.round((purchasePrice * 0.28) / 10000) * 10000);
-        }
-      }
-
-      const p1 = dailyRate;
-      const p2 = Math.max(0, p1 - 20000);
-      const p3 = Math.max(0, p1 - 30000);
-
-      const newCam: Camera = {
-        id: `outfit-rec-${Date.now()}-${idx}`,
-        name: fullName,
-        shortName: serial,
-        serialNumber: serial,
-        category,
-        size,
-        availableSizes: [size],
-        color: '',
-        gender: 'Nữ',
-        status: 'Available',
-        cleaningStatus: 'Clean',
-        purchasePrice,
-        dailyRate,
-        price1Day: p1,
-        price2Days: p2,
-        price3Days: p3,
-        price4DaysPlus: Math.max(0, p1 - 40000),
-        depositAmount: Math.round((purchasePrice * 1.5) / 50000) * 50000 || 500000,
-        image: defaultImages[category] || defaultImages['Khác'],
-        description: `Trang phục ${fullName} (Mã tag ${serial})`
-      };
-
-      restoredCams.push(newCam);
-    });
-
-    if (restoredCams.length === 0) {
-      addToast('Kho đồ đã đồng bộ đầy đủ', 'info', 'Tất cả các món trang phục trong mục Khoản chi đã có mặt trong Kho đồ, không có món nào bị thiếu.');
-      return;
-    }
-
-    setCameras(prev => [...prev, ...restoredCams]);
-    addToast(
-      'Khôi phục thành công!',
-      'success',
-      `Đã khôi phục thành công ${restoredCams.length} trang phục & phụ kiện từ mục Khoản chi vào Kho đồ!`
-    );
-  };
-
-    // Operations: CAMERAS
-  const handleAddCamera = (newCam: Camera) => {
-    setCameras(prev => [...prev, newCam]);
-
-    // Tự động chuyển giá gốc / vốn nhập đồ vào mục Khoản chi & Doanh thu
-    if (newCam.purchasePrice && newCam.purchasePrice > 0) {
-      const today = systemDate || new Date().toISOString().split('T')[0];
-      const newExpense: Expense = {
-        id: `exp-outfit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        description: `Vốn nhập trang phục: ${newCam.name}${newCam.serialNumber ? ` (#${newCam.serialNumber})` : ''}`,
-        amount: newCam.purchasePrice,
-        date: today,
-        category: 'Equipment',
-        operator: currentUser?.fullName || currentUser?.username || 'Quản trị viên'
-      };
-      setExpenses(prev => [newExpense, ...prev]);
       addToast(
-        'Đã ghi nhận khoản chi!',
-        'success',
-        `Tự động chuyển ${newCam.purchasePrice.toLocaleString()}đ (vốn nhập ${newCam.name}) vào mục Khoản chi & Doanh thu.`
+        'Đã xóa hợp đồng thành công',
+        'info',
+        `Đã xóa hợp đồng ${contractToDelete.contractCode} và cập nhật lại thông tin khách hàng "${contractToDelete.customerName}".`
       );
     }
   };
 
+  // Operations: CAMERAS
+  const handleAddCamera = (newCam: Camera) => {
+    setCameras(prev => [...prev, newCam]);
+  };
+
   const handleUpdateCamera = (updatedCam: Camera) => {
-    const oldCam = cameras.find(c => c.id === updatedCam.id);
-    const oldSerial = oldCam?.serialNumber?.trim();
-    const newSerial = updatedCam.serialNumber?.trim();
-    const oldPrice = oldCam?.purchasePrice || 0;
-    const newPrice = updatedCam.purchasePrice || 0;
-
-    const isMatchingExpense = (e: Expense) => {
-      if (!e.description || !e.description.includes('Vốn nhập trang phục:')) return false;
-      if (oldSerial && e.description.includes(`(#${oldSerial})`)) return true;
-      if (newSerial && e.description.includes(`(#${newSerial})`)) return true;
-      if (oldCam?.name && e.description.includes(oldCam.name)) return true;
-      return false;
-    };
-
-    if (newPrice !== oldPrice || (oldSerial && newSerial && oldSerial !== newSerial)) {
-      setExpenses(prev => {
-        const matchIdx = prev.findIndex(isMatchingExpense);
-
-        if (newPrice <= 0) {
-          // Xóa giá về 0 -> Tự động xóa bỏ khoản chi tương ứng
-          if (matchIdx !== -1) {
-            const removed = prev[matchIdx];
-            addToast(
-              'Đã cập nhật Khoản chi!',
-              'info',
-              `Đã tự động xóa khoản vốn nhập ${removed.amount.toLocaleString()}đ của "${updatedCam.name}" khỏi mục Khoản chi.`
-            );
-            return prev.filter((_, idx) => idx !== matchIdx);
-          }
-          return prev;
-        } else {
-          // Giá > 0
-          if (matchIdx !== -1) {
-            const updatedExpenses = [...prev];
-            const oldAmount = updatedExpenses[matchIdx].amount;
-            updatedExpenses[matchIdx] = {
-              ...updatedExpenses[matchIdx],
-              description: `Vốn nhập trang phục: ${updatedCam.name}${newSerial ? ` (#${newSerial})` : ''}`,
-              amount: newPrice,
-            };
-            if (oldAmount !== newPrice) {
-              addToast(
-                'Đã cập nhật Khoản chi!',
-                'success',
-                `Đã điều chỉnh vốn nhập "${updatedCam.name}" từ ${oldAmount.toLocaleString()}đ thành ${newPrice.toLocaleString()}đ trong mục Khoản chi.`
-              );
-            }
-            return updatedExpenses;
-          } else {
-            // Chưa có khoản chi -> Tạo mới
-            const today = systemDate || new Date().toISOString().split('T')[0];
-            const newExpense: Expense = {
-              id: `exp-outfit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-              description: `Vốn nhập trang phục: ${updatedCam.name}${newSerial ? ` (#${newSerial})` : ''}`,
-              amount: newPrice,
-              date: today,
-              category: 'Equipment',
-              operator: currentUser?.fullName || currentUser?.username || 'Quản trị viên'
-            };
-            addToast(
-              'Đã ghi nhận khoản chi!',
-              'success',
-              `Tự động chuyển ${newPrice.toLocaleString()}đ (vốn nhập ${updatedCam.name}) vào mục Khoản chi & Doanh thu.`
-            );
-            return [newExpense, ...prev];
-          }
-        }
-      });
-    }
-
-    // Tự động dọn dẹp ảnh cũ trên Supabase Storage nếu đã đổi sang ảnh mới hoặc xóa ảnh
-    if (oldCam?.image && oldCam.image !== updatedCam.image) {
-      const otherCameras = cameras.filter(c => c.id !== updatedCam.id);
-      deleteOutfitImageFromStorage(oldCam.image, otherCameras);
-    }
-
-    setCameras(prev => {
-      const next = prev.map(c => (c.id === updatedCam.id ? updatedCam : c));
-      saveStoredData('cameras', next);
-      return next;
-    });
+    setCameras(prev => prev.map(c => (c.id === updatedCam.id ? updatedCam : c)));
   };
 
   const handleDeleteCamera = (id: string) => {
-    const targetCam = cameras.find(c => c.id === id);
-    if (targetCam) {
-      // 1. Tự động dọn dẹp file ảnh trên Supabase Storage nếu không có trang phục nào khác dùng chung
-      if (targetCam.image) {
-        const otherCameras = cameras.filter(c => c.id !== id);
-        deleteOutfitImageFromStorage(targetCam.image, otherCameras);
-      }
-
-      // 2. Tự động dọn dẹp khoản chi vốn nhập
-      const serial = targetCam.serialNumber?.trim();
-      const isMatchingExpense = (e: Expense) => {
-        if (!e.description || !e.description.includes('Vốn nhập trang phục:')) return false;
-        if (serial && e.description.includes(`(#${serial})`)) return true;
-        if (targetCam.name && e.description.includes(targetCam.name)) return true;
-        return false;
-      };
-
-      setExpenses(prev => {
-        const match = prev.find(isMatchingExpense);
-        if (match) {
-          addToast(
-            'Đã cập nhật Khoản chi!',
-            'info',
-            `Đã tự động xóa khoản vốn nhập ${match.amount.toLocaleString()}đ của "${targetCam.name}" khỏi mục Khoản chi.`
-          );
-          return prev.filter(e => !isMatchingExpense(e));
-        }
-        return prev;
-      });
-    }
     setCameras(prev => prev.filter(c => c.id !== id));
   };
 
@@ -2719,159 +1863,139 @@ export default function App() {
   // If user is not authenticated, render the glorious login experience screen
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col lg:flex-row antialiased relative overflow-x-hidden select-none">
+      <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row antialiased relative overflow-hidden select-none">
+        
+        {/* Background glow effects */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-orange-500/5 rounded-full blur-3xl pointer-events-none"></div>
+        
+        {/* Decorative Grid Overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-30 pointer-events-none"></div>
 
-        {/* Ambient background glow effects */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-amber-500/8 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none"></div>
-
-        {/* Mobile Fullscreen Fashion Background Overlay */}
-        <div 
-          className="lg:hidden absolute inset-0 bg-cover bg-center pointer-events-none opacity-25"
-          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=1200&auto=format&fit=crop&q=80')` }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-950/90 to-slate-950"></div>
-        </div>
-
-        {/* Left Hero Decoration Panel (Desktop only) */}
-        <div className="hidden lg:flex lg:w-7/12 xl:w-7/12 bg-slate-900 text-white relative flex-col justify-between p-10 xl:p-14 border-r border-slate-800/80 overflow-hidden">
-          {/* Fashion Atelier Background with Elegant Tint */}
+        {/* Left decoration panel with customizable brand colors and Unsplash setup - Hidden on Mobile */}
+        <div className="hidden md:flex md:w-5/12 lg:w-6/12 xl:w-7/12 bg-slate-900 text-white relative flex-col justify-between p-8 lg:p-16 border-r border-slate-800/80">
+          <div className="absolute inset-0 opacity-20 pointer-events-none mix-blend-overlay bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-orange-400 via-rose-600 to-indigo-900"></div>
           <div 
-            className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity scale-105 transform transition duration-1000" 
-            style={{ backgroundImage: `url('https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=1600&auto=format&fit=crop&q=80')` }}
+            className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity pointer-events-none" 
+            style={{ backgroundImage: `url('https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200&auto=format&fit=crop&q=80')` }}
           ></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-slate-950/40 pointer-events-none"></div>
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-950/30 to-slate-950 pointer-events-none"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/10 opacity-70 pointer-events-none"></div>
 
           {/* Dynamic Top Brand section */}
-          <div className="flex items-center gap-3.5 relative z-10 bg-slate-950/60 backdrop-blur-md px-5 py-3.5 rounded-3xl border border-white/10 w-fit shadow-2xl">
+          <div className="flex items-center gap-3.5 relative z-10 bg-slate-950/40 backdrop-blur-md p-4 rounded-3xl border border-white/10 w-fit">
             {logoIconType === 'upload' && logoBase64 ? (
-              <div className="w-13 h-13 rounded-full overflow-hidden border border-white/20 bg-white/10 flex items-center justify-center shadow-xl shrink-0">
+              <div className="w-14 h-14 rounded-full overflow-hidden border border-white/20 bg-white/10 flex items-center justify-center shadow-xl">
                 <img src={logoBase64} alt="Custom Logo" className="w-full h-full object-cover" />
               </div>
             ) : (
               <span 
-                className="w-13 h-13 rounded-full text-white shadow-xl flex items-center justify-center transition transform hover:scale-105 font-bold shrink-0"
+                className="w-14 h-14 rounded-full text-white shadow-xl flex items-center justify-center transition scale-100 hover:scale-105 font-bold"
                 style={{ backgroundColor: logoIconColor }}
               >
-                {logoIconType === 'dress' && <DressIcon className="w-7 h-7 text-white" />}
-                {logoIconType === 'aperture' && <Aperture className="w-7 h-7" />}
-                {logoIconType === 'film' && <Film className="w-7 h-7" />}
-                {logoIconType === 'sparkles' && <Sparkles className="w-7 h-7 text-yellow-300" />}
-                {logoIconType === 'smile' && <Smile className="w-7 h-7" />}
-                {logoIconType === 'image' && <ImageIcon className="w-7 h-7" />}
-                {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-7 h-7 text-white" />}
+                {logoIconType === 'aperture' && <Aperture className="w-8 h-8" />}
+                {logoIconType === 'film' && <Film className="w-8 h-8" />}
+                {logoIconType === 'sparkles' && <Sparkles className="w-8 h-8 text-yellow-300" />}
+                {logoIconType === 'smile' && <Smile className="w-8 h-8" />}
+                {logoIconType === 'image' && <ImageIcon className="w-8 h-8" />}
+                {(logoIconType === 'camera' || logoIconType === 'upload') && <CameraIcon className="w-8 h-8" />}
               </span>
             )}
-            <div className="leading-tight pr-3">
-              <span className="font-sans font-black text-white text-base tracking-widest block uppercase">
-                {logoText || 'TIỆM NHÀ CAO'}
+            <div className="leading-tight pr-4">
+              <span className="font-sans font-black text-white text-lg tracking-widest block uppercase">
+                {logoText || 'TIỆM ẢNH NHÀ CAOS'}
               </span>
-              <span className="text-[10px] text-amber-400 font-mono block tracking-widest uppercase font-bold mt-0.5">
-                {logoSubtitle || 'CHO THUÊ TRANG PHỤC & PHỤ KIỆN'}
-              </span>
+              <span className="text-[10px] text-slate-300 font-mono block tracking-widest uppercase mt-0.5">{logoSubtitle || 'CHO THUÊ MÁY ẢNH GIÁ RẺ'}</span>
             </div>
           </div>
 
           {/* Welcome Message Text Block */}
-          <div className="my-auto space-y-6 max-w-xl relative z-10 pt-8 pb-8">
-            <span className="inline-flex items-center gap-2 px-3.5 py-1.5 text-[11px] font-bold text-amber-400 border border-amber-500/30 rounded-full bg-amber-500/10 uppercase tracking-widest backdrop-blur-sm">
-              <ShieldCheck className="w-4 h-4 text-amber-400 animate-pulse" /> Phiên bản máy chủ đám mây bảo mật
+          <div className="my-6 md:my-0 space-y-4 md:space-y-6 max-w-xl relative z-10 md:mt-auto md:mb-auto pt-4 md:pt-0">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 text-[10px] font-bold text-orange-400 border border-orange-500/30 rounded-full bg-orange-500/10 uppercase tracking-widest leading-none">
+              <ShieldCheck className="w-3.5 h-3.5 mr-0.5 animate-pulse" /> Phiên bản máy chủ đám mây bảo mật
             </span>
-
-            <div className="space-y-4">
-              <h2 className="text-4xl xl:text-5xl 2xl:text-6xl font-display font-black text-white tracking-tight leading-[1.1]">
-                Quản lý Cho thuê <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-200">
-                  Trang Phục & Phụ Kiện
-                </span>
+            <div className="space-y-3 md:space-y-4">
+              <h2 className="text-2xl sm:text-3xl lg:text-5xl font-display font-black text-white tracking-tight leading-none animate-fade-in">
+                Quản lý Cho thuê <br className="hidden md:inline" /> 
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-200">Thiết bị Studio</span>
               </h2>
-              <p className="text-slate-300 text-sm leading-relaxed font-normal">
-                Hệ sinh thái chuyên nghiệp hỗ trợ vận hành tối ưu khâu đặt lịch thử đồ, áo dài, cổ phục, đầm tiệc, fitting số đo, quản lý hợp đồng cọc và lịch giặt hấp chuẩn xác.
+              <p className="hidden sm:block text-slate-300 text-sm leading-relaxed font-normal">
+                Hệ sinh thái chuyên nghiệp hỗ trợ vận hành tối ưu khâu đặt máy chụp ảnh, lens, đèn quay chụp, quản toán hợp đồng, thu nợ, báo biểu doanh số thực chuẩn xác nhất.
               </p>
             </div>
 
-            {/* List of elegant key benefits */}
-            <div className="space-y-3 pt-5 border-t border-slate-800/70 max-w-lg">
-              <div className="flex items-start gap-3.5 bg-slate-950/40 p-3 rounded-2xl border border-white/5 backdrop-blur-xs">
-                <span className="p-1.5 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 mt-0.5 shrink-0">
-                  <Check className="w-4 h-4" />
+            {/* List of elegant key benefits - Hidden on mobile/tablets to keep login quick */}
+            <div className="hidden md:block space-y-3.5 pt-4 border-t border-slate-800/50 max-w-lg">
+              <div className="flex items-start gap-3">
+                <span className="p-1 rounded-lg bg-orange-500/15 border border-orange-500/20 text-orange-400 mt-0.5 shrink-0">
+                  <Check className="w-3.5 h-3.5" />
                 </span>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-100">Đặt lịch biểu quan hợp nhất (Smart Calendar)</h4>
-                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">Xếp lịch trang phục, phụ kiện theo thời gian thực trực quan, hoàn toàn chống trùng lặp lịch đồ.</p>
+                  <h4 className="text-sm font-bold text-slate-200">Đặt lịch biểu quan hợp nhất (Smart Calendar)</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Xếp lịch camera, lens theo thời gian thực trực quan, hoàn toàn chống trùng lặp lịch thiết bị.</p>
                 </div>
               </div>
-
-              <div className="flex items-start gap-3.5 bg-slate-950/40 p-3 rounded-2xl border border-white/5 backdrop-blur-xs">
-                <span className="p-1.5 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 mt-0.5 shrink-0">
-                  <Check className="w-4 h-4" />
+              <div className="flex items-start gap-3">
+                <span className="p-1 rounded-lg bg-orange-500/15 border border-orange-500/20 text-orange-400 mt-0.5 shrink-0">
+                  <Check className="w-3.5 h-3.5" />
                 </span>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-100">Quản trị khách hàng & Tổng hợp doanh thu</h4>
-                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">Chụp báo cáo tài chính doanh thu, chi phí phát sinh, công nợ xấu và khấu hao kho thiết bị.</p>
+                  <h4 className="text-sm font-bold text-slate-200">Quản trị khách hàng & Tổng hợp doanh thu</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Chụp báo cáo tài chính doanh thu, chi phí phát sinh, công nợ xấu và khấu hao kho thiết bị.</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Footer of decorative block */}
-          <div className="relative z-10 text-[11px] text-slate-400 select-none flex items-center justify-between border-t border-slate-800/60 pt-4">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>© 2026 {logoText || 'TIỆM NHÀ CAO'} Enterprise Suite • Kết nối máy chủ an toàn</span>
-            </div>
-            <span className="text-slate-500 font-mono text-[10px]">Cloud v3.8</span>
+          <div className="hidden sm:flex relative z-10 text-[11px] text-slate-500 select-none items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>© 2026 {logoText || 'TIỆM ẢNH NHÀ CAOS'} Enterprise Suite • Kết nối máy chủ an toàn</span>
           </div>
         </div>
 
-        {/* Right Authentication Panel (PC & Mobile) */}
-        <div className="flex-1 flex flex-col justify-center items-center p-4 sm:p-8 lg:p-12 relative z-10 min-h-screen">
+        {/* Right authentic login sheet form */}
+        <div className="flex-grow bg-slate-950 flex flex-col justify-center p-3.5 xs:p-5 sm:p-12 lg:p-16 relative z-10 min-h-screen">
+          
+          {/* Ambient Glow behind the card */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-          <div className="max-w-md w-full mx-auto relative z-10 space-y-6">
-
-            {/* Mobile-only prominent branding header */}
-            <div className="flex lg:hidden flex-col items-center justify-center text-center select-none pt-2 animate-fade-in">
-              <div className="flex items-center gap-3 bg-slate-900/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-700/60 shadow-xl mb-2">
-                {logoIconType === 'upload' && logoBase64 ? (
-                  <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20 bg-slate-900 flex items-center justify-center shadow-lg shrink-0">
-                    <img src={logoBase64} alt="Custom Logo" className="w-full h-full object-cover" />
-                  </div>
-                ) : (
-                  <span 
-                    className="w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center shrink-0 font-bold"
-                    style={{ backgroundColor: logoIconColor }}
-                  >
-                    {logoIconType === 'dress' && <DressIcon className="w-6 h-6 text-white" />}
-                    {logoIconType === 'aperture' && <Aperture className="w-6 h-6" />}
-                    {logoIconType === 'film' && <Film className="w-6 h-6" />}
-                    {logoIconType === 'sparkles' && <Sparkles className="w-6 h-6 text-yellow-300" />}
-                    {logoIconType === 'smile' && <Smile className="w-6 h-6" />}
-                    {logoIconType === 'image' && <ImageIcon className="w-6 h-6" />}
-                    {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-6 h-6 text-white" />}
-                  </span>
-                )}
-                <div className="leading-tight text-left">
-                  <span className="font-sans font-black text-white text-sm tracking-wider block uppercase">
-                    {logoText || 'TIỆM NHÀ CAO'}
-                  </span>
-                  <span className="text-[9px] text-amber-400 font-mono block tracking-wider uppercase font-bold mt-0.5">
-                    {logoSubtitle || 'CHO THUÊ TRANG PHỤC & PHỤ KIỆN'}
-                  </span>
+          <div className="max-w-md w-full mx-auto relative z-10">
+            
+            {/* Mobile-only beautiful branding logotype */}
+            <div className="flex md:hidden items-center justify-center gap-2.5 mb-7 select-none animate-fade-in">
+              {logoIconType === 'upload' && logoBase64 ? (
+                <div className="w-11 h-11 rounded-full overflow-hidden border border-white/20 bg-slate-900 flex items-center justify-center shadow-lg shadow-orange-500/10 shrink-0">
+                  <img src={logoBase64} alt="Custom Logo" className="w-full h-full object-cover" />
                 </div>
+              ) : (
+                <span 
+                  className="w-11 h-11 rounded-full text-white shadow-lg flex items-center justify-center shadow-orange-500/10 shrink-0 font-bold"
+                  style={{ backgroundColor: logoIconColor }}
+                >
+                  {logoIconType === 'aperture' && <Aperture className="w-6.5 h-6.5" />}
+                  {logoIconType === 'film' && <Film className="w-6.5 h-6.5" />}
+                  {logoIconType === 'sparkles' && <Sparkles className="w-6.5 h-6.5 text-yellow-300" />}
+                  {logoIconType === 'smile' && <Smile className="w-6.5 h-6.5" />}
+                  {logoIconType === 'image' && <ImageIcon className="w-6.5 h-6.5" />}
+                  {(logoIconType === 'camera' || logoIconType === 'upload') && <CameraIcon className="w-6.5 h-6.5" />}
+                </span>
+              )}
+              <div className="leading-tight text-left">
+                <span className="font-sans font-black text-white text-base tracking-widest block uppercase">
+                  {logoText || 'TIỆM ẢNH NHÀ CAOS'}
+                </span>
+                <span className="text-[9px] text-orange-400 font-mono block tracking-widest uppercase font-bold mt-0.5">{logoSubtitle || 'CHO THUÊ MÁY ẢNH GIÁ RẺ'}</span>
               </div>
             </div>
-
-            {/* Glass Card */}
-            <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/70 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-5 transition duration-300 hover:border-slate-600 hover:shadow-[0_0_50px_-10px_rgba(249,115,22,0.2)]">
-
+            
+            <div className="bg-slate-900/95 backdrop-blur-md border border-slate-800 p-5 xs:p-7 sm:p-9 rounded-2xl shadow-2xl space-y-4 xs:space-y-5 transition duration-300 hover:border-slate-700/60 hover:shadow-[0_0_50px_-12px_rgba(249,115,22,0.15)]">
+              
               {!isRegisterMode ? (
-                // LOGIN GIAO DIỆN
+                // LOGIN Giao diện
                 <>
-                  <div className="space-y-1.5 select-none">
-                    <span className="text-[10px] font-extrabold text-orange-400 uppercase tracking-widest bg-orange-500/10 px-3 py-1 rounded-lg border border-orange-500/25 inline-block leading-none">
-                      HỆ THỐNG VẬN HÀNH
+                  <div className="space-y-2 select-none">
+                    <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest bg-orange-500/10 px-3 py-1 rounded-lg border border-orange-500/25 inline-block leading-none">
+                      Hệ thống vận hành
                     </span>
                     <h3 className="text-2xl font-black text-white tracking-tight">Đăng nhập cổng kết nối</h3>
                     <p className="text-slate-400 text-xs">Vui lòng nhập tài khoản và mật khẩu được cấp để làm việc.</p>
@@ -2879,22 +2003,20 @@ export default function App() {
 
                   {/* ERROR FLASH */}
                   {loginError && (
-                    <div className="bg-rose-500/10 border border-rose-500/30 p-3.5 rounded-2xl text-xs text-rose-300 font-medium flex items-center gap-2.5 animate-shake">
-                      <span className="p-1.5 bg-rose-500/20 text-rose-400 rounded-xl shrink-0">
-                        <Lock className="w-4 h-4" />
+                    <div className="bg-rose-500/10 border border-rose-500/30 p-3.5 rounded-xl text-xs text-rose-450 font-medium flex items-center gap-2.5">
+                      <span className="p-1 bg-rose-500/20 text-rose-400 rounded-lg shrink-0">
+                        <Lock className="w-3.5 h-3.5" />
                       </span>
                       <span>{loginError}</span>
                     </div>
                   )}
 
-                  {/* FORM ĐĂNG NHẬP */}
+                  {/* FORM COMPONENT */}
                   <form onSubmit={handleLogin} className="space-y-4">
-
-                    {/* Tên tài khoản */}
+                    
+                    {/* Username field */}
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
-                        TÊN TÀI KHOẢN (USERNAME)
-                      </label>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tên tài khoản (Username)</label>
                       <div className="relative group">
                         <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500 transition-colors group-focus-within:text-orange-400">
                           <User className="w-4 h-4" />
@@ -2905,17 +2027,15 @@ export default function App() {
                           value={usernameInput}
                           onChange={(e) => setUsernameInput(e.target.value)}
                           placeholder="ví dụ: admin"
-                          className="w-full pl-10 pr-4 py-3 bg-slate-950/90 border border-slate-700/80 rounded-2xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all font-mono"
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-semibold text-white placeholder-slate-600 focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 transition-all font-mono"
                         />
                       </div>
                     </div>
 
-                    {/* Mật khẩu */}
+                    {/* Password field */}
                     <div className="space-y-1.5">
-                      <div className="flex justify-between items-center text-[11px]">
-                        <label className="font-bold text-slate-300 uppercase tracking-wider">
-                          MẬT KHẨU (PASSWORD)
-                        </label>
+                      <div className="flex justify-between items-center text-[10px]">
+                        <label className="font-bold text-slate-400 uppercase tracking-wider">Mật khẩu (Password)</label>
                         <button
                           type="button"
                           onClick={() => {
@@ -2928,7 +2048,7 @@ export default function App() {
                             setForgotSuccess('');
                             setShowForgotPasswordModal(true);
                           }}
-                          className="font-bold text-orange-400 hover:text-orange-300 hover:underline transition-colors cursor-pointer"
+                          className="font-bold text-orange-400 hover:text-orange-300 hover:underline transition-colors cursor-pointer animate-pulse"
                         >
                           Quên mật khẩu?
                         </button>
@@ -2943,22 +2063,22 @@ export default function App() {
                           value={passwordInput}
                           onChange={(e) => setPasswordInput(e.target.value)}
                           placeholder="••••••••"
-                          className="w-full pl-10 pr-11 py-3 bg-slate-950/90 border border-slate-700/80 rounded-2xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all font-mono"
+                          className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-semibold text-white placeholder-slate-6o0 focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 transition-all font-mono"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
                         >
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
 
-                    {/* Nút đăng nhập */}
                     <button
                       type="submit"
-                      className="w-full py-3.5 px-4 rounded-2xl text-sm font-bold text-white shadow-xl shadow-orange-950/40 hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-2 bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500"
+                      className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white shadow-lg shadow-orange-950/10 hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-2"
+                      style={{ backgroundColor: logoIconColor }}
                     >
                       <UserCheck className="w-4 h-4" />
                       Truy cập hệ thống
@@ -2966,9 +2086,9 @@ export default function App() {
 
                   </form>
 
-                  {/* Chuyển sang đăng ký */}
-                  <div className="text-center text-xs text-slate-400 select-none pt-2 border-t border-slate-800/60">
-                    Chưa có tài khoản?{' '}
+                  {/* SIGN UP TOGGLE */}
+                  <div className="text-center text-xs text-slate-400 select-none pt-1 border-t border-slate-800/40">
+                    Chưa có tài khoản?{" "}
                     <button
                       type="button"
                       onClick={() => {
@@ -2982,54 +2102,40 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Tài khoản dùng thử Demo */}
-                  <div className="pt-3 space-y-2.5 border-t border-slate-800/60">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block text-center">
-                      TÀI KHOẢN DÙNG THỬ DEMO
-                    </span>
+                  {/* PRESENTS AUTOFILLS Badges */}
+                  <div className="pt-2.5 space-y-2 border-t border-slate-800/30">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">Tài khoản dùng thử Demo</span>
                     <div className="grid grid-cols-2 gap-2.5">
                       
-                      {/* Admin Quick Button */}
+                      {/* Admin Quick button */}
                       <button
                         type="button"
                         onClick={() => handleAutofill('admin', '12345')}
-                        className="p-3 rounded-2xl border border-slate-800 hover:border-indigo-500/50 bg-slate-950/60 hover:bg-slate-950 text-left transition duration-200 flex flex-col justify-between cursor-pointer group shadow-sm"
+                        className="p-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-left hover:bg-slate-950 hover:border-orange-500/40 hover:shadow-md transition duration-200 flex flex-col justify-between cursor-pointer group"
                       >
                         <div className="w-full flex items-center justify-between mb-1.5">
-                          <span className="text-[9px] text-indigo-400 font-extrabold uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20 leading-none">
-                            ADMIN
-                          </span>
-                          <User className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 transition-colors" />
+                          <span className="text-[9px] text-indigo-400 font-extrabold uppercase tracking-widest bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/15 leading-none">Admin</span>
+                          <User className="w-3 h-3 text-slate-600 group-hover:text-indigo-400 transition-colors" />
                         </div>
                         <div className="min-w-0">
-                          <span className="text-xs font-bold text-white block group-hover:text-indigo-300 transition-colors truncate">
-                            Tài khoản Quản trị
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">
-                            admin / 12345
-                          </span>
+                          <span className="text-[11px] font-bold text-white block group-hover:text-orange-400 transition-colors truncate">Tài khoản Quản trị</span>
+                          <span className="text-[9px] text-slate-500 font-mono block truncate">admin / 12345</span>
                         </div>
                       </button>
 
-                      {/* Staff Quick Button */}
+                      {/* Staff Quick button */}
                       <button
                         type="button"
                         onClick={() => handleAutofill('nhanvien', '123')}
-                        className="p-3 rounded-2xl border border-slate-800 hover:border-emerald-500/50 bg-slate-950/60 hover:bg-slate-950 text-left transition duration-200 flex flex-col justify-between cursor-pointer group shadow-sm"
+                        className="p-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-left hover:bg-slate-950 hover:border-orange-500/40 hover:shadow-md transition duration-200 flex flex-col justify-between cursor-pointer group"
                       >
                         <div className="w-full flex items-center justify-between mb-1.5">
-                          <span className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 leading-none">
-                            STAFF
-                          </span>
-                          <User className="w-3.5 h-3.5 text-slate-600 group-hover:text-emerald-400 transition-colors" />
+                          <span className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-widest bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/15 leading-none">Staff</span>
+                          <User className="w-3 h-3 text-slate-600 group-hover:text-emerald-450 transition-colors" />
                         </div>
                         <div className="min-w-0">
-                          <span className="text-xs font-bold text-white block group-hover:text-emerald-300 transition-colors truncate">
-                            Tài khoản Nhân viên
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">
-                            nhanvien / 123
-                          </span>
+                          <span className="text-[11px] font-bold text-white block group-hover:text-orange-400 transition-colors truncate">Tài khoản Nhân viên</span>
+                          <span className="text-[9px] text-slate-500 font-mono block truncate">nhanvien / 123</span>
                         </div>
                       </button>
 
@@ -3037,11 +2143,11 @@ export default function App() {
                   </div>
                 </>
               ) : (
-                // REGISTER GIAO DIỆN
+                // REGISTER Giao diện
                 <>
-                  <div className="space-y-1.5 select-none">
-                    <span className="text-[10px] font-extrabold text-orange-400 uppercase tracking-widest bg-orange-500/10 px-2.5 py-1 rounded-md border border-orange-500/20 inline-block leading-none">
-                      ĐĂNG KÝ THÀNH VIÊN
+                  <div className="space-y-2 select-none">
+                    <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest bg-orange-500/10 px-2.5 py-1 rounded-md border border-orange-500/20 inline-block leading-none">
+                      Đăng ký thành viên
                     </span>
                     <h3 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
                       <UserPlus className="w-6 h-6 text-orange-400" />
@@ -3052,29 +2158,27 @@ export default function App() {
 
                   {/* ERROR/SUCCESS FLASH */}
                   {registerError && (
-                    <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-2xl text-xs text-rose-300 font-medium flex items-center gap-2">
-                      <span className="p-1 bg-rose-500/20 text-rose-400 rounded-lg shrink-0">
+                    <div className="bg-rose-500/10 border border-rose-500/30 p-3.5 rounded-xl text-xs text-rose-450 font-medium flex items-center gap-2 animate-pulse">
+                      <span className="p-1 bg-rose-500/20 text-rose-450 rounded-md shrink-0">
                         <Lock className="w-3.5 h-3.5" />
                       </span>
                       <span>{registerError}</span>
                     </div>
                   )}
                   {registerSuccess && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-2xl text-xs text-emerald-300 font-semibold flex items-center gap-2">
-                      <span className="p-1 bg-emerald-500/20 text-emerald-400 rounded-lg shrink-0">
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 rounded-xl text-xs text-emerald-400 font-semibold flex items-center gap-2 animate-pulse">
+                      <span className="p-1 bg-emerald-500/20 text-emerald-450 rounded-md shrink-0">
                         <ShieldCheck className="w-3.5 h-3.5" />
                       </span>
                       <span>{registerSuccess}</span>
                     </div>
                   )}
 
-                  <form onSubmit={handleRegister} className="space-y-3.5">
-
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    
                     {/* Họ và tên */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Họ và tên nhân viên
-                      </label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Họ và tên nhân viên</label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
                           <User className="w-4 h-4" />
@@ -3085,16 +2189,14 @@ export default function App() {
                           value={regFullName}
                           onChange={(e) => setRegFullName(e.target.value)}
                           placeholder="ví dụ: Trần Văn C"
-                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 transition-all font-sans"
+                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm font-semibold text-white placeholder-slate-650 focus:outline-hidden focus:border-orange-500 transition-all font-sans"
                         />
                       </div>
                     </div>
 
                     {/* Username */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Tên đăng nhập (Username)
-                      </label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tên đăng nhập (Username)</label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
                           <User className="w-4 h-4" />
@@ -3105,16 +2207,14 @@ export default function App() {
                           value={regUsername}
                           onChange={(e) => setRegUsername(e.target.value)}
                           placeholder="ví dụ: nhanvien_c"
-                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-700 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 transition-all font-mono lowercase"
+                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-650 focus:outline-hidden focus:border-orange-500 transition-all font-mono lowercase"
                         />
                       </div>
                     </div>
 
                     {/* Password */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Mật khẩu (Password)
-                      </label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mật khẩu (Password)</label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
                           <Lock className="w-4 h-4" />
@@ -3125,23 +2225,21 @@ export default function App() {
                           value={regPassword}
                           onChange={(e) => setRegPassword(e.target.value)}
                           placeholder="Tối thiểu 3 ký tự..."
-                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-700 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-500 transition-all font-mono"
+                          className="w-full pl-9.5 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-650 focus:outline-hidden focus:border-orange-500 transition-all font-mono"
                         />
                       </div>
                     </div>
 
                     {/* Role segment */}
-                    <div className="space-y-1 pt-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Vai trò thành viên
-                      </label>
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Vai trò thành viên</label>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => setRegRole('staff')}
-                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
+                          className={`flex-grow py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
                             regRole === 'staff'
-                              ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 font-extrabold shadow-sm'
+                              ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 font-extrabold'
                               : 'border-slate-800 text-slate-400 hover:bg-slate-950 bg-transparent'
                           }`}
                         >
@@ -3150,9 +2248,9 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setRegRole('admin')}
-                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
+                          className={`flex-grow py-2 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
                             regRole === 'admin'
-                              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 font-extrabold shadow-sm'
+                              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 font-extrabold'
                               : 'border-slate-800 text-slate-400 hover:bg-slate-950 bg-transparent'
                           }`}
                         >
@@ -3161,10 +2259,11 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Submit */}
+                    {/* Submit Button */}
                     <button
                       type="submit"
-                      className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-3 bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500"
+                      className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white shadow-lg hover:filter hover:brightness-110 active:scale-[0.98] transition-all text-center flex items-center justify-center gap-2 cursor-pointer mt-4"
+                      style={{ backgroundColor: logoIconColor }}
                     >
                       <UserPlus className="w-4 h-4" />
                       Đăng ký tài khoản
@@ -3172,9 +2271,9 @@ export default function App() {
 
                   </form>
 
-                  {/* Quay lại đăng nhập */}
+                  {/* BACK TO LOGIN */}
                   <div className="text-center text-xs text-slate-400 pt-2 select-none border-t border-slate-800/40">
-                    Đã có tài khoản?{' '}
+                    Đã có tài khoản?{" "}
                     <button
                       type="button"
                       onClick={() => {
@@ -3182,7 +2281,6 @@ export default function App() {
                         setRegisterError('');
                         setRegisterSuccess('');
                       }}
-                      className="text-orange-400 font-bold hover:text-orange-300 transition-colors hover:underline cursor-pointer"
                     >
                       Quay lại đăng nhập
                     </button>
@@ -3194,7 +2292,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Forgot Password Modal */}        {/* Forgot Password Modal */}
+        {/* Forgot Password Modal */}
         {showForgotPasswordModal && (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in text-left">
             <div className="bg-slate-900 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-800 flex flex-col text-slate-100">
@@ -3355,14 +2453,7 @@ export default function App() {
       <button
         key={tabId}
         type="button"
-        onClick={() => {
-          if (tabId === 'equipment') {
-            // Khi bấm trực tiếp vào menu Kho Đồ thì xem tất cả
-            setEquipmentTrackerCleaningFilter('ALL');
-            setEquipmentTrackerStatusFilter('ALL');
-          }
-          handleTabChange(tabId);
-        }}
+        onClick={() => setActiveTab(tabId)}
         className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center cursor-pointer ${
           sidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
         } ${
@@ -3429,25 +2520,43 @@ export default function App() {
         <div className={`p-2 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} mb-3 relative`}>
           <div 
             onClick={() => setShowLogoModal(true)}
-            className="flex items-center cursor-pointer group/logo transition-all"
-            title="Bấm để thay đổi Logo & Thương hiệu"
+            className={`flex items-center gap-2.5 cursor-pointer group/logo transition-all ${sidebarCollapsed ? 'justify-center' : 'min-w-0 flex-1'}`}
+            title="Thay đổi Logo & Thương hiệu"
           >
             {logoIconType === 'upload' && logoBase64 ? (
-              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full overflow-hidden border border-slate-200/90 flex items-center justify-center bg-white shrink-0 shadow-xs group-hover/logo:scale-105 group-hover/logo:shadow-md transition-all">
+              <div className="w-11 h-11 rounded-full overflow-hidden border border-slate-200/80 flex items-center justify-center bg-white shrink-0 shadow-xs group-hover/logo:scale-105 group-hover/logo:shadow-md transition-all">
                 <img src={logoBase64} alt="Logo" className="w-full h-full object-cover" />
               </div>
             ) : (
               <div 
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-full text-white shrink-0 shadow-xs flex items-center justify-center font-bold group-hover/logo:scale-105 transition-transform"
+                className="w-11 h-11 rounded-full text-white shrink-0 shadow-xs flex items-center justify-center font-bold group-hover/logo:scale-105 transition-transform"
                 style={{ backgroundColor: logoIconColor }}
               >
-                {logoIconType === 'dress' && <DressIcon className="w-6 h-6 text-white" />}
-                {logoIconType === 'aperture' && <Aperture className="w-6 h-6" />}
-                {logoIconType === 'film' && <Film className="w-6 h-6" />}
-                {logoIconType === 'sparkles' && <Sparkles className="w-6 h-6 text-yellow-300" />}
-                {logoIconType === 'smile' && <Smile className="w-6 h-6" />}
-                {logoIconType === 'image' && <ImageIcon className="w-6 h-6" />}
-                {(logoIconType === 'camera' || logoIconType === 'upload') && <DressIcon className="w-6 h-6 text-white" />}
+                {logoIconType === 'aperture' && <Aperture className="w-5.5 h-5.5" />}
+                {logoIconType === 'film' && <Film className="w-5.5 h-5.5" />}
+                {logoIconType === 'sparkles' && <Sparkles className="w-5.5 h-5.5 text-yellow-300" />}
+                {logoIconType === 'smile' && <Smile className="w-5.5 h-5.5" />}
+                {logoIconType === 'image' && <ImageIcon className="w-5.5 h-5.5" />}
+                {(logoIconType === 'camera' || logoIconType === 'upload') && <CameraIcon className="w-5.5 h-5.5" />}
+              </div>
+            )}
+
+            {!sidebarCollapsed && (
+              <div className="leading-tight min-w-0">
+                <span 
+                  className="font-display font-black text-slate-900 tracking-tight block uppercase truncate"
+                  style={{ fontSize: `${Math.min(logoFontSize || 15.5, 14)}px` }}
+                >
+                  {logoText || 'TIỆM ẢNH NHÀ CAOS'}
+                </span>
+                <span 
+                  className={`text-gray-400 font-medium block tracking-wide truncate mt-0.5 ${
+                    logoSubtitleCase === 'uppercase' ? 'uppercase' : logoSubtitleCase === 'lowercase' ? 'lowercase' : ''
+                  }`}
+                  style={{ fontSize: `${logoSubtitleFontSize || 9}px` }}
+                >
+                  {logoSubtitle || 'cho thuê máy ảnh giá rẻ'}
+                </span>
               </div>
             )}
           </div>
@@ -3486,16 +2595,16 @@ export default function App() {
               <div className="w-5 h-px bg-slate-200 mx-auto my-1.5" />
             )}
             <div className="space-y-1">
-              {renderNavItem('calendar', 'Lịch đặt đồ', 'Xếp lịch thử & thuê đồ', Calendar)}
+              {renderNavItem('calendar', 'Lịch máy', 'Xếp lịch máy & lens', Calendar)}
               {renderNavItem('contracts', 'Đơn thuê', 'Hợp đồng & trạng thái', FileText, pendingOrOverdueContractsCount)}
-              {renderNavItem('equipment', 'Kho trang phục', 'Tủ đồ & phụ kiện', DressIcon)}
+              {renderNavItem('equipment', 'Kho thiết bị', 'Kho máy, lens & đèn', CameraIcon)}
               {renderNavItem('customers', 'Khách hàng', 'Hồ sơ khách thuê', Users)}
               {renderNavItem('revenue', 'Doanh thu', 'Báo cáo & lợi nhuận', TrendingUp)}
-              {renderNavItem('expenses', 'Khoản chi', 'Chi phí & giặt hấp', DollarSign)}
+              {renderNavItem('expenses', 'Khoản chi', 'Chi phí vận hành', DollarSign)}
             </div>
           </div>
 
-          {/* Section 2: CÀI ĐẶT & HỆ THỐNG */}
+          {/* Section 2: CÀI ĐẶT & HỆ THỐNG - Ẩn đi, bấm chọn mới hiện ra */}
           <div>
             {!sidebarCollapsed ? (
               <div className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -3505,59 +2614,119 @@ export default function App() {
               <div className="w-5 h-px bg-slate-200 mx-auto my-1.5" />
             )}
 
-            <div className="space-y-1">
-              {/* Nút 1: Thương hiệu & Logo */}
-              <button
-                type="button"
-                onClick={() => setShowLogoModal(true)}
-                className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-white/60 ${
-                  sidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
-                }`}
-                title={sidebarCollapsed ? 'Thương hiệu & Logo' : undefined}
-              >
-                <div className={`flex items-center gap-3 min-w-0 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 text-slate-500 group-hover/nav:text-orange-600 group-hover/nav:bg-orange-50">
-                    <Palette className="w-[19px] h-[19px] stroke-[1.8] group-hover/nav:stroke-[2]" />
-                  </div>
-                  {!sidebarCollapsed && (
+            {!sidebarCollapsed ? (
+              /* Expanded Sidebar Accordion */
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSettingsExpanded(!settingsExpanded)}
+                  className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center justify-between px-3 py-2.5 cursor-pointer ${
+                    settingsExpanded
+                      ? 'bg-white text-slate-900 shadow-[0_4px_20px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] ring-1 ring-slate-900/5'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ${
+                      settingsExpanded 
+                        ? 'bg-orange-500 text-white shadow-sm shadow-orange-500/30' 
+                        : 'text-slate-500 group-hover/nav:text-slate-800 group-hover/nav:bg-white/80'
+                    }`}>
+                      <Settings className={`w-[19px] h-[19px] ${settingsExpanded ? 'stroke-[2.2]' : 'stroke-[1.8] group-hover/nav:stroke-[2]'}`} />
+                    </div>
                     <div className="leading-tight text-left min-w-0">
-                      <span className="block text-[13.5px] font-semibold text-slate-700 group-hover/nav:text-slate-900 tracking-tight transition-colors">
-                        Thương hiệu & Logo
+                      <span className={`block text-[13.5px] tracking-tight transition-colors ${settingsExpanded ? 'font-black text-slate-900' : 'font-semibold text-slate-700 group-hover/nav:text-slate-900'}`}>
+                        Cài đặt
                       </span>
-                      <span className="text-[11px] text-slate-400 font-normal group-hover/nav:text-slate-500 block truncate transition-colors">
-                        Tên tiệm, logo & liên hệ
+                      <span className={`text-[11px] block truncate transition-colors ${settingsExpanded ? 'text-slate-500 font-medium' : 'text-slate-400 font-normal group-hover/nav:text-slate-500'}`}>
+                        Thương hiệu & Sao lưu
                       </span>
                     </div>
-                  )}
-                </div>
-              </button>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 group-hover/nav:text-slate-700 transition-transform duration-200 shrink-0 ${
+                    settingsExpanded ? 'rotate-180 text-orange-600' : ''
+                  }`} />
+                </button>
 
-              {/* Nút 2: Sao lưu & Cloud */}
-              <button
-                type="button"
-                onClick={() => setShowBackupModal(true)}
-                className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-white/60 ${
-                  sidebarCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
-                }`}
-                title={sidebarCollapsed ? 'Sao lưu & Đồng bộ Cloud' : undefined}
-              >
-                <div className={`flex items-center gap-3 min-w-0 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 text-slate-500 group-hover/nav:text-emerald-600 group-hover/nav:bg-emerald-50">
-                    <Database className="w-[19px] h-[19px] stroke-[1.8] group-hover/nav:stroke-[2]" />
+                {/* Sub-items: ONLY shown when settingsExpanded is true */}
+                {settingsExpanded && (
+                  <div className="pl-3 pr-1 py-1 space-y-1 bg-slate-50/80 rounded-2xl border border-slate-200/70 mt-1.5 animate-fade-in">
+                    <button
+                      type="button"
+                      onClick={() => setShowLogoModal(true)}
+                      className="w-full rounded-xl px-3 py-2 text-left flex items-center gap-2.5 hover:bg-white text-slate-700 hover:text-orange-600 font-bold text-xs transition cursor-pointer hover:shadow-3xs"
+                    >
+                      <Palette className="w-4 h-4 text-slate-500 shrink-0" />
+                      <div>
+                        <span className="block leading-tight">Thương hiệu & Logo</span>
+                        <span className="text-[9.5px] text-slate-400 font-normal block">Tùy chỉnh logo, tên quán</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowBackupModal(true)}
+                      className="w-full rounded-xl px-3 py-2 text-left flex items-center gap-2.5 hover:bg-white text-slate-700 hover:text-orange-600 font-bold text-xs transition cursor-pointer hover:shadow-3xs"
+                    >
+                      <Database className="w-4 h-4 text-slate-500 shrink-0" />
+                      <div>
+                        <span className="block leading-tight">Sao lưu dữ liệu</span>
+                        <span className="text-[9.5px] text-slate-400 font-normal block">Xuất & nạp bản sao lưu</span>
+                      </div>
+                    </button>
                   </div>
-                  {!sidebarCollapsed && (
-                    <div className="leading-tight text-left min-w-0">
-                      <span className="block text-[13.5px] font-semibold text-slate-700 group-hover/nav:text-slate-900 tracking-tight transition-colors">
-                        Sao lưu & Cloud
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-normal group-hover/nav:text-slate-500 block truncate transition-colors">
-                        Xuất file & đồng bộ dữ liệu
-                      </span>
+                )}
+              </div>
+            ) : (
+              /* Collapsed Rail Mode - Squircle button with popup */
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSettingsExpanded(!settingsExpanded)}
+                  className={`w-full group/nav relative rounded-2xl transition-all duration-200 flex items-center justify-center p-2 cursor-pointer ${
+                    settingsExpanded
+                      ? 'bg-orange-500 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-950 hover:bg-white/80'
+                  }`}
+                  title="Cài đặt"
+                >
+                  <div className={`w-9.5 h-9.5 rounded-xl flex items-center justify-center shrink-0 transition-all ${
+                    settingsExpanded 
+                      ? 'bg-orange-500 text-white' 
+                      : 'bg-slate-100/90 text-slate-600 group-hover/nav:bg-orange-50 group-hover/nav:text-orange-600'
+                  }`}>
+                    <Settings className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                </button>
+
+                {settingsExpanded && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setSettingsExpanded(false)} />
+                    <div className="absolute left-full ml-3 top-0 w-48 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-1.5 z-50 text-left text-xs animate-fade-in divide-y divide-slate-100">
+                      <div className="px-3 py-1.5 font-extrabold text-[11px] text-slate-400 uppercase tracking-wider">Cài đặt</div>
+                      <div className="py-1">
+                        <button
+                          type="button"
+                          onClick={() => { setSettingsExpanded(false); setShowLogoModal(true); }}
+                          className="w-full px-3 py-2 hover:bg-orange-50 text-left font-bold text-slate-700 hover:text-orange-600 transition flex items-center gap-2 cursor-pointer"
+                        >
+                          <Palette className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Thương hiệu & Logo</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSettingsExpanded(false); setShowBackupModal(true); }}
+                          className="w-full px-3 py-2 hover:bg-orange-50 text-left font-bold text-slate-700 hover:text-orange-600 transition flex items-center gap-2 cursor-pointer"
+                        >
+                          <Database className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Sao lưu dữ liệu</span>
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </button>
-            </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </nav>
 
@@ -3716,7 +2885,7 @@ export default function App() {
                   </div>
                   <div className="flex items-center gap-1 mt-0.5">
                     <span className="text-[10px] font-bold text-gray-400 truncate leading-tight">
-                      {logoText || 'TIỆM NHÀ CAOS'}
+                      {logoText || 'TIỆM ẢNH NHÀ CAOS'}
                     </span>
                     <ChevronDown className={`w-3 h-3 text-gray-400 group-hover:text-gray-700 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
                   </div>
@@ -3822,19 +2991,19 @@ export default function App() {
 
             {/* Desktop Clean Breadcrumb (As seen in Reference: Maham > Overview) */}
             <div className="hidden md:flex items-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">{logoText || 'Tiệm Nhà Caos'}</span>
+              <span className="text-slate-400 font-medium">{logoText || 'Tiệm ảnh Nhà Caos'}</span>
               <ChevronRight className="w-3.5 h-3.5 text-slate-300 stroke-[2.5]" />
               <div className="flex items-center gap-1.5 text-slate-800 font-extrabold bg-slate-100/70 px-2.5 py-1 rounded-xl border border-slate-200/50">
                 {activeTab === 'calendar' && <Calendar className="w-3.5 h-3.5 text-orange-600" />}
                 {activeTab === 'contracts' && <FileText className="w-3.5 h-3.5 text-orange-600" />}
-                {activeTab === 'equipment' && <DressIcon className="w-3.5 h-3.5 text-orange-600" />}
+                {activeTab === 'equipment' && <CameraIcon className="w-3.5 h-3.5 text-orange-600" />}
                 {activeTab === 'customers' && <Users className="w-3.5 h-3.5 text-orange-600" />}
                 {activeTab === 'revenue' && <TrendingUp className="w-3.5 h-3.5 text-orange-600" />}
                 {activeTab === 'expenses' && <DollarSign className="w-3.5 h-3.5 text-orange-600" />}
                 <span>
-                  {activeTab === 'calendar' && 'Lịch đặt đồ'}
+                  {activeTab === 'calendar' && 'Lịch máy'}
                   {activeTab === 'contracts' && 'Đơn thuê'}
-                  {activeTab === 'equipment' && 'Kho trang phục'}
+                  {activeTab === 'equipment' && 'Kho thiết bị'}
                   {activeTab === 'customers' && 'Khách hàng'}
                   {activeTab === 'revenue' && 'Doanh thu'}
                   {activeTab === 'expenses' && 'Khoản chi'}
@@ -3855,89 +3024,12 @@ export default function App() {
               <span className="font-mono font-black text-slate-800">{formatDMY(systemDate)}</span>
             </div>
 
-            {/* Cloud Sync Status Indicator */}
-            {cloudSyncState === 'syncing' ? (
-              <div 
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-bold shadow-3xs"
-                title="Đang đồng bộ dữ liệu đồ lên máy chủ đám mây..."
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-amber-600 animate-spin" />
-                <span className="hidden sm:inline">Đang lưu Cloud...</span>
-              </div>
-            ) : cloudSyncState === 'error' ? (
-              <button 
-                type="button"
-                onClick={handlePushAllToCloud}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-bold cursor-pointer shadow-3xs hover:bg-rose-100"
-                title="Đồng bộ gặp sự cố. Bấm để thử lại ngay"
-              >
-                <Cloud className="w-3.5 h-3.5 text-rose-600" />
-                <span className="hidden sm:inline">Thử lại Cloud</span>
-              </button>
-            ) : cloudSyncState === 'synced' ? (() => {
-              // Đếm đồ đang giặt / đang sửa
-              const laundryCount = cameras.filter(c => c.cleaningStatus === 'Laundry').length;
-              const mendingCount = cameras.filter(c => c.cleaningStatus === 'Mending').length;
-              const total = laundryCount + mendingCount;
-              if (total === 0) return null;
-              return (
-                <div
-                  onClick={() => {
-                    setActiveTab('equipment');
-                    setEquipmentTrackerSearch('');
-                    // Set filter trực tiếp cho trang Kho Đồ (EquipmentTracker)
-                    if (laundryCount > 0 && mendingCount === 0) {
-                      setEquipmentTrackerCleaningFilter('Laundry');
-                      setEquipmentTrackerStatusFilter('ALL');
-                    } else if (mendingCount > 0 && laundryCount === 0) {
-                      setEquipmentTrackerCleaningFilter('Mending');
-                      setEquipmentTrackerStatusFilter('ALL');
-                    } else {
-                      // Có cả 2 hoặc đồ giặt chiếm đa số -> lọc Đang giặt
-                      setEquipmentTrackerCleaningFilter('Laundry');
-                      setEquipmentTrackerStatusFilter('ALL');
-                    }
-                  }}
-                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 hover:bg-blue-100 text-blue-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none"
-                  title={`${laundryCount > 0 ? `${laundryCount} bộ đang giặt hấp` : ''}${laundryCount > 0 && mendingCount > 0 ? ' · ' : ''}${mendingCount > 0 ? `${mendingCount} bộ đang sửa chữa` : ''}. Bấm để xem kho đồ.`}
-                >
-                  <span className="text-sm leading-none">🧺</span>
-                  <span>
-                    {laundryCount > 0 && <span>{laundryCount} đang giặt</span>}
-                    {laundryCount > 0 && mendingCount > 0 && <span className="mx-1 opacity-50">·</span>}
-                    {mendingCount > 0 && <span>{mendingCount} đang sửa</span>}
-                  </span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                </div>
-              );
-            })() : null}
-
-            {/* Nút kiểm tra nhanh kho đồ trống cạnh thông báo */}
-            <button
-              type="button"
-              onClick={() => {
-                setSearchFilterTab('outfits');
-                setIsSearchModalOpen(true);
-              }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200/90 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 text-xs font-black transition cursor-pointer shadow-3xs active:scale-95"
-              title="Tra cứu kho trang phục còn trống theo ngày"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Kho đồ trống</span>
-              <span className="bg-white/95 px-1.5 py-0.2 rounded-full text-[10px] font-black border border-emerald-200 text-emerald-900">
-                {totalAvailableCount}
-              </span>
-            </button>
-
             {/* Clean Minimal Search Button (Spotlight Trigger) */}
             <button
               type="button"
-              onClick={() => {
-                setSearchFilterTab('all');
-                setIsSearchModalOpen(true);
-              }}
+              onClick={() => setIsSearchModalOpen(true)}
               className="w-10 h-10 sm:w-9 sm:h-9 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center transition cursor-pointer shadow-3xs group active:scale-95"
-              title="Tìm kiếm thông minh & Kho đồ trống (Ctrl + K)"
+              title="Tìm kiếm nhanh (Ctrl + K)"
             >
               <Search className="w-4 h-4 group-hover:scale-110 transition-transform" />
             </button>
@@ -3956,14 +3048,14 @@ export default function App() {
         {/* MOBILE NAVIGATION BAR */}
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-2xl border-t border-gray-200/80 shadow-[0_-8px_30px_rgba(0,0,0,0.06)] pb-[max(8px,env(safe-area-inset-bottom,4px))] pt-2 px-2 flex justify-between items-center select-none">
           {[
-            { id: 'calendar', label: 'Lịch đồ', icon: Calendar },
+            { id: 'calendar', label: 'Lịch máy', icon: Calendar },
             { 
               id: 'contracts', 
               label: 'Đơn thuê', 
               icon: FileText, 
               badge: contracts.filter(c => c.status === 'Pending' || c.status === 'Overdue').length 
             },
-            { id: 'equipment', label: 'Kho đồ', icon: DressIcon },
+            { id: 'equipment', label: 'Thiết bị', icon: CameraIcon },
             { id: 'customers', label: 'Khách', icon: Users },
             { id: 'revenue', label: 'Doanh thu', icon: TrendingUp },
             { id: 'expenses', label: 'Khoản chi', icon: DollarSign },
@@ -3973,13 +3065,7 @@ export default function App() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => {
-                  if (tab.id === 'equipment') {
-                    setEquipmentTrackerCleaningFilter('ALL');
-                    setEquipmentTrackerStatusFilter('ALL');
-                  }
-                  handleTabChange(tab.id as any);
-                }}
+                onClick={() => setActiveTab(tab.id as any)}
                 className={`relative flex flex-col items-center justify-center flex-1 py-0.5 px-0.5 transition-all duration-150 cursor-pointer active:scale-92 ${
                   isActive ? 'text-orange-600' : 'text-gray-400 active:text-gray-700'
                 }`}
@@ -4015,7 +3101,7 @@ export default function App() {
 
           <div className="w-full">
             {activeTab === 'calendar' && (
-              <TabErrorBoundary tabName="Lịch Đặt Đồ">
+              <TabErrorBoundary tabName="Lịch Đặt Máy">
                 <BookingCalendar
                   cameras={cameras}
                   contracts={contracts}
@@ -4025,8 +3111,6 @@ export default function App() {
                   selectedDate={selectedDate}
                   setSelectedDate={setSelectedDate}
                   systemDate={systemDate}
-                  initialBookingIntent={calendarBookingIntent}
-                  onClearBookingIntent={() => setCalendarBookingIntent(null)}
                 />
               </TabErrorBoundary>
             )}
@@ -4042,9 +3126,6 @@ export default function App() {
                   onDeleteContract={currentUser?.role === 'admin' ? handleDeleteContract : undefined}
                   onUpdateContractNote={handleUpdateContractNote}
                   onUpdateContractCustomer={handleUpdateContractCustomer}
-                  onUpdateContractSurcharge={handleUpdateContractSurcharge}
-                  onUpdateContractDates={currentUser?.role === 'admin' ? handleUpdateContractDates : undefined}
-                  onUpdateContractItems={currentUser?.role === 'admin' ? handleUpdateContractItems : undefined}
                   initialSearchQuery={contractManagerSearch}
                   systemDate={systemDate}
                   isAdmin={currentUser?.role === 'admin'}
@@ -4054,7 +3135,7 @@ export default function App() {
             )}
 
             {activeTab === 'equipment' && (
-              <TabErrorBoundary tabName="Kho Trang Phục">
+              <TabErrorBoundary tabName="Kho Thiết Bị">
                 <EquipmentTracker
                   cameras={cameras}
                   onAddCamera={handleAddCamera}
@@ -4064,10 +3145,7 @@ export default function App() {
                   currentUserRole={currentUser?.role}
                   contracts={contracts}
                   initialSearchQuery={equipmentTrackerSearch}
-                  initialCleaningFilter={equipmentTrackerCleaningFilter}
-                  initialStatusFilter={equipmentTrackerStatusFilter}
                   systemDate={systemDate}
-                  addToast={addToast}
                 />
               </TabErrorBoundary>
             )}
@@ -4127,19 +3205,17 @@ export default function App() {
 
       {/* SPOTLIGHT QUICK SEARCH MODAL */}
       {isSearchModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-10 sm:pt-20 px-3 sm:px-4 animate-fade-in">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 sm:pt-24 px-4 animate-fade-in">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onClick={() => setIsSearchModalOpen(false)} />
-          <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden z-50 animate-fade-in divide-y divide-slate-100 flex flex-col max-h-[88vh]">
-            
-            {/* Search Input Bar */}
-            <div className="p-3.5 sm:p-4 flex items-center gap-3 shrink-0 bg-white border-b border-slate-150">
+          <div className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden z-50 animate-fade-in divide-y divide-slate-100">
+            <div className="p-4 flex items-center gap-3">
               <Search className="w-5 h-5 text-slate-400 shrink-0" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={headerSearchQuery}
                 onChange={e => setHeaderSearchQuery(e.target.value)}
-                placeholder="Tìm kho đồ trống, mã trang phục, size, đơn thuê, khách hàng..."
+                placeholder="Tìm kiếm hợp đồng, khách hàng, số điện thoại, thiết bị..."
                 className="w-full bg-transparent text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-hidden"
               />
               {headerSearchQuery && (
@@ -4151,624 +3227,236 @@ export default function App() {
                   <X className="w-4 h-4" />
                 </button>
               )}
-              <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded-md hidden sm:inline-block">
+              <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded-md">
                 ESC
               </span>
-              <button
-                type="button"
-                onClick={() => setIsSearchModalOpen(false)}
-                className="ml-1 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
-                title="Đóng"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </div>
 
-            {/* Category Tabs (Always Visible) */}
-            <div className="px-3 sm:px-4 py-2.5 bg-slate-50 border-b border-slate-200/80 flex items-center gap-2 overflow-x-auto scrollbar-none shrink-0 min-h-[50px]">
-              <button
-                type="button"
-                onClick={() => setSearchFilterTab('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                  searchFilterTab === 'all'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                Tất cả ({searchResults.total})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchFilterTab('outfits')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer flex items-center gap-1.5 ${
-                  searchFilterTab === 'outfits'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Kho đồ trống ({totalAvailableCount}/{totalOutfitCount})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchFilterTab('contracts')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                  searchFilterTab === 'contracts'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                Đơn thuê ({searchResults.contracts.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchFilterTab('customers')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                  searchFilterTab === 'customers'
-                    ? 'bg-orange-600 text-white shadow-xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                Khách hàng ({searchResults.customers.length})
-              </button>
-            </div>
+            {/* Search Filter Category Tabs (Visible when typing) */}
+            {headerSearchQuery.trim() && (
+              <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-1.5 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setSearchFilterTab('all')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                    searchFilterTab === 'all'
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Tất cả ({searchResults.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchFilterTab('contracts')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                    searchFilterTab === 'contracts'
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Đơn thuê ({searchResults.contracts.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchFilterTab('equipment')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                    searchFilterTab === 'equipment'
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Thiết bị ({searchResults.cameras.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchFilterTab('customers')}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                    searchFilterTab === 'customers'
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Khách hàng ({searchResults.customers.length})
+                </button>
+              </div>
+            )}
 
-            {/* Modal Body Area */}
-            <div className="overflow-y-auto p-3 sm:p-4 flex-1 space-y-4">
-              
-              {/* Costume Availability Date Picker & Controls (Show in 'all' or 'outfits' tabs) */}
-              {(searchFilterTab === 'all' || searchFilterTab === 'outfits') && (
-                <div className="bg-gradient-to-r from-emerald-50/60 to-teal-50/40 border border-emerald-200/80 rounded-2xl p-3 space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                        <Calendar className="w-4 h-4 text-emerald-600" />
-                        <span>Kiểm tra ngày:</span>
-                      </span>
-                      <input
-                        type="date"
-                        value={inventoryCheckDate}
-                        onChange={e => setInventoryCheckDate(e.target.value)}
-                        className="bg-white border border-gray-300 rounded-xl px-2.5 py-1 text-xs font-bold text-gray-800 shadow-3xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setInventoryCheckDate(systemDate)}
-                        className={`text-[10.5px] font-bold px-2 py-1 rounded-lg transition border cursor-pointer ${
-                          inventoryCheckDate === systemDate
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                            : 'bg-white text-gray-700 border-gray-250 hover:bg-gray-100'
-                        }`}
-                      >
-                        Hôm nay ({formatDMY(systemDate)})
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setInventoryOnlyAvailable(prev => !prev)}
-                        className={`text-[10.5px] font-extrabold px-2.5 py-1 rounded-xl transition flex items-center gap-1.5 border cursor-pointer ${
-                          inventoryOnlyAvailable
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                            : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
-                        }`}
-                        title="Bấm để lọc chỉ hiện trang phục còn size trống"
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${inventoryOnlyAvailable ? 'bg-white' : 'bg-emerald-500'}`}></span>
-                        <span>Chỉ đồ trống ({totalAvailableCount})</span>
-                      </button>
-                    </div>
+            {/* Results Area */}
+            <div className="max-h-[60vh] overflow-y-auto p-3">
+              {!headerSearchQuery.trim() ? (
+                <div className="py-10 text-center space-y-2">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 mx-auto flex items-center justify-center font-bold">
+                    <Search className="w-5 h-5" />
                   </div>
-
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Tình trạng:</span>
-                      {[
-                        { id: 'ALL', label: `Tất cả (${totalOutfitCount})`, color: 'bg-slate-700 text-white' },
-                        { id: 'READY', label: `✓ Sẵn sàng (${totalAvailableCount})`, color: 'bg-emerald-600 text-white' },
-                        { id: 'LAUNDRY', label: `🧺 Đang giặt (${totalLaundryCount})`, color: 'bg-blue-600 text-white' },
-                        { id: 'MENDING', label: `🪡 Đang sửa (${totalMendingCount})`, color: 'bg-amber-600 text-white' },
-                        { id: 'BUSY', label: `Bận / Đã thuê`, color: 'bg-rose-600 text-white' }
-                      ].map(st => {
-                        const isActive = inventoryStatusFilter === st.id;
-                        return (
-                          <button
-                            key={st.id}
-                            type="button"
-                            onClick={() => {
-                              setInventoryStatusFilter(st.id as any);
-                              if (st.id === 'READY') setInventoryOnlyAvailable(true);
-                              else setInventoryOnlyAvailable(false);
-                            }}
-                            className={`px-2.5 py-0.8 rounded-lg text-[10.5px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
-                              isActive
-                                ? `${st.color} shadow-3xs`
-                                : 'bg-white/80 hover:bg-white text-gray-700 border border-gray-200'
-                            }`}
-                          >
-                            {st.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                  {/* Category Filter Pills */}
-                  <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-                    {inventoryCategories.map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setInventoryCategoryFilter(cat)}
-                        className={`px-2.5 py-0.8 rounded-lg text-[10.5px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
-                          inventoryCategoryFilter === cat
-                            ? 'bg-gray-900 text-white shadow-3xs'
-                            : 'bg-white/80 hover:bg-white text-gray-700 border border-gray-200'
-                        }`}
-                      >
-                        {cat === 'ALL' ? `Tất cả (${totalOutfitCount})` : cat}
-                      </button>
-                    ))}
-                  </div>
+                  <div className="text-xs font-bold text-slate-700">Tìm kiếm thông minh toàn hệ thống</div>
+                  <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">
+                    Hỗ trợ gõ tiếng Việt <b>có dấu hoặc không dấu</b>, tìm theo mã hợp đồng, tên khách, số điện thoại, CCCD hoặc tên thiết bị thuê.
+                  </p>
                 </div>
-              )}
+              ) : searchResults.total === 0 ? (
+                <div className="py-10 text-center space-y-1.5">
+                  <div className="text-xs font-bold text-slate-700">Không tìm thấy kết quả phù hợp</div>
+                  <p className="text-[11px] text-slate-400">
+                    Không có đơn thuê, thiết bị hay khách hàng nào khớp với "<span className="font-bold text-slate-600">{headerSearchQuery}</span>"
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Contracts */}
+                  {(searchFilterTab === 'all' || searchFilterTab === 'contracts') && searchResults.contracts.length > 0 && (
+                    <div>
+                      <div className="px-2 pb-1.5 text-[10.5px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                        <span>📋 Đơn thuê ({searchResults.contracts.length})</span>
+                        <span className="text-[9.5px] font-normal lowercase text-slate-400">Bấm để mở đơn</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {searchResults.contracts.map(c => {
+                          const itemsText = (c.items || []).map(i => i.cameraName).join(', ') || 'Chưa chọn thiết bị';
+                          const statusColor = 
+                            c.status === 'Active' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                            c.status === 'Pending' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                            c.status === 'Overdue' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                            'bg-slate-100 text-slate-700 border-slate-200';
 
-              {/* OUTFITS RESULT SECTION */}
-              {(searchFilterTab === 'all' || searchFilterTab === 'outfits') && (
-                <div>
-                  <div className="px-1 pb-2 text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                      Kho trang phục ({searchResults.outfits.length} mẫu • {searchResults.outfits.reduce((s, g) => s + g.availableCount, 0)} bộ trống)
-                    </span>
-                    <span className="text-[10px] font-medium text-gray-500 lowercase">
-                      ngày {formatDMY(inventoryCheckDate)}
-                    </span>
-                  </div>
-
-                  {searchResults.outfits.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                      Không có trang phục nào phù hợp với bộ lọc ngày {formatDMY(inventoryCheckDate)}.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {searchResults.outfits.map(group => {
-                        const activeCamId = selectedCardSizes[group.groupKey];
-                        const activeItem = (activeCamId && group.items.find((i: any) => i.cam.id === activeCamId))
-                          || group.items.find((i: any) => i.isAvailable) 
-                          || group.items[0];
-                        const targetCam = activeItem?.cam;
-                        const cleanName = group.name.replace(/\s*\((Size\s+[^)]+|Freesize|FS)\)\s*$/i, '').trim() || group.name;
-
-                        return (
-                          <div
-                            key={group.groupKey}
-                            className={`p-3 rounded-2xl border transition-all flex flex-col justify-between gap-2 bg-white shadow-3xs ${
-                              group.hasAvailable
-                                ? 'border-emerald-200/90 hover:border-emerald-300 hover:shadow-xs'
-                                : group.hasLaundry
-                                ? 'border-blue-200 bg-blue-50/20'
-                                : group.hasMending
-                                ? 'border-amber-200 bg-amber-50/20'
-                                : 'border-gray-200 bg-gray-50/50 opacity-85'
-                            }`}
-                          >
-                            <div className="flex flex-row gap-2.5 sm:gap-3 items-stretch relative">
-                              {/* Left: Prominent 4:5 Portrait Image */}
-                              <div
-                                onClick={() => {
-                                  const imgUrl = targetCam?.image || group.image;
-                                  if (imgUrl) setPreviewImage({ url: imgUrl, title: cleanName });
-                                }}
-                                className={`w-20 sm:w-28 aspect-[4/5] rounded-xl overflow-hidden shrink-0 border border-gray-200 bg-gray-100 shadow-xs relative group ${
-                                  (targetCam?.image || group.image) ? 'cursor-zoom-in' : ''
-                                }`}
-                                title={(targetCam?.image || group.image) ? 'Bấm để phóng to ảnh' : undefined}
-                              >
-                                {(targetCam?.image || group.image) ? (
-                                  <>
-                                    <img
-                                      src={targetCam?.image || group.image}
-                                      alt={cleanName}
-                                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-200"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                    {/* Zoom Hint Icon on hover */}
-                                    <div className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm pointer-events-none">
-                                      <Search className="w-3.5 h-3.5" />
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="w-full h-full bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xl">
-                                    👗
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => {
+                                setContractManagerSearch(c.contractCode);
+                                setActiveTab('contracts');
+                                setIsSearchModalOpen(false);
+                              }}
+                              className="p-3 rounded-2xl border border-slate-150/80 bg-white hover:bg-orange-50/60 hover:border-orange-250 cursor-pointer transition group shadow-3xs"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-orange-600 transition-colors truncate">
+                                      {c.customerName}
+                                    </span>
+                                    <span className="font-mono text-[11px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60 shrink-0">
+                                      {c.contractCode}
+                                    </span>
                                   </div>
-                                )}
-                                <span className={`absolute bottom-1.5 left-1.5 right-1.5 text-[8.5px] font-black py-0.5 px-1 rounded text-center truncate shadow-xs text-white backdrop-blur-xs ${
-                                  group.hasAvailable
-                                    ? 'bg-emerald-600/90'
-                                    : group.hasLaundry
-                                    ? 'bg-blue-600/90'
-                                    : group.hasMending
-                                    ? 'bg-amber-600/90'
-                                    : 'bg-rose-600/90'
-                                }`}>
-                                  {group.hasAvailable 
-                                    ? `Còn ${group.availableCount}/${group.totalSizes} size`
-                                    : group.hasLaundry
-                                    ? `🧺 Đang giặt (${group.laundryCount})`
-                                    : group.hasMending
-                                    ? `🪡 Đang sửa (${group.mendingCount})`
-                                    : 'Kín lịch'}
+                                  <div className="text-[11px] text-slate-600 font-medium mt-1 truncate">
+                                    📷 <span className="text-slate-800 font-semibold">{itemsText}</span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-[10.5px] text-slate-400 mt-1 font-mono">
+                                    <span>📞 {c.customerPhone}</span>
+                                    <span>📅 {formatDMY(c.startDate)} ➔ {formatDMY(c.endDate)}</span>
+                                  </div>
+                                </div>
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 uppercase tracking-wide ${statusColor}`}>
+                                  {c.status}
                                 </span>
                               </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
-                              {/* Right: Info + Sizes */}
-                              <div className="flex-1 min-w-0 flex flex-col justify-between gap-1.5">
-                                <div>
-                                  {/* Code Tags Row */}
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {(targetCam?.serialNumber || group.serialNumber) && (
-                                      <span className="font-mono text-[10.5px] font-black px-1.5 py-0.5 rounded bg-orange-100 text-orange-950 border border-orange-200" title={`Mã tag của Size ${activeItem?.size || ''}`}>
-                                        🏷️ {targetCam?.serialNumber || group.serialNumber}
-                                      </span>
-                                    )}
-                                    {group.shortName && (
-                                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200">
-                                        #{group.shortName}
-                                      </span>
-                                    )}
-                                    <span className="bg-gray-100 text-gray-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                      {group.category}
-                                    </span>
-                                  </div>
-
-                                  {/* Outfit Title */}
-                                  <h4 className="text-xs sm:text-sm font-black text-gray-900 mt-1 line-clamp-1 leading-snug" title={cleanName}>
-                                    {cleanName}
-                                  </h4>
-
-                                  {/* Renter phone when outfit is busy */}
-                                  {!group.hasAvailable && group.items.some((i: any) => i.bookedContracts?.[0]?.customerPhone) && (
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 truncate">
-                                        {(() => {
-                                          const bc = group.items.find((i: any) => i.bookedContracts?.[0]?.customerPhone)?.bookedContracts[0];
-                                          return bc ? ('\uD83D\uDCDE ' + bc.customerPhone + (bc.customerName ? ' · ' + bc.customerName : '')) : null;
-                                        })()}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {/* Color & Price Row */}
-                                  <div className="flex items-center gap-2 text-[11px] text-gray-600 mt-0.5 flex-wrap">
-                                    {targetCam?.color ? (
-                                      <span className="font-bold text-rose-700 bg-rose-50 border border-rose-200/90 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-3xs" title={`Màu của Size ${activeItem?.size || ''}: ${targetCam.color}`}>
-                                        <span>🎨</span>
-                                        <span>{targetCam.color}</span>
-                                        {activeItem && <span className="text-[10px] text-rose-500 font-semibold">({activeItem.size})</span>}
-                                      </span>
-                                    ) : group.color ? (
-                                      <span className="text-gray-500 font-medium">🎨 {group.color}</span>
-                                    ) : null}
-                                    {group.dailyRate && (
-                                      <span className="font-mono font-black text-orange-600 text-xs">
-                                        {group.dailyRate.toLocaleString()}đ<span className="text-[10px] font-normal text-gray-400">/ngày</span>
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Sizes Row */}
-                                <div>
-                                  <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[10px] font-bold text-gray-400">
-                                      Kích cỡ & Màu sắc ({group.items.length}):
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 italic">
-                                      (Chọn size xem màu)
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {group.items.map((item: any, idx: number) => {
-                                      const isSelected = activeItem?.cam.id === item.cam.id;
-                                      const bookedContract2 = !item.isAvailable && item.bookedContracts[0] ? item.bookedContracts[0] : null;
-                                      const bookedInfo = bookedContract2
-                                        ? bookedContract2.customerName + (bookedContract2.customerPhone ? ' (' + bookedContract2.customerPhone + ')' : '')
-                                        : '';
-                                      const badgeTitle = item.isAvailable 
-                                        ? `Size ${item.size} - Màu: ${item.cam?.color || 'Chưa đặt'} (Còn trống ngày này)`
-                                        : item.isLaundry
-                                        ? `Size ${item.size} - Màu: ${item.cam?.color || 'Chưa đặt'} - 🧺 Đang giặt hấp`
-                                        : item.isMending
-                                        ? `Size ${item.size} - Màu: ${item.cam?.color || 'Chưa đặt'} - 🪡 Đang sửa / may vá`
-                                        : item.isMaintenance
-                                        ? `Size ${item.size} - Màu: ${item.cam?.color || 'Chưa đặt'} - 🔧 Đang bảo quản`
-                                        : `Size ${item.size} - Màu: ${item.cam?.color || 'Chưa đặt'} - Bận (Khách: ${bookedInfo || 'Đã đặt'})`;
-
-                                      return (
-                                        <button
-                                          key={idx}
-                                          type="button"
-                                          title={badgeTitle}
-                                          onClick={() => {
-                                            if (isSelected) {
-                                              if (!item.isAvailable) {
-                                                setCustomAlertMessage(`Size ${item.size} ${item.isLaundry ? 'đang giặt hấp' : item.isMending ? 'đang sửa chữa' : 'đã kín lịch'}, không thể đặt lịch!`);
-                                                return;
-                                              }
-                                              setSelectedDate(inventoryCheckDate);
-                                              setCalendarBookingIntent({
-                                                startDate: inventoryCheckDate,
-                                                endDate: inventoryCheckDate,
-                                                selectedCameraIds: [item.cam.id],
-                                                is6Hours: false,
-                                                note: `Đặt lịch mẫu ${cleanName} (Size ${item.size}${item.cam?.color ? ` - ${item.cam.color}` : ''})`
-                                              });
-                                              setActiveTab('calendar');
-                                              setIsSearchModalOpen(false);
-                                            } else {
-                                              setSelectedCardSizes(prev => ({ ...prev, [group.groupKey]: item.cam.id }));
-                                              if (!item.isAvailable) {
-                                                setCustomAlertMessage(`Size ${item.size} ${item.isLaundry ? 'đang giặt hấp' : item.isMending ? 'đang sửa chữa' : 'đã kín lịch'}, không thể đặt lịch!`);
-                                              }
-                                            }
-                                          }}
-                                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-bold border transition-all ${
-                                            isSelected && item.isAvailable
-                                              ? 'bg-orange-50/95 text-orange-950 border-2 border-orange-500 ring-2 ring-orange-300/80 shadow-xs scale-102 font-black cursor-pointer'
-                                              : isSelected && !item.isAvailable
-                                              ? 'bg-gray-100 text-gray-700 border-2 border-gray-400 ring-2 ring-gray-200 shadow-xs scale-102 font-black cursor-pointer'
-                                              : item.isAvailable
-                                              ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400 cursor-pointer'
-                                              : item.isLaundry
-                                              ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100 cursor-pointer'
-                                              : item.isMending
-                                              ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 cursor-pointer'
-                                              : 'bg-gray-100 text-gray-400 border-gray-250 line-through cursor-pointer opacity-70'
-                                          }`}
-                                        >
-                                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                            isSelected && item.isAvailable
-                                              ? 'bg-orange-600 ring-2 ring-orange-300'
-                                              : isSelected && !item.isAvailable
-                                              ? 'bg-gray-400'
-                                              : item.isAvailable 
-                                              ? 'bg-emerald-500' 
-                                              : item.isLaundry 
-                                              ? 'bg-blue-500' 
-                                              : item.isMending 
-                                              ? 'bg-amber-500' 
-                                              : 'bg-gray-400'
-                                          }`}></span>
-                                          <span className="font-extrabold whitespace-nowrap">Size {item.size}</span>
-                                          {item.cam?.color && (
-                                            <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded truncate max-w-[105px] shadow-3xs ${
-                                              isSelected && item.isAvailable
-                                                ? 'bg-white text-orange-950 border border-orange-300' 
-                                                : 'bg-white text-gray-700 border border-gray-200/90'
-                                            }`}>
-                                              🎨 {item.cam.color}
-                                            </span>
-                                          )}
-                                          {item.isLaundry && <span className="text-[9px] font-medium text-blue-600">🧺</span>}
-                                          {item.isMending && <span className="text-[9px] font-medium text-amber-600">🪡</span>}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
+                  {/* Cameras */}
+                  {(searchFilterTab === 'all' || searchFilterTab === 'equipment') && searchResults.cameras.length > 0 && (
+                    <div>
+                      <div className="px-2 pb-1.5 text-[10.5px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                        <span>📷 Thiết bị ({searchResults.cameras.length})</span>
+                        <span className="text-[9.5px] font-normal lowercase text-slate-400">Bấm để xem kho</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {searchResults.cameras.map(cam => (
+                          <div
+                            key={cam.id}
+                            onClick={() => {
+                              setEquipmentTrackerSearch(cam.name);
+                              setActiveTab('equipment');
+                              setIsSearchModalOpen(false);
+                            }}
+                            className="p-3 rounded-2xl border border-slate-150/80 bg-white hover:bg-orange-50/60 hover:border-orange-250 cursor-pointer flex items-center justify-between transition group shadow-3xs"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-black text-slate-900 text-xs sm:text-sm block truncate group-hover:text-orange-600 transition-colors">
+                                {cam.name}
+                              </span>
+                              <div className="flex items-center gap-2 text-[10.5px] text-slate-500 font-mono mt-0.5">
+                                <span className="bg-slate-100 px-1.5 py-0.2 rounded font-semibold text-slate-600">{cam.category || 'Thiết bị'}</span>
+                                {cam.serialNumber && <span>SN: {cam.serialNumber}</span>}
                               </div>
                             </div>
-
-                            {/* Card action buttons */}
-                            <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 mt-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedDate(inventoryCheckDate);
-                                  setActiveTab('calendar');
-                                  setIsSearchModalOpen(false);
-                                }}
-                                className="text-[10px] font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
-                              >
-                                <span>📅 Xem trên lịch</span>
-                              </button>
-                              {activeItem?.isAvailable ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedDate(inventoryCheckDate);
-                                    const camIdToSelect = targetCam ? targetCam.id : (group.items[0]?.cam?.id);
-                                    const chosenDetail = activeItem ? ` (Size ${activeItem.size}${targetCam?.color ? ` - ${targetCam.color}` : ''})` : '';
-                                    setCalendarBookingIntent({
-                                      startDate: inventoryCheckDate,
-                                      endDate: inventoryCheckDate,
-                                      selectedCameraIds: camIdToSelect ? [camIdToSelect] : [],
-                                      is6Hours: false,
-                                      note: `Đặt lịch mẫu ${cleanName}${chosenDetail}`
-                                    });
-                                    setActiveTab('calendar');
-                                    setIsSearchModalOpen(false);
-                                  }}
-                                  className="text-[10px] font-black text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 px-3 py-1 rounded-lg transition cursor-pointer shadow-3xs active:scale-95 flex items-center gap-1"
-                                  title="Mở bảng tạo hợp đồng và tự động điền trang phục & ngày thuê"
-                                >
-                                  <span>+ Đặt lịch (Size {activeItem.size})</span>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled
-                                  className="text-[10px] font-bold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-1 rounded-lg cursor-not-allowed opacity-80 flex items-center gap-1 select-none"
-                                  title="Trang phục này đang giặt / sửa / kín lịch nên không thể đặt"
-                                >
-                                  <span>
-                                    {activeItem?.isLaundry 
-                                      ? `🧺 Đang giặt (Không thể đặt)` 
-                                      : activeItem?.isMending 
-                                      ? `🪡 Đang sửa (Không thể đặt)` 
-                                      : `✕ Kín lịch (Không thể đặt)`}
-                                  </span>
-                                </button>
-                              )}
-                            </div>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
+                              cam.status === 'Available'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                : 'bg-blue-100 text-blue-800 border-blue-200'
+                            }`}>
+                              {cam.status === 'Available' ? 'Sẵn sàng' : 'Đang thuê'}
+                            </span>
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Customers */}
+                  {(searchFilterTab === 'all' || searchFilterTab === 'customers') && searchResults.customers.length > 0 && (
+                    <div>
+                      <div className="px-2 pb-1.5 text-[10.5px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                        <span>👤 Khách hàng ({searchResults.customers.length})</span>
+                        <span className="text-[9.5px] font-normal lowercase text-slate-400">Bấm để xem hồ sơ</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {searchResults.customers.map(cust => (
+                          <div
+                            key={cust.id}
+                            onClick={() => {
+                              setCustomerManagerSearch(cust.phone || cust.name);
+                              setActiveTab('customers');
+                              setIsSearchModalOpen(false);
+                            }}
+                            className="p-3 rounded-2xl border border-slate-150/80 bg-white hover:bg-orange-50/60 hover:border-orange-250 cursor-pointer flex items-center justify-between transition group shadow-3xs"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-black text-slate-900 text-xs sm:text-sm block truncate group-hover:text-orange-600 transition-colors">
+                                {cust.name}
+                              </span>
+                              <div className="flex items-center gap-3 text-[10.5px] text-slate-500 font-mono mt-0.5">
+                                <span>📞 {cust.phone}</span>
+                                {(cust.idCard || cust.idNumber) && <span>CCCD: {cust.idCard || cust.idNumber}</span>}
+                              </div>
+                            </div>
+                            <span className="text-xs font-bold text-orange-600 group-hover:translate-x-0.5 transition-transform">
+                              Xem hồ sơ ➔
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
               )}
-
-              {/* CONTRACTS RESULT SECTION */}
-              {(searchFilterTab === 'all' || searchFilterTab === 'contracts') && searchResults.contracts.length > 0 && (
-                <div className="pt-2">
-                  <div className="px-1 pb-1.5 text-[10.5px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                    <span>📋 Đơn thuê ({searchResults.contracts.length})</span>
-                    <span className="text-[9.5px] font-normal lowercase text-slate-400">Bấm để mở đơn</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {searchResults.contracts.map(c => {
-                      const itemsText = (c.items || []).map(i => i.cameraName).join(', ') || 'Chưa chọn trang phục';
-                      const statusColor = 
-                        c.status === 'Active' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                        c.status === 'Pending' ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                        c.status === 'Overdue' ? 'bg-rose-100 text-rose-800 border-rose-200' :
-                        'bg-slate-100 text-slate-700 border-slate-200';
-
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => {
-                            setContractManagerSearch(c.contractCode);
-                            setActiveTab('contracts');
-                            setIsSearchModalOpen(false);
-                          }}
-                          className="p-3 rounded-2xl border border-slate-150/80 bg-white hover:bg-orange-50/60 hover:border-orange-250 cursor-pointer transition group shadow-3xs"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-orange-600 transition-colors truncate">
-                                  {c.customerName}
-                                </span>
-                                <span className="font-mono text-[11px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200/60 shrink-0">
-                                  {c.contractCode}
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-slate-600 font-medium mt-1 truncate">
-                                👗 <span className="text-slate-800 font-semibold">{itemsText}</span>
-                              </div>
-                              <div className="flex items-center gap-3 text-[10.5px] text-slate-400 mt-1 font-mono">
-                                <span>📞 {c.customerPhone}</span>
-                                <span>📅 {formatDMY(c.startDate)} ➔ {formatDMY(c.endDate)}</span>
-                              </div>
-                            </div>
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 uppercase tracking-wide ${statusColor}`}>
-                              {c.status}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* CUSTOMERS RESULT SECTION */}
-              {(searchFilterTab === 'all' || searchFilterTab === 'customers') && searchResults.customers.length > 0 && (
-                <div className="pt-2">
-                  <div className="px-1 pb-1.5 text-[10.5px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                    <span>👤 Khách hàng ({searchResults.customers.length})</span>
-                    <span className="text-[9.5px] font-normal lowercase text-slate-400">Bấm để xem hồ sơ</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {searchResults.customers.map(cust => (
-                      <div
-                        key={cust.id}
-                        onClick={() => {
-                          setCustomerManagerSearch(cust.phone || cust.name);
-                          setActiveTab('customers');
-                          setIsSearchModalOpen(false);
-                        }}
-                        className="p-3 rounded-2xl border border-slate-150/80 bg-white hover:bg-orange-50/60 hover:border-orange-250 cursor-pointer flex items-center justify-between transition group shadow-3xs"
-                      >
-                        <div className="min-w-0">
-                          <span className="font-black text-slate-900 text-xs sm:text-sm block truncate group-hover:text-orange-600 transition-colors">
-                            {cust.name}
-                          </span>
-                          <div className="flex items-center gap-3 text-[10.5px] text-slate-500 font-mono mt-0.5">
-                            <span>📞 {cust.phone}</span>
-                            {(cust.idCard || cust.idNumber) && <span>CCCD: {cust.idCard || cust.idNumber}</span>}
-                          </div>
-                        </div>
-                        <span className="text-xs font-bold text-orange-600 group-hover:translate-x-0.5 transition-transform">
-                          Xem hồ sơ ➔
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
             </div>
 
-            {/* Modal Footer Tips */}
-            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-150/70 text-[10.5px] text-slate-500 flex items-center justify-between">
-              <span>💡 Tìm kiếm theo tên đồ, size, mã tag hoặc ngày thuê</span>
+            {/* Footer tips */}
+            <div className="px-4 py-2 bg-slate-50 border-t border-slate-150/70 text-[10.5px] text-slate-400 flex items-center justify-between">
+              <span>💡 Gõ tiếng Việt có dấu hoặc không dấu</span>
               <span>Bấm <kbd className="font-mono bg-white border border-slate-200 px-1 rounded text-[9.5px]">ESC</kbd> để đóng</span>
             </div>
-
           </div>
         </div>,
         document.body
       )}
 
-      {/* Image Zoom Lightbox Modal */}
-      {previewImage && typeof document !== 'undefined' && createPortal(
-        <div 
-          className="fixed inset-0 z-[100000] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div 
-            className="relative max-w-lg w-full bg-white rounded-2xl overflow-hidden shadow-2xl animate-scale-up border border-gray-150 flex flex-col max-h-[92vh]"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/80">
-              <h4 className="text-sm font-extrabold text-gray-900 truncate pr-2 flex items-center gap-1.5">
-                <span>👗</span>
-                <span className="truncate">{previewImage.title}</span>
-              </h4>
-              <button
-                type="button"
-                onClick={() => setPreviewImage(null)}
-                className="w-7 h-7 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition flex items-center justify-center cursor-pointer text-base"
-                title="Đóng (ESC)"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-3 overflow-auto flex items-center justify-center bg-slate-900/5">
-              <img
-                src={previewImage.url}
-                alt={previewImage.title}
-                className="max-h-[78vh] w-auto max-w-full rounded-xl object-contain shadow-sm"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modern Logo Customization Modal (Thu gọn tinh tế) */}
+      {/* Modern Logo Customization Modal */}
       {showLogoModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[9999] animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-gray-100 flex flex-col">
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-100 flex flex-col max-h-[90vh]">
             
             {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-gray-150 flex justify-between items-center bg-gray-50/70 select-none">
+            <div className="px-6 py-4.5 border-b border-gray-150 flex justify-between items-center bg-gray-50/70 select-none">
               <div>
-                <h3 className="font-bold text-gray-900 text-base">Cài đặt Logo & Tên tiệm</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Tùy chỉnh ảnh logo tròn và tên thương hiệu</p>
+                <h3 className="font-bold text-gray-900 text-base">Cài đặt Logo & Thương hiệu</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Tùy chỉnh biểu tượng, tên thương hiệu hiển thị trên thanh tiêu đề</p>
               </div>
               <button
                 onClick={() => setShowLogoModal(false)}
@@ -4778,117 +3466,478 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="p-5 space-y-5">
+            {/* Modal Content - Scrollable if small screen */}
+            <div className="p-6 overflow-y-auto space-y-6">
               
-              {/* Xem trước Logo Tròn */}
-              <div className="flex flex-col items-center justify-center p-4 bg-orange-50/50 rounded-2xl border border-orange-100/80">
-                <span className="text-[10.5px] font-bold text-orange-900/60 uppercase tracking-wider mb-2">Xem trước Logo Sidebar</span>
-                <div className="relative group/prev">
+              {/* BRAND LOGO PREVIEW BOX */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200/60 text-center flex flex-col items-center">
+                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">Xem trước hiển thị (Header)</span>
+                <div className="bg-white border border-gray-150 p-4 rounded-xl shadow-sm inline-flex items-center gap-3.5 min-w-[240px] justify-center">
                   {logoIconType === 'upload' && logoBase64 ? (
-                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white shadow-md bg-white flex items-center justify-center">
+                    <div className="w-14 h-14 rounded-full overflow-hidden border border-gray-150 flex items-center justify-center bg-white shrink-0 shadow-xs">
                       <img src={logoBase64} alt="Preview" className="w-full h-full object-cover" />
                     </div>
                   ) : (
-                    <div 
-                      className="w-16 h-16 rounded-full text-white shadow-md flex items-center justify-center font-bold"
+                    <span 
+                      className="w-14 h-14 rounded-full text-white shrink-0 flex items-center justify-center font-bold shadow-xs"
                       style={{ backgroundColor: logoIconColor }}
                     >
-                      <DressIcon className="w-9 h-9 text-white" />
-                    </div>
+                      {logoIconType === 'aperture' && <Aperture className="w-8 h-8" />}
+                      {logoIconType === 'film' && <Film className="w-8 h-8" />}
+                      {logoIconType === 'sparkles' && <Sparkles className="w-8 h-8 text-yellow-200" />}
+                      {logoIconType === 'smile' && <Smile className="w-8 h-8" />}
+                      {logoIconType === 'image' && <ImageIcon className="w-8 h-8" />}
+                      {(logoIconType === 'camera' || logoIconType === 'upload') && <CameraIcon className="w-8 h-8" />}
+                    </span>
                   )}
-                  {logoBase64 && (
+                  <div className="leading-tight text-left min-w-0">
+                    <span 
+                      className="font-display font-black text-gray-950 tracking-tight block uppercase leading-snug break-words"
+                      style={{ fontSize: `${logoFontSize || 15.5}px` }}
+                    >
+                      {logoText || 'TIỆM ẢNH NHÀ CAOS'}
+                    </span>
+                    <span 
+                      className={`text-gray-400 font-normal block tracking-wide mt-0.5 ${
+                        logoSubtitleCase === 'uppercase' ? 'uppercase' : logoSubtitleCase === 'lowercase' ? 'lowercase' : ''
+                      }`}
+                      style={{ fontSize: `${logoSubtitleFontSize || 9.5}px` }}
+                    >
+                      {logoSubtitle || 'cho thuê máy ảnh giá rẻ'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form entries */}
+              <div className="space-y-4">
+                
+                {/* Brand Name Input & Font Size Control */}
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Tên thương hiệu chính</label>
+                  <input
+                    type="text"
+                    maxLength={25}
+                    value={logoText}
+                    onChange={(e) => setLogoText(e.target.value)}
+                    placeholder="ví dụ: TIỆM ẢNH NHÀ CAOS"
+                    className="w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-semibold"
+                  />
+
+                  {/* Font Size Adjustment Slider & Presets */}
+                  <div className="bg-gray-50/90 p-3 rounded-xl border border-gray-200/90 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-gray-700 uppercase tracking-wider text-[10.5px]">
+                        Điều chỉnh cỡ chữ thương hiệu
+                      </span>
+                      <span className="font-mono font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 text-xs">
+                        {logoFontSize || 15.5}px
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-gray-400 font-bold">11px</span>
+                      <input
+                        type="range"
+                        min={11}
+                        max={24}
+                        step={0.5}
+                        value={logoFontSize || 15.5}
+                        onChange={(e) => setLogoFontSize(parseFloat(e.target.value))}
+                        className="flex-1 accent-orange-600 h-2 bg-gray-200 rounded-lg cursor-pointer"
+                      />
+                      <span className="text-[10px] text-gray-400 font-bold">24px</span>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto scrollbar-none">
+                      {[
+                        { label: 'Nhỏ', size: 12 },
+                        { label: 'Vừa', size: 14 },
+                        { label: 'Chuẩn', size: 15.5 },
+                        { label: 'Lớn', size: 18 },
+                        { label: 'Rất lớn', size: 21 },
+                      ].map((preset) => (
+                        <button
+                          key={preset.size}
+                          type="button"
+                          onClick={() => setLogoFontSize(preset.size)}
+                          className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold border transition cursor-pointer shrink-0 ${
+                            logoFontSize === preset.size
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                              : 'bg-white text-gray-650 hover:bg-gray-100 hover:text-gray-900 border-gray-200'
+                          }`}
+                        >
+                          {preset.label} ({preset.size}px)
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tagline / Subtitle Input & Controls */}
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Dòng chữ phụ (Subtitle / Slogan)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={35}
+                    value={logoSubtitle}
+                    onChange={(e) => setLogoSubtitle(e.target.value)}
+                    placeholder="ví dụ: cho thuê máy ảnh hà nội"
+                    className="w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-medium text-gray-700 text-xs"
+                  />
+
+                  {/* Subtitle Style: Viết hoa / Viết thường & Cỡ chữ */}
+                  <div className="bg-gray-50/90 p-3 rounded-xl border border-gray-200/90 space-y-3">
+                    {/* Kiểu hiển thị chữ hoa / thường */}
+                    <div>
+                      <span className="block font-bold text-gray-700 uppercase tracking-wider text-[10.5px] mb-1.5">
+                        Kiểu viết hoa / thường dòng phụ
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setLogoSubtitleCase('lowercase')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                            logoSubtitleCase === 'lowercase'
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                              : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
+                          }`}
+                        >
+                          <span className="font-mono">abc</span>
+                          <span className="text-[10px] font-normal opacity-90">(Viết thường)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogoSubtitleCase('uppercase')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                            logoSubtitleCase === 'uppercase'
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                              : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
+                          }`}
+                        >
+                          <span className="font-mono font-black">ABC</span>
+                          <span className="text-[10px] font-normal opacity-90">(Viết hoa)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogoSubtitleCase('normal')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1 ${
+                            logoSubtitleCase === 'normal'
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                              : 'bg-white text-gray-650 hover:bg-gray-100 border-gray-200'
+                          }`}
+                        >
+                          <span className="font-mono font-bold">Aa</span>
+                          <span className="text-[10px] font-normal opacity-90">(Theo ý gõ)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Cỡ chữ dòng phụ */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-gray-700 uppercase tracking-wider text-[10.5px]">
+                          Điều chỉnh cỡ chữ dòng phụ
+                        </span>
+                        <span className="font-mono font-black text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 text-xs">
+                          {logoSubtitleFontSize || 9}px
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-gray-400 font-bold">8px</span>
+                        <input
+                          type="range"
+                          min={8}
+                          max={13}
+                          step={0.5}
+                          value={logoSubtitleFontSize || 9}
+                          onChange={(e) => setLogoSubtitleFontSize(parseFloat(e.target.value))}
+                          className="flex-1 accent-orange-600 h-2 bg-gray-200 rounded-lg cursor-pointer"
+                        />
+                        <span className="text-[10px] text-gray-400 font-bold">13px</span>
+                      </div>
+
+                      {/* Quick Presets */}
+                      <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto scrollbar-none">
+                        {[
+                          { label: 'Cực nhỏ', size: 8 },
+                          { label: 'Nhỏ (Chuẩn)', size: 9 },
+                          { label: 'Vừa', size: 10 },
+                          { label: 'Lớn', size: 11.5 },
+                        ].map((preset) => (
+                          <button
+                            key={preset.size}
+                            type="button"
+                            onClick={() => setLogoSubtitleFontSize(preset.size)}
+                            className={`px-2.5 py-1 rounded-md text-[10.5px] font-bold border transition cursor-pointer shrink-0 ${
+                              logoSubtitleFontSize === preset.size
+                                ? 'bg-orange-600 text-white border-orange-600 shadow-3xs'
+                                : 'bg-white text-gray-650 hover:bg-gray-100 hover:text-gray-900 border-gray-200'
+                            }`}
+                          >
+                            {preset.label} ({preset.size}px)
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Account Section Title */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Nhãn mục "Tài khoản" trên sidebar</label>
+                  <input
+                    type="text"
+                    maxLength={20}
+                    value={accountSectionTitle}
+                    onChange={(e) => setAccountSectionTitle(e.target.value)}
+                    placeholder="ví dụ: Tài khoản, Account, ..."
+                    className="w-full px-3 py-2 text-sm border border-gray-250 rounded-lg focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-medium text-gray-700 text-xs"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Nhãn hiển thị phía trên khu vực tài khoản trong sidebar.</p>
+                </div>
+
+                {/* Icon option selector */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Phương thức &amp; Kiểu biểu tượng (Icon)</label>
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    
+                    {/* Camera */}
                     <button
                       type="button"
-                      onClick={() => {
-                        setLogoBase64('');
-                        setLogoIconType('dress');
-                      }}
-                      className="absolute -top-1 -right-1 p-1 bg-rose-600 text-white rounded-full shadow-xs hover:bg-rose-700 transition"
-                      title="Xóa ảnh tự chọn"
+                      onClick={() => setLogoIconType('camera')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
+                        logoIconType === 'camera'
+                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
                     >
-                      <X className="w-3 h-3" />
+                      <CameraIcon className="w-5 h-5" />
+                      <span className="text-[10px]">Máy ảnh</span>
                     </button>
-                  )}
-                </div>
-                <div className="mt-2 text-center">
-                  <span className="font-extrabold text-sm text-gray-900 block">{logoText || 'Tiệm Nhà Caos'}</span>
-                  <span className="text-[11px] text-gray-400">Hiển thị tròn ở góc trái ứng dụng</span>
-                </div>
-              </div>
 
-              {/* Tải ảnh Logo */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Ảnh biểu tượng Logo</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    id="logo-upload-input-compact"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        try {
-                          const compressed = await compressImageFile(file, 256, 256, 0.85);
-                          setLogoBase64(compressed);
-                          setLogoIconType('upload');
-                        } catch {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setLogoBase64(reader.result as string);
-                            setLogoIconType('upload');
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }
-                    }}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="logo-upload-input-compact"
-                    className="flex-1 py-2 px-3 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl font-bold text-xs text-gray-700 flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs transition"
-                  >
-                    <Upload className="w-4 h-4 text-orange-600" />
-                    <span>{logoBase64 ? 'Thay đổi ảnh khác' : 'Tải ảnh logo lên (.png / .jpg)'}</span>
-                  </label>
+                    {/* Aperture */}
+                    <button
+                      type="button"
+                      onClick={() => setLogoIconType('aperture')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
+                        logoIconType === 'aperture'
+                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Aperture className="w-5 h-5" />
+                      <span className="text-[10px]">Khẩu độ</span>
+                    </button>
+
+                    {/* Film */}
+                    <button
+                      type="button"
+                      onClick={() => setLogoIconType('film')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
+                        logoIconType === 'film'
+                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Film className="w-5 h-5" />
+                      <span className="text-[10px]">Cuộn phim</span>
+                    </button>
+
+                    {/* Sparkles */}
+                    <button
+                      type="button"
+                      onClick={() => setLogoIconType('sparkles')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
+                        logoIconType === 'sparkles'
+                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Sparkles className="w-5 h-5" />
+                      <span className="text-[10px]">Lấp lánh</span>
+                    </button>
+
+                    {/* Smile */}
+                    <button
+                      type="button"
+                      onClick={() => setLogoIconType('smile')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
+                        logoIconType === 'smile'
+                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Smile className="w-5 h-5" />
+                      <span className="text-[10px]">Thân thiện</span>
+                    </button>
+
+                    {/* Image */}
+                    <button
+                      type="button"
+                      onClick={() => setLogoIconType('image')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition ${
+                        logoIconType === 'image'
+                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <ImageIcon className="w-5 h-5" />
+                      <span className="text-[10px]">Hình ảnh</span>
+                    </button>
+
+                    {/* Custom upload Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => setLogoIconType('upload')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition-all col-span-2 ${
+                        logoIconType === 'upload'
+                          ? 'border-orange-500 bg-orange-50/40 text-orange-600 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1">
+                        <Upload className="w-4 h-4 shrink-0" />
+                        <span className="text-[10px] truncate max-w-[80px]">
+                          {logoBase64 ? 'Đã tải ảnh' : 'Tải ảnh lên'}
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-gray-400 font-normal truncate">Logo tự chọn (.png/.jpg)</span>
+                    </button>
+                    
+                  </div>
+
+                  {/* Real upload file block */}
+                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-150 flex items-center justify-between gap-4 text-xs">
+                    <div className="min-w-0">
+                      <span className="block font-semibold text-gray-700">Tải tệp ảnh lên</span>
+                      <span className="text-[10px] text-gray-400 block truncate">Khuyên dùng tỷ lệ 1:1, ảnh nhỏ, trong suốt</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="logo-upload-input"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const compressed = await compressImageFile(file, 256, 256, 0.85);
+                              setLogoBase64(compressed);
+                              setLogoIconType('upload');
+                            } catch {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setLogoBase64(reader.result as string);
+                                setLogoIconType('upload');
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="logo-upload-input"
+                        className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-250 px-2.5 py-1.5 rounded-lg font-bold text-[11px] cursor-pointer transition shrink-0 inline-block text-center"
+                      >
+                        Chọn tệp
+                      </label>
+                      {logoBase64 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogoBase64('');
+                            if (logoIconType === 'upload') {
+                              setLogoIconType('camera');
+                            }
+                          }}
+                          className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg border border-rose-150 transition cursor-pointer"
+                          title="Xóa ảnh tự chọn"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Tên thương hiệu */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Tên thương hiệu / Cửa hàng</label>
-                <input
-                  type="text"
-                  maxLength={30}
-                  value={logoText}
-                  onChange={(e) => setLogoText(e.target.value)}
-                  placeholder="ví dụ: Tiệm Nhà Caos"
-                  className="w-full px-3 py-2 text-sm border border-gray-250 rounded-xl focus:outline-hidden focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-bold text-gray-900"
-                />
-                <p className="text-[10px] text-gray-400">Dùng cho tiêu đề trình duyệt và xuất hóa đơn.</p>
-              </div>
+                {/* Icon Background colors selection - only showing if NOT custom picture */}
+                {logoIconType !== 'upload' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Màu nền biểu tượng</label>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      {[
+                        { color: '#ea580c', name: 'Cam' },
+                        { color: '#2563eb', name: 'Xanh dương' },
+                        { color: '#dc2626', name: 'Đỏ thẫm' },
+                        { color: '#059669', name: 'Xanh lá' },
+                        { color: '#4f46e5', name: 'Tím Indigo' },
+                        { color: '#d97706', name: 'Vàng hổ phách' },
+                        { color: '#1f2937', name: 'Xám đậm' },
+                        { color: '#db2777', name: 'Hồng sen' }
+                      ].map((item) => (
+                        <button
+                          key={item.color}
+                          type="button"
+                          onClick={() => setLogoIconColor(item.color)}
+                          className="w-7 h-7 rounded-full flex items-center justify-center transition hover:scale-110 cursor-pointer border border-black/10 relative"
+                          style={{ backgroundColor: item.color }}
+                          title={item.name}
+                        >
+                          {logoIconColor === item.color && (
+                            <Check className="w-4 h-4 text-white drop-shadow-xs" />
+                          )}
+                        </button>
+                      ))}
+                      
+                      {/* Custom color picker */}
+                      <div className="flex items-center gap-1.5 ml-2 border-l border-gray-200 pl-3">
+                        <input
+                          type="color"
+                          id="logo-color-picker"
+                          value={logoIconColor}
+                          onChange={(e) => setLogoIconColor(e.target.value)}
+                          className="w-6 h-6 p-0 border-0 rounded-md cursor-pointer outline-none shrink-0"
+                        />
+                        <label htmlFor="logo-color-picker" className="text-[10px] text-gray-500 font-mono font-bold uppercase cursor-pointer">
+                          {logoIconColor}
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
+              </div>
             </div>
 
             {/* Modal Actions */}
-            <div className="px-5 py-3.5 border-t border-gray-150 bg-gray-50/60 flex items-center justify-between gap-3 select-none">
+            <div className="px-6 py-4.5 border-t border-gray-150 bg-gray-50/60 flex items-center justify-between gap-3 select-none">
               <button
                 type="button"
                 onClick={() => {
-                  setLogoText('Tiệm nhà Caos');
+                  setLogoText('TIỆM ẢNH NHÀ CAOS');
+                  setLogoFontSize(15.5);
+                  setLogoSubtitle('cho thuê máy ảnh giá rẻ');
+                  setLogoSubtitleCase('lowercase');
+                  setLogoSubtitleFontSize(9);
                   setLogoIconType('upload');
                   setLogoIconColor('#ea580c');
                   setLogoBase64('/logocaos.png');
                 }}
                 className="text-xs text-gray-500 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition cursor-pointer"
               >
-                Mặc định
+                Khôi phục mặc định
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowLogoModal(false)}
-                className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-xs cursor-pointer"
+                className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition shadow-xs cursor-pointer"
               >
                 Hoàn tất
               </button>
@@ -5734,165 +4783,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3. KẾT NỐI CLOUD SUPABASE (ĐỒNG BỘ ĐA THIẾT BỊ) */}
-              <div className="space-y-3 pt-3 border-t border-gray-150">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
-                    <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Đồng bộ Đám mây Supabase (Nhiều máy tính / Điện thoại)</span>
-                  </h4>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    supabaseUrlInput && supabaseKeyInput 
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                      : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}>
-                    {supabaseUrlInput && supabaseKeyInput ? 'Đã cài đặt Cloud' : 'Chưa kết nối Cloud'}
-                  </span>
-                </div>
-
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Kết nối tài khoản Supabase (hoàn toàn miễn phí) giúp mọi máy tính và điện thoại trong tiệm của bạn tự động cập nhật kho trang phục, đơn thuê tức thời.
-                </p>
-
-                {/* Input Fields */}
-                <div className="space-y-2.5 bg-gray-50/80 p-3.5 rounded-xl border border-gray-200">
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                      1. Supabase Project URL (Địa chỉ máy chủ)
-                    </label>
-                    <input
-                      type="text"
-                      value={supabaseUrlInput}
-                      onChange={(e) => setSupabaseUrlInput(e.target.value)}
-                      placeholder="https://xyzabcdefgh.supabase.co"
-                      className="w-full text-xs font-mono px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-hidden focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                      2. Supabase Anon Key (Khóa bảo mật công khai)
-                    </label>
-                    <input
-                      type="password"
-                      value={supabaseKeyInput}
-                      onChange={(e) => setSupabaseKeyInput(e.target.value)}
-                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                      className="w-full text-xs font-mono px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-hidden focus:border-emerald-500"
-                    />
-                  </div>
-
-                  {/* Status alert */}
-                  {supabaseStatusMsg.text && (
-                    <div className={`p-2.5 rounded-lg text-xs flex items-start gap-2 ${
-                      supabaseStatusMsg.type === 'success' 
-                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
-                        : supabaseStatusMsg.type === 'error'
-                        ? 'bg-rose-50 text-rose-800 border border-rose-200'
-                        : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                    }`}>
-                      <span className="font-bold shrink-0">
-                        {supabaseStatusMsg.type === 'success' ? '✓' : supabaseStatusMsg.type === 'error' ? '⚠' : 'ℹ'}
-                      </span>
-                      <div className="flex-1 leading-snug">
-                        {supabaseStatusMsg.text}
-                        {supabaseStatusMsg.needSchema && (
-                          <div className="mt-2 pt-2 border-t border-rose-200/60">
-                            <span className="block text-[10.5px] font-semibold text-rose-900 mb-1">
-                              👉 Bấm nút dưới đây để sao chép mã SQL, sau đó dán vào SQL Editor trên Supabase:
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const sql = `CREATE TABLE IF NOT EXISTS camlease_store (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
-);
-ALTER TABLE camlease_store ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read access" ON camlease_store FOR SELECT USING (true);
-CREATE POLICY "Allow public insert/upsert" ON camlease_store FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update" ON camlease_store FOR UPDATE USING (true);
-CREATE POLICY "Allow public delete" ON camlease_store FOR DELETE USING (true);`;
-                                navigator.clipboard.writeText(sql);
-                                setCopiedSql(true);
-                                setTimeout(() => setCopiedSql(false), 3000);
-                              }}
-                              className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10.5px] rounded-md transition flex items-center gap-1 cursor-pointer"
-                            >
-                              {copiedSql ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedSql ? 'Đã sao chép mã SQL!' : 'Sao chép đoạn mã tạo bảng SQL'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Actions buttons */}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleTestSupabase}
-                      className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold text-xs rounded-lg transition cursor-pointer flex items-center gap-1"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      <span>Kiểm tra kết nối</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleSaveSupabaseConfig}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
-                    >
-                      <Save className="w-3 h-3" />
-                      <span>Lưu cấu hình</span>
-                    </button>
-                  </div>
-
-                  {/* 2 Big Sync Action Buttons */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-gray-200/80">
-                    <button
-                      type="button"
-                      disabled={isSyncingCloud}
-                      onClick={handlePushAllToCloud}
-                      className="p-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer disabled:opacity-50"
-                      title="Tải toàn bộ đồ trên máy này lên máy chủ đám mây"
-                    >
-                      <CloudUpload className="w-4 h-4" />
-                      <span>ĐẨY DỮ LIỆU LÊN CLOUD</span>
-                      <span className="text-[9.5px] text-emerald-100 font-normal">Dùng cho máy có đủ đồ ({cameras.length} đồ)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isSyncingCloud}
-                      onClick={handlePullAllFromCloud}
-                      className="p-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer disabled:opacity-50"
-                      title="Kéo toàn bộ đồ từ đám mây về máy này"
-                    >
-                      <CloudDownload className="w-4 h-4" />
-                      <span>KÉO DỮ LIỆU TỪ CLOUD VỀ</span>
-                      <span className="text-[9.5px] text-blue-100 font-normal">Dùng cho máy bị thiếu đồ</span>
-                    </button>
-                  </div>
-
-                  {/* Dọn dẹp ảnh rác Storage */}
-                  <div className="pt-2 border-t border-gray-200/80">
-                    <button
-                      type="button"
-                      disabled={isCleaningStorage}
-                      onClick={handleCleanCloudStorage}
-                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 border border-slate-200/80"
-                      title="Quét và xóa vĩnh viễn các ảnh cũ/ảnh thử nghiệm không còn gắn với trang phục nào trong kho"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-slate-500" />
-                      <span>{isCleaningStorage ? 'Đang quét & dọn dẹp...' : '🧹 Quét & Dọn dẹp ảnh rác trên Storage'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
             </div>
 
             {/* Footer */}
@@ -5916,4 +4806,3 @@ CREATE POLICY "Allow public delete" ON camlease_store FOR DELETE USING (true);`;
     </div>
   );
 }
-
