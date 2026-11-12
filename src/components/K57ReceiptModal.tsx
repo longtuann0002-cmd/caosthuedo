@@ -28,8 +28,25 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const printContainerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-detect brand name from props or storage
-  const effectiveShopName = (shopName || localStorage.getItem('logoText') || 'TIỆM NHÀ CAO').trim().toUpperCase();
+  // Auto-detect brand name cleanly without quotes
+  const getCleanShopName = (rawName?: string): string => {
+    let name = rawName || '';
+    if (!name) {
+      const fromStorage = localStorage.getItem('logoText');
+      if (fromStorage) {
+        try {
+          const parsed = JSON.parse(fromStorage);
+          name = typeof parsed === 'string' ? parsed : fromStorage;
+        } catch {
+          name = fromStorage;
+        }
+      }
+    }
+    name = (name || '').replace(/^["'“”«»\s]+|["'“”«»\s]+$/g, '').trim();
+    return (name || 'TIỆM NHÀ CAO').toUpperCase();
+  };
+
+  const effectiveShopName = getCleanShopName(shopName);
 
   // Detect iOS Safari
   const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
