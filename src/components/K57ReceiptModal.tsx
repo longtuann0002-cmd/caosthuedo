@@ -153,77 +153,77 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
   const bankName = VIET_BANKS.find(b => b.id === bankConfig.bankId)?.name?.split('(')[0]?.trim() || bankConfig.bankId;
 
   // Reusable receipt content with 100% INLINE STYLES (never breaks in iframe or PDF)
-  // Clean, high-legibility sans-serif with bold text for mobile & thermal printing
+  // High-impact bold typography tuned for 58mm thermal printers (384 dots width)
   const renderReceiptContent = () => (
     <div style={{ 
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', 
-      fontSize: '13px', 
-      lineHeight: '1.45', 
+      fontSize: '19px', 
+      lineHeight: '1.4', 
       color: '#000000', 
-      fontWeight: '700', 
+      fontWeight: '800', 
       boxSizing: 'border-box', 
       width: '100%',
-      letterSpacing: '-0.1px'
+      letterSpacing: '-0.2px'
     }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', fontWeight: '900', fontSize: '16px', textTransform: 'uppercase', letterSpacing: '0.2px', lineHeight: '1.3' }}>
+      <div style={{ textAlign: 'center', fontWeight: '900', fontSize: '26px', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: '1.2' }}>
         {effectiveShopName}
       </div>
-      <div style={{ textAlign: 'center', fontWeight: '800', fontSize: '12.5px', marginTop: '3px', letterSpacing: '0.2px' }}>
+      <div style={{ textAlign: 'center', fontWeight: '900', fontSize: '18px', marginTop: '4px', letterSpacing: '0.2px' }}>
         HÓA ĐƠN BÀN GIAO &amp; THANH TOÁN
       </div>
 
-      <div style={{ borderTop: '1px dashed #000000', margin: '8px 0', width: '100%' }} />
+      <div style={{ borderTop: '2px dashed #000000', margin: '10px 0', width: '100%' }} />
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '700' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', fontWeight: '800' }}>
         <span>Mã HĐ:</span>
-        <span style={{ fontWeight: '900', fontSize: '14px' }}>{contract.contractCode}</span>
+        <span style={{ fontWeight: '900', fontSize: '21px' }}>{contract.contractCode}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '12px', color: '#000000', fontWeight: '700', marginTop: '1px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '17px', color: '#000000', fontWeight: '800', marginTop: '2px' }}>
         <span>Ngày lập:</span>
         <span>{formatDateTimeVN(contract.createdAt)}</span>
       </div>
 
-      <div style={{ borderTop: '1px dashed #000000', margin: '8px 0', width: '100%' }} />
+      <div style={{ borderTop: '2px dashed #000000', margin: '10px 0', width: '100%' }} />
 
       {/* Customer details */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '700', marginBottom: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', fontWeight: '800', marginBottom: '3px' }}>
         <span>Khách:</span>
-        <span style={{ fontWeight: '900', fontSize: '13.5px', textAlign: 'right' }}>{contract.customerName}</span>
+        <span style={{ fontWeight: '900', fontSize: '21px', textAlign: 'right' }}>{contract.customerName}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '700', marginBottom: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', fontWeight: '800', marginBottom: '3px' }}>
         <span>SĐT:</span>
-        <span style={{ fontWeight: '900', fontSize: '13.5px', textAlign: 'right' }}>{contract.customerPhone}</span>
+        <span style={{ fontWeight: '900', fontSize: '21px', textAlign: 'right' }}>{contract.customerPhone}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', fontSize: '13px', fontWeight: '700', marginBottom: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', fontSize: '18px', fontWeight: '800', marginBottom: '3px' }}>
         <span style={{ flexShrink: 0 }}>Thế chấp:</span>
-        <span style={{ fontWeight: '800', fontSize: '13px', textAlign: 'right', marginLeft: '8px' }}>{docText}</span>
+        <span style={{ fontWeight: '900', fontSize: '19px', textAlign: 'right', marginLeft: '8px' }}>{docText}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', fontSize: '13px', fontWeight: '700' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', fontSize: '18px', fontWeight: '800' }}>
         <span style={{ flexShrink: 0 }}>Thời hạn:</span>
-        <span style={{ fontWeight: '800', fontSize: '13px', textAlign: 'right', marginLeft: '8px' }}>{timeRangeText}</span>
+        <span style={{ fontWeight: '900', fontSize: '19px', textAlign: 'right', marginLeft: '8px' }}>{timeRangeText}</span>
       </div>
 
-      <div style={{ borderTop: '1px dashed #000000', margin: '8px 0', width: '100%' }} />
+      <div style={{ borderTop: '2px dashed #000000', margin: '10px 0', width: '100%' }} />
 
       {/* Items List - Clothing specific formatting */}
-      <div style={{ fontWeight: '900', fontSize: '13.5px', marginBottom: '5px', textAlign: 'left', width: '100%' }}>DANH SÁCH TRANG PHỤC:</div>
+      <div style={{ fontWeight: '900', fontSize: '21px', marginBottom: '6px', textAlign: 'left', width: '100%' }}>DANH SÁCH TRANG PHỤC:</div>
       {contract.items && contract.items.length > 0 ? (
         contract.items.map((item, idx) => (
-          <div key={idx} style={{ marginBottom: '6px', width: '100%', textAlign: 'left' }}>
-            <div style={{ fontWeight: '900', fontSize: '13.5px' }}>
+          <div key={idx} style={{ marginBottom: '8px', width: '100%', textAlign: 'left' }}>
+            <div style={{ fontWeight: '900', fontSize: '21px' }}>
               {idx + 1}. {item.cameraName}
             </div>
             {(item.size || item.color) && (
-              <div style={{ fontSize: '12px', color: '#000000', fontWeight: '700', paddingLeft: '8px', marginTop: '1px' }}>
+              <div style={{ fontSize: '18px', color: '#000000', fontWeight: '800', paddingLeft: '10px', marginTop: '2px' }}>
                 {item.size && <span>Size: {item.size}</span>}
                 {item.size && item.color && <span> • </span>}
                 {item.color && <span>Màu: {item.color}</span>}
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', color: '#000000', fontWeight: '700', paddingLeft: '8px', marginTop: '1px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', color: '#000000', fontWeight: '800', paddingLeft: '10px', marginTop: '2px' }}>
               <span>SL: {item.quantity || 1}</span>
-              <span style={{ fontWeight: '900', fontSize: '13.5px' }}>
+              <span style={{ fontWeight: '900', fontSize: '21px' }}>
                 {item.dailyRate
                   ? (item.dailyRate * (item.quantity || 1)).toLocaleString('vi-VN') + 'đ'
                   : ''}
@@ -232,46 +232,46 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
           </div>
         ))
       ) : (
-        <div style={{ fontStyle: 'italic', color: '#000000', fontWeight: '700' }}>Chưa có trang phục</div>
+        <div style={{ fontStyle: 'italic', color: '#000000', fontWeight: '800' }}>Chưa có trang phục</div>
       )}
 
-      <div style={{ borderTop: '1px dashed #000000', margin: '8px 0', width: '100%' }} />
+      <div style={{ borderTop: '2px dashed #000000', margin: '10px 0', width: '100%' }} />
 
       {/* Financial Calculation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '700', marginBottom: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', fontWeight: '800', marginBottom: '3px' }}>
         <span>Tiền thuê trang phục:</span>
-        <span style={{ fontWeight: '800' }}>{contract.totalPrice.toLocaleString('vi-VN')}đ</span>
+        <span style={{ fontWeight: '900' }}>{contract.totalPrice.toLocaleString('vi-VN')}đ</span>
       </div>
 
       {Boolean(contract.discountPercent) && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '700', color: '#000000', marginBottom: '2px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', fontWeight: '800', color: '#000000', marginBottom: '3px' }}>
           <span>Giảm giá:</span>
-          <span style={{ fontWeight: '800' }}>-{contract.discountPercent}%</span>
+          <span style={{ fontWeight: '900' }}>-{contract.discountPercent}%</span>
         </div>
       )}
 
       {Boolean(contract.surchargeAmount) && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '700', color: '#000000', marginBottom: '2px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', fontWeight: '800', color: '#000000', marginBottom: '3px' }}>
           <span>Phụ thu:</span>
-          <span style={{ fontWeight: '800' }}>+{contract.surchargeAmount?.toLocaleString('vi-VN')}đ</span>
+          <span style={{ fontWeight: '900' }}>+{contract.surchargeAmount?.toLocaleString('vi-VN')}đ</span>
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '700', marginBottom: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '19px', fontWeight: '800', marginBottom: '3px' }}>
         <span>Cọc thế chấp:</span>
-        <span style={{ fontWeight: '800' }}>{(contract.depositAmount || 0).toLocaleString('vi-VN')}đ</span>
+        <span style={{ fontWeight: '900' }}>{(contract.depositAmount || 0).toLocaleString('vi-VN')}đ</span>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '13px', fontWeight: '900', marginBottom: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '20px', fontWeight: '900', marginBottom: '3px' }}>
         <span>Đã thanh toán:</span>
-        <span style={{ fontWeight: '900', fontSize: '13.5px' }}>{contract.paidAmount.toLocaleString('vi-VN')}đ</span>
+        <span style={{ fontWeight: '900', fontSize: '21px' }}>{contract.paidAmount.toLocaleString('vi-VN')}đ</span>
       </div>
 
-      <div style={{ borderTop: '2px solid #000000', margin: '8px 0', width: '100%' }} />
+      <div style={{ borderTop: '3px solid #000000', margin: '10px 0', width: '100%' }} />
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontWeight: '900', fontSize: '15px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontWeight: '900', fontSize: '22px' }}>
         <span>CÒN LẠI CẦN THU:</span>
-        <span style={{ fontSize: '15px' }}>
+        <span style={{ fontSize: '23px' }}>
           {remaining > 0 ? `${remaining.toLocaleString('vi-VN')}đ` : '0đ (ĐÃ THU ĐỦ)'}
         </span>
       </div>
@@ -279,28 +279,28 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
       {/* QR Code */}
       {qrDataUrl && (
         <>
-          <div style={{ borderTop: '1px dashed #000000', margin: '8px 0', width: '100%' }} />
+          <div style={{ borderTop: '2px dashed #000000', margin: '10px 0', width: '100%' }} />
           <div style={{ textAlign: 'center', width: '100%' }}>
-            <div style={{ fontWeight: '900', fontSize: '12px', marginBottom: '3px', letterSpacing: '0.2px' }}>QUÉT MÃ VIETQR THANH TOÁN</div>
+            <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '4px', letterSpacing: '0.2px' }}>QUÉT MÃ VIETQR THANH TOÁN</div>
             <img
               src={qrDataUrl}
               alt="VietQR"
-              style={{ width: '135px', height: '135px', margin: '4px auto', display: 'block', border: '1px solid rgba(0,0,0,0.1)' }}
+              style={{ width: '200px', height: '200px', margin: '6px auto', display: 'block', border: '1px solid rgba(0,0,0,0.1)' }}
             />
-            <div style={{ fontWeight: '900', fontSize: '13px', marginTop: '3px' }}>
+            <div style={{ fontWeight: '900', fontSize: '20px', marginTop: '4px' }}>
               {bankConfig.accountNo} • {bankName}
             </div>
-            <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '800', color: '#000000', marginTop: '1px' }}>
+            <div style={{ fontSize: '18px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '900', color: '#000000', marginTop: '2px' }}>
               {bankConfig.accountName}
             </div>
           </div>
         </>
       )}
 
-      <div style={{ borderTop: '1px dashed #000000', margin: '8px 0', width: '100%' }} />
+      <div style={{ borderTop: '2px dashed #000000', margin: '10px 0', width: '100%' }} />
 
       {/* Footer Note */}
-      <div style={{ textAlign: 'center', fontSize: '11.5px', fontStyle: 'italic', fontWeight: '700', color: '#000000', width: '100%', lineHeight: '1.4' }}>
+      <div style={{ textAlign: 'center', fontSize: '16px', fontStyle: 'italic', fontWeight: '800', color: '#000000', width: '100%', lineHeight: '1.4' }}>
         * Quý khách vui lòng kiểm tra kỹ trang phục khi nhận bàn giao.
         <br />
         Cảm ơn Quý Khách!
@@ -536,9 +536,9 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
             const b = pixels[offset + 2];
             const a = pixels[offset + 3];
 
-            // Threshold: luminance < 170 and non-transparent
+            // Threshold: luminance < 185 for rich, dark thermal printing
             const luminance = r * 0.299 + g * 0.587 + b * 0.114;
-            const isBlack = a > 128 && luminance < 170;
+            const isBlack = a > 128 && luminance < 185;
 
             if (isBlack) {
               currentByte |= 1 << (7 - bit);
@@ -581,7 +581,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
       setIsBtPrinting(true);
       setBtStatus('Đang chuẩn bị bill...');
 
-      // 1. Render high-res snapshot of receipt for 384-dot K57 printer
+      // 1. Render high-res snapshot of receipt for 384-dot K57 printer (edge-to-edge)
       const clone = sourceEl.cloneNode(true) as HTMLElement;
       clone.id = 'k57-bt-clone';
       clone.style.position = 'fixed';
@@ -592,7 +592,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
       clone.style.minWidth = '384px';
       clone.style.maxWidth = '384px';
       clone.style.boxSizing = 'border-box';
-      clone.style.padding = '14px 10px';
+      clone.style.padding = '4px 2px';
       clone.style.borderRadius = '0px';
       clone.style.border = 'none';
       clone.style.boxShadow = 'none';
@@ -809,7 +809,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
             <div 
               id="k57-printable-receipt" 
               ref={printContainerRef}
-              className="w-[330px] max-w-[330px] bg-white text-black px-4 py-4 shadow-md border border-gray-300 rounded-sm leading-[1.45] box-border select-none mx-auto"
+              className="w-[360px] max-w-full bg-white text-black px-2 py-3 shadow-md border border-gray-300 rounded-sm leading-[1.4] box-border select-none mx-auto"
               style={{ boxSizing: 'border-box' }}
             >
               {renderReceiptContent()}
@@ -884,7 +884,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
               <img 
                 src={previewImageUrl} 
                 alt="Bill K57" 
-                className="max-w-[330px] w-full h-auto rounded shadow-sm select-auto"
+                className="max-w-[360px] w-full h-auto rounded shadow-sm select-auto"
                 style={{ WebkitTouchCallout: 'default' }}
               />
             </div>
