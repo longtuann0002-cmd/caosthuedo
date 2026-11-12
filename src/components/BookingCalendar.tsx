@@ -12,6 +12,7 @@ import { formatDMY } from '../utils/dateUtils';
 import { VIET_BANKS, getBankBin, QrDisplay, DEFAULT_RENTAL_TERMS } from './ContractManager';
 import { useScrollLock } from '../utils/useScrollLock';
 import { generateNextContractCode } from '../utils/contractUtils';
+import { K57ReceiptModal } from './K57ReceiptModal';
 
 // 20 fully distinct vivid palettes — ordered so adjacent entries look maximally different
 const CAMERA_COLOR_PALETTES = [
@@ -653,9 +654,10 @@ export default function BookingCalendar({
 
   const [quickReceiptContract, setQuickReceiptContract] = useState<RentalContract | null>(null);
   const [isExportingReceipt, setIsExportingReceipt] = useState<boolean>(false);
+  const [showK57Modal, setShowK57Modal] = useState<boolean>(false);
 
   // Lock body scroll whenever any modal is open to prevent background scrolling on mobile
-  useScrollLock(Boolean(showAddQuickModal || quickReceiptContract || deleteConfirmId || customAlertMessage || showBankSettings));
+  useScrollLock(Boolean(showAddQuickModal || quickReceiptContract || deleteConfirmId || customAlertMessage || showBankSettings || showK57Modal));
 
   // Detect iOS / iPhone / iPad Safari
   const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -3566,12 +3568,12 @@ export default function BookingCalendar({
             <div className="bg-gray-50 px-4 sm:px-5 py-3.5 flex flex-wrap gap-2.5 justify-center items-center border-t border-gray-150 shrink-0">
               <button
                 type="button"
-                className="bg-white hover:bg-gray-100 border border-gray-250 text-gray-750 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"
-                onClick={() => handlePrintReceipt('calendar-contract-receipt-capture')}
-                title="In hóa đơn hợp đồng bản cứng ra máy in"
+                className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-800 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"
+                onClick={() => setShowK57Modal(true)}
+                title="In hóa đơn khổ nhiệt K57 (58mm)"
               >
-                <Printer className="w-4 h-4 text-gray-600" />
-                <span>In Hóa Đơn (Bản cứng)</span>
+                <Printer className="w-4 h-4 text-gray-700" />
+                <span>In Bill K57</span>
               </button>
 
               <button
@@ -3595,6 +3597,15 @@ export default function BookingCalendar({
         </div>,
         document.body
       )}
+
+      {/* K57 Thermal Receipt Modal */}
+      <K57ReceiptModal
+        isOpen={showK57Modal}
+        onClose={() => setShowK57Modal(false)}
+        contract={quickReceiptContract}
+        bankConfig={bankConfig}
+        customQrImage={customQrImage}
+      />
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmId && typeof document !== 'undefined' && createPortal(

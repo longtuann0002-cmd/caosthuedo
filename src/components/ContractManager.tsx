@@ -17,6 +17,7 @@ import { toPng } from 'html-to-image';
 import { matchContract } from '../utils/searchUtils';
 import { useScrollLock } from '../utils/useScrollLock';
 import { generateNextContractCode } from '../utils/contractUtils';
+import { K57ReceiptModal } from './K57ReceiptModal';
 
 interface ContractManagerProps {
   contracts: RentalContract[];
@@ -242,9 +243,10 @@ export default function ContractManager({
   const [showBankSettings, setShowBankSettings] = useState(false);
   const [qrAmountOption, setQrAmountOption] = useState<'remaining' | 'deposit50' | 'full' | 'custom'>('remaining');
   const [customQrAmount, setCustomQrAmount] = useState<number | null>(null);
+  const [showK57Modal, setShowK57Modal] = useState<boolean>(false);
 
   // Lock body scroll whenever any modal is open (placed after all related state declarations)
-  useScrollLock(Boolean(selectedContract || showAddModal || deleteConfirmId || customAlertMessage || showBankSettings));
+  useScrollLock(Boolean(selectedContract || showAddModal || deleteConfirmId || customAlertMessage || showBankSettings || showK57Modal));
 
   const [customQrImage, setCustomQrImage] = useState<string>(getStoredCustomQr);
   const [vietQrBase64, setVietQrBase64] = useState<string>('');
@@ -2797,12 +2799,12 @@ export default function ContractManager({
             <div className="bg-gray-50 px-4 sm:px-5 py-3.5 flex flex-wrap gap-2.5 justify-center items-center border-t border-gray-150 shrink-0">
               <button
                 type="button"
-                className="bg-white hover:bg-gray-100 border border-gray-250 text-gray-750 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"
-                onClick={() => handlePrintReceipt('contract-receipt-capture')}
-                title="In hóa đơn hợp đồng bản cứng ra máy in"
+                className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-800 font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-4xs min-h-[38px] whitespace-nowrap"
+                onClick={() => setShowK57Modal(true)}
+                title="In hóa đơn khổ nhiệt K57 (58mm)"
               >
-                <Printer className="w-4 h-4 text-gray-600" />
-                <span>In Hóa Đơn (Bản cứng)</span>
+                <Printer className="w-4 h-4 text-gray-700" />
+                <span>In Bill K57</span>
               </button>
 
               <button
@@ -2853,6 +2855,15 @@ export default function ContractManager({
         </div>,
         document.body
       )}
+
+      {/* K57 Thermal Receipt Modal */}
+      <K57ReceiptModal
+        isOpen={showK57Modal}
+        onClose={() => setShowK57Modal(false)}
+        contract={selectedContract}
+        bankConfig={bankConfig}
+        customQrImage={customQrImage}
+      />
 
       {/* Add New Contract Form Modal */}
       {showAddModal && typeof document !== 'undefined' && createPortal(
