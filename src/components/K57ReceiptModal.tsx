@@ -150,7 +150,153 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
   const remaining = Math.max(0, finalTotal - contract.paidAmount);
   const bankName = VIET_BANKS.find(b => b.id === bankConfig.bankId)?.name?.split('(')[0]?.trim() || bankConfig.bankId;
 
-  // Print handler with full iOS Safari / AirPrint support & centered margins
+  // Reusable receipt content with 100% INLINE STYLES (never breaks in iframe or PDF)
+  const renderReceiptContent = () => (
+    <div style={{ fontFamily: '"Courier New", Courier, monospace, sans-serif', fontSize: '11px', lineHeight: '1.4', color: '#000000', boxSizing: 'border-box', width: '100%' }}>
+      {/* Header */}
+      <div style={{ textAlign: 'center', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '-0.3px' }}>
+        {effectiveShopName}
+      </div>
+      <div style={{ textAlign: 'center', fontWeight: '700', fontSize: '10.5px', marginTop: '2px' }}>
+        HÓA ĐƠN BÀN GIAO &amp; THANH TOÁN
+      </div>
+
+      <div style={{ borderTop: '1px dashed #000000', margin: '7px 0', width: '100%' }} />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <span>Mã HĐ:</span>
+        <span style={{ fontWeight: '700' }}>{contract.contractCode}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '10px', color: '#374151' }}>
+        <span>Ngày lập:</span>
+        <span>{formatDateTimeVN(contract.createdAt)}</span>
+      </div>
+
+      <div style={{ borderTop: '1px dashed #000000', margin: '7px 0', width: '100%' }} />
+
+      {/* Customer details */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <span>Khách:</span>
+        <span style={{ fontWeight: '700', textAlign: 'right' }}>{contract.customerName}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <span>SĐT:</span>
+        <span style={{ fontWeight: '700', textAlign: 'right' }}>{contract.customerPhone}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+        <span style={{ flexShrink: 0 }}>Thế chấp:</span>
+        <span style={{ fontWeight: '700', textAlign: 'right', marginLeft: '8px' }}>{docText}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+        <span style={{ flexShrink: 0 }}>Thời hạn:</span>
+        <span style={{ fontWeight: '700', textAlign: 'right', marginLeft: '8px' }}>{timeRangeText}</span>
+      </div>
+
+      <div style={{ borderTop: '1px dashed #000000', margin: '7px 0', width: '100%' }} />
+
+      {/* Items List - Clothing specific formatting */}
+      <div style={{ fontWeight: '700', marginBottom: '4px', textAlign: 'left', width: '100%' }}>DANH SÁCH TRANG PHỤC:</div>
+      {contract.items && contract.items.length > 0 ? (
+        contract.items.map((item, idx) => (
+          <div key={idx} style={{ marginBottom: '6px', width: '100%', textAlign: 'left' }}>
+            <div style={{ fontWeight: '700', fontSize: '11px' }}>
+              {idx + 1}. {item.cameraName}
+            </div>
+            {(item.size || item.color) && (
+              <div style={{ fontSize: '10px', color: '#4b5563', paddingLeft: '8px', marginTop: '1px' }}>
+                {item.size && <span>Size: {item.size}</span>}
+                {item.size && item.color && <span> • </span>}
+                {item.color && <span>Màu: {item.color}</span>}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontSize: '10.5px', color: '#1f2937', paddingLeft: '8px', marginTop: '1px' }}>
+              <span>SL: {item.quantity || 1}</span>
+              <span style={{ fontWeight: '700' }}>
+                {item.dailyRate
+                  ? (item.dailyRate * (item.quantity || 1)).toLocaleString('vi-VN') + 'đ'
+                  : ''}
+              </span>
+            </div>
+          </div>
+        ))
+      ) : (
+        <div style={{ fontStyle: 'italic', color: '#6b7280' }}>Chưa có trang phục</div>
+      )}
+
+      <div style={{ borderTop: '1px dashed #000000', margin: '7px 0', width: '100%' }} />
+
+      {/* Financial Calculation */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <span>Tiền thuê trang phục:</span>
+        <span>{contract.totalPrice.toLocaleString('vi-VN')}đ</span>
+      </div>
+
+      {Boolean(contract.discountPercent) && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', color: '#4b5563' }}>
+          <span>Giảm giá:</span>
+          <span>-{contract.discountPercent}%</span>
+        </div>
+      )}
+
+      {Boolean(contract.surchargeAmount) && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', color: '#4b5563' }}>
+          <span>Phụ thu:</span>
+          <span>+{contract.surchargeAmount?.toLocaleString('vi-VN')}đ</span>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <span>Cọc thế chấp:</span>
+        <span>{(contract.depositAmount || 0).toLocaleString('vi-VN')}đ</span>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontWeight: '700' }}>
+        <span>Đã thanh toán:</span>
+        <span>{contract.paidAmount.toLocaleString('vi-VN')}đ</span>
+      </div>
+
+      <div style={{ borderTop: '2px solid #000000', margin: '7px 0', width: '100%' }} />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', fontWeight: '900', fontSize: '11.5px' }}>
+        <span>CÒN LẠI CẦN THU:</span>
+        <span>
+          {remaining > 0 ? `${remaining.toLocaleString('vi-VN')}đ` : '0đ (ĐÃ THU ĐỦ)'}
+        </span>
+      </div>
+
+      {/* QR Code */}
+      {qrDataUrl && (
+        <>
+          <div style={{ borderTop: '1px dashed #000000', margin: '7px 0', width: '100%' }} />
+          <div style={{ textAlign: 'center', width: '100%' }}>
+            <div style={{ fontWeight: '700', fontSize: '9.5px', marginBottom: '2px' }}>QUÉT MÃ VIETQR THANH TOÁN</div>
+            <img
+              src={qrDataUrl}
+              alt="VietQR"
+              style={{ width: '125px', height: '125px', margin: '4px auto', display: 'block', border: '1px solid rgba(0,0,0,0.1)' }}
+            />
+            <div style={{ fontWeight: '700', fontSize: '9.5px', marginTop: '2px' }}>
+              {bankConfig.accountNo} • {bankName}
+            </div>
+            <div style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#374151', marginTop: '1px' }}>
+              {bankConfig.accountName}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div style={{ borderTop: '1px dashed #000000', margin: '7px 0', width: '100%' }} />
+
+      {/* Footer Note - No signature section as requested */}
+      <div style={{ textAlign: 'center', fontSize: '9.5px', fontStyle: 'italic', color: '#4b5563', width: '100%' }}>
+        * Quý khách vui lòng kiểm tra kỹ trang phục khi nhận bàn giao.
+        <br />
+        Cảm ơn Quý Khách!
+      </div>
+    </div>
+  );
+
+  // Print handler with strict single-page 58mm thermal print styles
   const handlePrint = () => {
     if (!printContainerRef.current) return;
 
@@ -159,7 +305,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
       return;
     }
 
-    // On PC / Android: print via dedicated hidden iframe with balanced center margins
+    // On PC / Android: print via dedicated hidden iframe with complete standalone CSS
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.top = '-9999px';
@@ -187,57 +333,39 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
           <style>
             @page {
               size: 58mm auto;
-              margin: 0mm !important;
+              margin: 0 !important;
             }
             @media print {
               html, body {
                 width: 58mm !important;
-                margin: 0 auto !important;
+                margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
                 color: #000000 !important;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Courier New", Courier, monospace;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
               }
             }
             body {
-              width: 54mm;
-              max-width: 54mm;
+              width: 50mm;
+              max-width: 50mm;
               margin: 0 auto;
-              padding: 2.5mm 3mm;
+              padding: 2mm 1.5mm;
               box-sizing: border-box;
+              font-family: "Courier New", Courier, monospace, sans-serif;
               font-size: 11px;
               line-height: 1.35;
               color: #000000;
+              background: #ffffff;
             }
             * {
               box-sizing: border-box;
-            }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: 700; }
-            .font-black { font-weight: 900; }
-            .divider {
-              border-top: 1px dashed #000000;
-              margin: 4px 0;
-            }
-            .divider-double {
-              border-top: 2px solid #000000;
-              margin: 5px 0;
-            }
-            .row {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              gap: 4px;
-              width: 100%;
-            }
-            .qr-img {
-              display: block;
-              margin: 3px auto;
-              width: 36mm;
-              height: 36mm;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
             }
           </style>
         </head>
@@ -266,152 +394,6 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
 
     setTimeout(triggerPrint, 300);
   };
-
-  // Reusable receipt content that matches the preview 100%
-  const renderReceiptContent = () => (
-    <>
-      {/* Header */}
-      <div className="text-center font-black text-xs uppercase tracking-tight">
-        {effectiveShopName}
-      </div>
-      <div className="text-center font-bold text-[10.5px] mt-0.5">
-        HÓA ĐƠN BÀN GIAO &amp; THANH TOÁN
-      </div>
-
-      <div className="border-t border-dashed border-black my-2" />
-
-      <div className="flex justify-between items-center w-full">
-        <span>Mã HĐ:</span>
-        <span className="font-bold">{contract.contractCode}</span>
-      </div>
-      <div className="flex justify-between items-center w-full text-[10px] text-gray-700">
-        <span>Ngày lập:</span>
-        <span>{formatDateTimeVN(contract.createdAt)}</span>
-      </div>
-
-      <div className="border-t border-dashed border-black my-2" />
-
-      {/* Customer details */}
-      <div className="flex justify-between items-center w-full">
-        <span>Khách:</span>
-        <span className="font-bold text-right">{contract.customerName}</span>
-      </div>
-      <div className="flex justify-between items-center w-full">
-        <span>SĐT:</span>
-        <span className="font-bold text-right">{contract.customerPhone}</span>
-      </div>
-      <div className="flex justify-between items-start w-full">
-        <span className="shrink-0">Thế chấp:</span>
-        <span className="font-bold text-right ml-2">{docText}</span>
-      </div>
-      <div className="flex justify-between items-start w-full">
-        <span className="shrink-0">Thời hạn:</span>
-        <span className="font-bold text-right ml-2">{timeRangeText}</span>
-      </div>
-
-      <div className="border-t border-dashed border-black my-2" />
-
-      {/* Items List - Clothing specific formatting */}
-      <div className="font-bold mb-1.5 text-left w-full">DANH SÁCH TRANG PHỤC:</div>
-      {contract.items && contract.items.length > 0 ? (
-        contract.items.map((item, idx) => (
-          <div key={idx} className="mb-2 w-full text-left">
-            <div className="font-bold text-[11px]">
-              {idx + 1}. {item.cameraName}
-            </div>
-            {(item.size || item.color) && (
-              <div className="text-[10px] text-gray-700 pl-2 mt-0.5">
-                {item.size && <span>Size: {item.size}</span>}
-                {item.size && item.color && <span> • </span>}
-                {item.color && <span>Màu: {item.color}</span>}
-              </div>
-            )}
-            <div className="flex justify-between items-center w-full text-[10.5px] text-gray-800 pl-2 mt-0.5">
-              <span>SL: {item.quantity || 1}</span>
-              <span className="font-bold">
-                {item.dailyRate
-                  ? (item.dailyRate * (item.quantity || 1)).toLocaleString('vi-VN') + 'đ'
-                  : ''}
-              </span>
-            </div>
-          </div>
-        ))
-      ) : (
-        <div className="italic text-gray-500">Chưa có trang phục</div>
-      )}
-
-      <div className="border-t border-dashed border-black my-2" />
-
-      {/* Financial Calculation */}
-      <div className="flex justify-between items-center w-full">
-        <span>Tiền thuê trang phục:</span>
-        <span>{contract.totalPrice.toLocaleString('vi-VN')}đ</span>
-      </div>
-
-      {Boolean(contract.discountPercent) && (
-        <div className="flex justify-between items-center w-full text-gray-700">
-          <span>Giảm giá:</span>
-          <span>-{contract.discountPercent}%</span>
-        </div>
-      )}
-
-      {Boolean(contract.surchargeAmount) && (
-        <div className="flex justify-between items-center w-full text-gray-700">
-          <span>Phụ thu:</span>
-          <span>+{contract.surchargeAmount?.toLocaleString('vi-VN')}đ</span>
-        </div>
-      )}
-
-      <div className="flex justify-between items-center w-full">
-        <span>Cọc thế chấp:</span>
-        <span>{(contract.depositAmount || 0).toLocaleString('vi-VN')}đ</span>
-      </div>
-
-      <div className="flex justify-between items-center w-full font-bold">
-        <span>Đã thanh toán:</span>
-        <span>{contract.paidAmount.toLocaleString('vi-VN')}đ</span>
-      </div>
-
-      <div className="border-t-2 border-black my-2" />
-
-      <div className="flex justify-between items-center w-full font-black text-xs">
-        <span>CÒN LẠI CẦN THU:</span>
-        <span>
-          {remaining > 0 ? `${remaining.toLocaleString('vi-VN')}đ` : '0đ (ĐÃ THU ĐỦ)'}
-        </span>
-      </div>
-
-      {/* QR Code */}
-      {qrDataUrl && (
-        <>
-          <div className="border-t border-dashed border-black my-2" />
-          <div className="text-center w-full">
-            <div className="font-bold text-[9.5px]">QUÉT MÃ VIETQR THANH TOÁN</div>
-            <img
-              src={qrDataUrl}
-              alt="VietQR"
-              className="w-[130px] h-[130px] mx-auto my-1.5 border border-black/10"
-            />
-            <div className="font-bold text-[9.5px]">
-              {bankConfig.accountNo} • {bankName}
-            </div>
-            <div className="text-[9px] uppercase tracking-wider text-gray-800">
-              {bankConfig.accountName}
-            </div>
-          </div>
-        </>
-      )}
-
-      <div className="border-t border-dashed border-black my-2" />
-
-      {/* Footer Note - No signature section as requested */}
-      <div className="text-center text-[9.5px] italic text-gray-700 w-full">
-        * Quý khách vui lòng kiểm tra kỹ trang phục khi nhận bàn giao.
-        <br />
-        Cảm ơn Quý Khách!
-      </div>
-    </>
-  );
 
   // Exact 1:1 Image Export matching the preview card
   const handleExportImage = async () => {
@@ -518,10 +500,10 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
             background: #ffffff !important;
           }
           #k57-printable-receipt {
-            width: 52mm !important;
-            max-width: 52mm !important;
+            width: 50mm !important;
+            max-width: 50mm !important;
             margin: 0 auto !important;
-            padding: 2mm 3mm !important;
+            padding: 2mm 1.5mm !important;
             box-shadow: none !important;
             border: none !important;
             font-size: 11px !important;
