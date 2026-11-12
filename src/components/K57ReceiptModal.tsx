@@ -27,7 +27,6 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const printContainerRef = useRef<HTMLDivElement>(null);
-  const exportContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-detect brand name cleanly without quotes
   const getCleanShopName = (rawName?: string): string => {
@@ -44,7 +43,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
       }
     }
     name = (name || '').replace(/^["'“”«»\s]+|["'“”«»\s]+$/g, '').trim();
-    return (name || 'TIỆM NHÀ CAO').toUpperCase();
+    return (name || 'TIỆM NHÀ CAOS').toUpperCase();
   };
 
   const effectiveShopName = getCleanShopName(shopName);
@@ -268,65 +267,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
     setTimeout(triggerPrint, 300);
   };
 
-  // Method 1: Export using Off-Screen Isolated Container (100% immune to mobile margin offset / cut-off)
-  const handleExportImage = async () => {
-    // Prefer the isolated off-screen container which has margin: 0, left: 0
-    const element = exportContainerRef.current || printContainerRef.current;
-    if (!element) return;
-
-    try {
-      setIsExporting(true);
-      const targetWidth = 330;
-
-      const dataUrl = await toPng(element, {
-        backgroundColor: '#ffffff',
-        pixelRatio: isIOS ? 2 : 2.5,
-        width: targetWidth,
-        cacheBust: true,
-      });
-
-      const filename = `Bill_K57_${contract.contractCode}.png`;
-
-      // 1. Try native Web Share API (Safari / iOS / Chrome Mobile)
-      if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
-        try {
-          const res = await fetch(dataUrl);
-          const blob = await res.blob();
-          const file = new File([blob], filename, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: `Hóa đơn K57 ${contract.contractCode}`,
-              text: `Hóa đơn bàn giao ${contract.contractCode} - ${contract.customerName}`
-            });
-            setIsExporting(false);
-            return;
-          }
-        } catch (shareErr) {
-          console.log('Share dismissed or unsupported:', shareErr);
-        }
-      }
-
-      // 2. On PC: download via <a> link
-      if (!isIOS) {
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-
-      // 3. Always open in-app image preview so iPhone users can touch & hold to save
-      setPreviewImageUrl(dataUrl);
-    } catch (err) {
-      console.error('Lỗi khi xuất ảnh bill K57:', err);
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // Reusable receipt content for both On-Screen Preview and Off-Screen Isolation Render
+  // Reusable receipt content that matches the preview 100%
   const renderReceiptContent = () => (
     <>
       {/* Header */}
@@ -472,6 +413,91 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
     </>
   );
 
+  // Exact 1:1 Image Export matching the preview card
+  const handleExportImage = async () => {
+    const sourceEl = printContainerRef.current;
+    if (!sourceEl) return;
+
+    try {
+      setIsExporting(true);
+
+      // Clone the live preview element so it matches 100% what the user sees
+      const clone = sourceEl.cloneNode(true) as HTMLElement;
+      clone.id = 'k57-export-clone';
+      clone.style.position = 'fixed';
+      clone.style.left = '0px';
+      clone.style.top = '0px';
+      clone.style.margin = '0px';
+      clone.style.width = '320px';
+      clone.style.minWidth = '320px';
+      clone.style.maxWidth = '320px';
+      clone.style.boxSizing = 'border-box';
+      clone.style.padding = '18px 16px';
+      clone.style.borderRadius = '8px';
+      clone.style.border = '1px solid #d1d5db';
+      clone.style.boxShadow = 'none';
+      clone.style.transform = 'none';
+      clone.style.zIndex = '-99999';
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.color = '#000000';
+      document.body.appendChild(clone);
+
+      // Wait a tick for DOM and fonts to settle
+      await new Promise(r => setTimeout(r, 60));
+
+      const targetHeight = clone.scrollHeight || clone.offsetHeight;
+
+      const dataUrl = await toPng(clone, {
+        backgroundColor: '#ffffff',
+        pixelRatio: isIOS ? 2 : 2.5,
+        width: 320,
+        height: targetHeight,
+        cacheBust: true,
+      });
+
+      document.body.removeChild(clone);
+
+      const filename = `Bill_K57_${contract.contractCode}.png`;
+
+      // 1. Try native Web Share API (Safari / iOS / Chrome Mobile)
+      if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+        try {
+          const res = await fetch(dataUrl);
+          const blob = await res.blob();
+          const file = new File([blob], filename, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `Hóa đơn K57 ${contract.contractCode}`,
+              text: `Hóa đơn bàn giao ${contract.contractCode} - ${contract.customerName}`
+            });
+            setIsExporting(false);
+            return;
+          }
+        } catch (shareErr) {
+          console.log('Share dismissed or unsupported:', shareErr);
+        }
+      }
+
+      // 2. On PC: download via <a> link
+      if (!isIOS) {
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      // 3. Always open in-app image preview so iPhone users can touch & hold to save
+      setPreviewImageUrl(dataUrl);
+    } catch (err) {
+      console.error('Lỗi khi xuất ảnh bill K57:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return createPortal(
     <>
       {/* Global Print Styles for iOS Safari AirPrint */}
@@ -508,42 +534,6 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
         }
       `}</style>
 
-      {/* METHOD 1: OFF-SCREEN ISOLATED CAPTURE CONTAINER
-          - Zero margins, fixed coordinate origin (0,0), exactly 330px width
-          - Perfectly immune to mobile viewport offset, zoom, or mx-auto shifting */}
-      <div
-        style={{
-          position: 'fixed',
-          left: '-9999px',
-          top: '0px',
-          width: '330px',
-          margin: 0,
-          padding: 0,
-          zIndex: -100,
-          pointerEvents: 'none',
-          backgroundColor: '#ffffff',
-        }}
-        aria-hidden="true"
-      >
-        <div
-          ref={exportContainerRef}
-          style={{
-            width: '330px',
-            maxWidth: '330px',
-            boxSizing: 'border-box',
-            padding: '16px 14px',
-            margin: 0,
-            backgroundColor: '#ffffff',
-            color: '#000000',
-            fontFamily: '"Courier New", Courier, monospace, -apple-system, sans-serif',
-            fontSize: '11px',
-            lineHeight: 1.4,
-          }}
-        >
-          {renderReceiptContent()}
-        </div>
-      </div>
-
       {/* Main Modal Overlay */}
       <div id="k57-print-root" className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
         <div 
@@ -576,7 +566,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
             <div 
               id="k57-printable-receipt" 
               ref={printContainerRef}
-              className="w-[300px] max-w-[300px] bg-white text-black px-4 py-4 shadow-md border border-gray-300 rounded-sm font-mono text-[11px] leading-[1.4] box-border select-none mx-auto"
+              className="w-[310px] max-w-[310px] bg-white text-black px-4 py-4 shadow-md border border-gray-300 rounded-sm font-mono text-[11px] leading-[1.4] box-border select-none mx-auto"
               style={{ boxSizing: 'border-box' }}
             >
               {renderReceiptContent()}
@@ -589,7 +579,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
               type="button"
               onClick={handleExportImage}
               disabled={isExporting}
-              className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-bold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+              className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
             >
               {isIOS ? <Share2 className="w-3.5 h-3.5 text-orange-600" /> : <Download className="w-3.5 h-3.5 text-orange-600" />}
               <span>{isExporting ? 'Đang tạo...' : isIOS ? 'Chia sẻ / Lưu ảnh' : 'Tải ảnh Bill K57'}</span>
@@ -598,7 +588,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>In ra máy in (K57)</span>
@@ -607,7 +597,7 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="bg-gray-800 hover:bg-gray-900 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+              className="bg-gray-800 hover:bg-gray-900 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
             >
               Đóng
             </button>
