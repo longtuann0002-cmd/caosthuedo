@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, Download, X, Eye, Share2, Check } from 'lucide-react';
+import { Printer, Download, X, Eye, Share2, Check, Bluetooth, Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { toPng } from 'html-to-image';
 import { RentalContract, BankConfig } from '../types';
@@ -25,6 +25,8 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
 }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [isBtPrinting, setIsBtPrinting] = useState<boolean>(false);
+  const [btStatus, setBtStatus] = useState<string>('');
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const printContainerRef = useRef<HTMLDivElement>(null);
 
@@ -494,6 +496,250 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
     }
   };
 
+  // List of standard BLE thermal printer services
+  const BT_PRINTER_SERVICES = [
+    '000018f0-0000-1000-8000-00805f9b34fb',
+    '0000fff0-0000-1000-8000-00805f9b34fb',
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '0000ff00-0000-1000-8000-00805f9b34fb',
+    '0000ffe5-0000-1000-8000-00805f9b34fb',
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+    'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+    '0000fee7-0000-1000-8000-00805f9b34fb',
+    '0000ae00-0000-1000-8000-00805f9b34fb',
+    '0000af00-0000-1000-8000-00805f9b34fb'
+  ];
+
+  // Convert canvas to ESC/POS GS v 0 raster bit image
+  const convertCanvasToRasterGSv0 = (canvas: HTMLCanvasElement): Uint8Array => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return new Uint8Array(0);
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const pixels = imgData.data;
+
+    const bytesPerRow = Math.ceil(width / 8);
+    const rasterData = new Uint8Array(bytesPerRow * height);
+
+    let byteIndex = 0;
+    for (let y = 0; y < height; y++) {
+      for (let xBytes = 0; xBytes < bytesPerRow; xBytes++) {
+        let currentByte = 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const x = xBytes * 8 + bit;
+          if (x < width) {
+            const offset = (y * width + x) * 4;
+            const r = pixels[offset];
+            const g = pixels[offset + 1];
+            const b = pixels[offset + 2];
+            const a = pixels[offset + 3];
+
+            // Threshold: luminance < 170 and non-transparent
+            const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+            const isBlack = a > 128 && luminance < 170;
+
+            if (isBlack) {
+              currentByte |= 1 << (7 - bit);
+            }
+          }
+        }
+        rasterData[byteIndex++] = currentByte;
+      }
+    }
+
+    const xL = bytesPerRow % 256;
+    const xH = Math.floor(bytesPerRow / 256);
+    const yL = height % 256;
+    const yH = Math.floor(height / 256);
+
+    const header = new Uint8Array([
+      0x1d, 0x76, 0x30, 0x00,
+      xL, xH,
+      yL, yH
+    ]);
+
+    const fullPacket = new Uint8Array(header.length + rasterData.length);
+    fullPacket.set(header, 0);
+    fullPacket.set(rasterData, header.length);
+    return fullPacket;
+  };
+
+  // Direct Web Bluetooth printing for Bluefy (iOS) and Chrome (Android/PC)
+  const handleBluetoothPrint = async () => {
+    const nav = navigator as any;
+    if (!nav.bluetooth) {
+      alert('Trình duyệt hiện tại chưa mở tính năng Web Bluetooth.\n\n👉 Nếu dùng iPhone, bạn hãy mở trang web này bằng trình duyệt Bluefy để in trực tiếp qua Bluetooth nhé!');
+      return;
+    }
+
+    const sourceEl = printContainerRef.current;
+    if (!sourceEl) return;
+
+    try {
+      setIsBtPrinting(true);
+      setBtStatus('Đang chuẩn bị bill...');
+
+      // 1. Render high-res snapshot of receipt for 384-dot K57 printer
+      const clone = sourceEl.cloneNode(true) as HTMLElement;
+      clone.id = 'k57-bt-clone';
+      clone.style.position = 'fixed';
+      clone.style.left = '0px';
+      clone.style.top = '0px';
+      clone.style.margin = '0px';
+      clone.style.width = '384px';
+      clone.style.minWidth = '384px';
+      clone.style.maxWidth = '384px';
+      clone.style.boxSizing = 'border-box';
+      clone.style.padding = '14px 10px';
+      clone.style.borderRadius = '0px';
+      clone.style.border = 'none';
+      clone.style.boxShadow = 'none';
+      clone.style.transform = 'none';
+      clone.style.zIndex = '-99999';
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.color = '#000000';
+      document.body.appendChild(clone);
+
+      await new Promise(r => setTimeout(r, 60));
+
+      const targetHeight = clone.scrollHeight || clone.offsetHeight;
+      const dataUrl = await toPng(clone, {
+        backgroundColor: '#ffffff',
+        width: 384,
+        height: targetHeight,
+        pixelRatio: 1,
+        cacheBust: true,
+      });
+
+      document.body.removeChild(clone);
+
+      // 2. Load into canvas to create raster ESC/POS bytes
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 384;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Không thể tạo canvas');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const rasterBytes = convertCanvasToRasterGSv0(canvas);
+
+      // 3. Request Bluetooth device
+      setBtStatus('Đang tìm máy in...');
+      const device = await nav.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: BT_PRINTER_SERVICES
+      });
+
+      if (!device) {
+        setIsBtPrinting(false);
+        setBtStatus('');
+        return;
+      }
+
+      setBtStatus(`Đang kết nối: ${device.name || 'Máy in'}...`);
+      const server = await device.gatt.connect();
+
+      // Find writable characteristic
+      let writableChar: any = null;
+
+      try {
+        const services = await server.getPrimaryServices();
+        for (const service of services) {
+          try {
+            const characteristics = await service.getCharacteristics();
+            for (const char of characteristics) {
+              if (char.properties.writeWithoutResponse || char.properties.write) {
+                writableChar = char;
+                break;
+              }
+            }
+          } catch {}
+          if (writableChar) break;
+        }
+      } catch {}
+
+      if (!writableChar) {
+        for (const serviceUuid of BT_PRINTER_SERVICES) {
+          try {
+            const service = await server.getPrimaryService(serviceUuid);
+            const characteristics = await service.getCharacteristics();
+            for (const char of characteristics) {
+              if (char.properties.writeWithoutResponse || char.properties.write) {
+                writableChar = char;
+                break;
+              }
+            }
+          } catch {}
+          if (writableChar) break;
+        }
+      }
+
+      if (!writableChar) {
+        throw new Error('Đã kết nối nhưng không tìm thấy cổng ghi dữ liệu in (ESC/POS) của máy in này.');
+      }
+
+      // 4. Send print data
+      setBtStatus('Đang gửi lệnh in...');
+
+      // ESC @ init
+      const initCmd = new Uint8Array([0x1b, 0x40]);
+      if (writableChar.properties.writeWithoutResponse) {
+        await writableChar.writeValueWithoutResponse(initCmd);
+      } else {
+        await writableChar.writeValue(initCmd);
+      }
+      await new Promise(r => setTimeout(r, 40));
+
+      // Send raster data in chunks
+      const CHUNK_SIZE = 120;
+      const totalChunks = Math.ceil(rasterBytes.length / CHUNK_SIZE);
+      for (let i = 0; i < rasterBytes.length; i += CHUNK_SIZE) {
+        const chunk = rasterBytes.slice(i, i + CHUNK_SIZE);
+        if (writableChar.properties.writeWithoutResponse) {
+          await writableChar.writeValueWithoutResponse(chunk);
+        } else {
+          await writableChar.writeValue(chunk);
+        }
+        const pct = Math.min(100, Math.round(((Math.floor(i / CHUNK_SIZE) + 1) / totalChunks) * 100));
+        setBtStatus(`Đang in... ${pct}%`);
+        await new Promise(r => setTimeout(r, 20));
+      }
+
+      // Feed paper 4 lines
+      const feedCmd = new Uint8Array([0x1b, 0x64, 0x04]);
+      if (writableChar.properties.writeWithoutResponse) {
+        await writableChar.writeValueWithoutResponse(feedCmd);
+      } else {
+        await writableChar.writeValue(feedCmd);
+      }
+
+      setBtStatus('In thành công! ✅');
+      setTimeout(() => {
+        setIsBtPrinting(false);
+        setBtStatus('');
+      }, 2000);
+
+    } catch (err: any) {
+      console.error('Bluetooth Print Error:', err);
+      if (err.name !== 'NotFoundError' && !err.message?.includes('cancelled')) {
+        alert('Lỗi in Bluetooth: ' + (err.message || err));
+      }
+      setIsBtPrinting(false);
+      setBtStatus('');
+    }
+  };
+
   return createPortal(
     <>
       {/* Global Print Styles for iOS Safari AirPrint */}
@@ -574,8 +820,19 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
           <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex flex-wrap gap-2 justify-end items-center no-print">
             <button
               type="button"
+              onClick={handleBluetoothPrint}
+              disabled={isBtPrinting || isExporting}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+              title="In trực tiếp qua Bluetooth trên Bluefy hoặc Chrome"
+            >
+              {isBtPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : <Bluetooth className="w-3.5 h-3.5 text-blue-100" />}
+              <span>{isBtPrinting ? (btStatus || 'Đang in...') : 'In Bluetooth (Bluefy)'}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleExportImage}
-              disabled={isExporting}
+              disabled={isExporting || isBtPrinting}
               className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
             >
               {isIOS ? <Share2 className="w-3.5 h-3.5 text-orange-600" /> : <Download className="w-3.5 h-3.5 text-orange-600" />}
@@ -585,10 +842,11 @@ export const K57ReceiptModal: React.FC<K57ReceiptModalProps> = ({
             <button
               type="button"
               onClick={handlePrint}
+              disabled={isBtPrinting || isExporting}
               className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>In ra máy in (K57)</span>
+              <span>In máy tính (USB)</span>
             </button>
 
             <button
