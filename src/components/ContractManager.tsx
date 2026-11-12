@@ -35,6 +35,7 @@ interface ContractManagerProps {
   systemDate: string;
   isAdmin?: boolean;
   onFixDuplicateContracts?: () => void;
+  shopName?: string;
 }
 
 export const VIET_BANKS = [
@@ -156,7 +157,8 @@ export default function ContractManager({
   initialSearchQuery,
   systemDate,
   isAdmin = false,
-  onFixDuplicateContracts
+  onFixDuplicateContracts,
+  shopName
 }: ContractManagerProps) {
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
 
@@ -2863,6 +2865,7 @@ export default function ContractManager({
         contract={selectedContract}
         bankConfig={bankConfig}
         customQrImage={customQrImage}
+        shopName={shopName}
       />
 
       {/* Add New Contract Form Modal */}

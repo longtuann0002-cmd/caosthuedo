@@ -4068,6 +4068,7 @@ export default function App() {
                   systemDate={systemDate}
                   initialBookingIntent={calendarBookingIntent}
                   onClearBookingIntent={() => setCalendarBookingIntent(null)}
+                  shopName={logoText}
                 />
               </TabErrorBoundary>
             )}
@@ -4090,6 +4091,7 @@ export default function App() {
                   systemDate={systemDate}
                   isAdmin={currentUser?.role === 'admin'}
                   onFixDuplicateContracts={currentUser?.role === 'admin' ? handleFixDuplicateContracts : undefined}
+                  shopName={logoText}
                 />
               </TabErrorBoundary>
             )}

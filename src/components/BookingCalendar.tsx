@@ -81,6 +81,7 @@ interface BookingCalendarProps {
     note?: string;
   } | null;
   onClearBookingIntent?: () => void;
+  shopName?: string;
 }
 
 export default function BookingCalendar({
@@ -93,7 +94,8 @@ export default function BookingCalendar({
   setSelectedDate,
   systemDate,
   initialBookingIntent,
-  onClearBookingIntent
+  onClearBookingIntent,
+  shopName
 }: BookingCalendarProps) {
   // Calendar focuses on a target year and month. Initialize to match selectedDate (closest booking on startup)
   const [currentYear, setCurrentYear] = useState<number>(() => {
@@ -3605,6 +3607,7 @@ export default function BookingCalendar({
         contract={quickReceiptContract}
         bankConfig={bankConfig}
         customQrImage={customQrImage}
+        shopName={shopName}
       />
 
       {/* Delete Confirmation Modal */}
