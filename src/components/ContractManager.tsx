@@ -168,6 +168,9 @@ export default function ContractManager({
     }
   }, [initialSearchQuery]);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  // Bộ lọc theo ngày chốt đơn (createdAt)
+  const [createdDateFilter, setCreatedDateFilter] = useState<'ALL' | 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM'>('ALL');
+  const [customCreatedDate, setCustomCreatedDate] = useState<string>('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [hideCustomerSuggestions, setHideCustomerSuggestions] = useState(false);
   const [selectedContract, setSelectedContract] = useState<RentalContract | null>(null);
@@ -796,8 +799,72 @@ export default function ContractManager({
     saveStoredData('custom_contract_templates', updated);
   };
 
+  // Helper lấy ngày YYYY-MM-DD từ createdAt (hoặc fallback từ ID con-timestamp)
+  const getContractCreatedDateStr = (c: RentalContract): string => {
+    if (c.createdAt) {
+      try {
+        const d = new Date(c.createdAt);
+        if (!isNaN(d.getTime())) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        }
+      } catch (e) {}
+      if (c.createdAt.length >= 10 && c.createdAt.includes('-')) {
+        return c.createdAt.substring(0, 10);
+      }
+    }
+    // Fallback: nếu id có dạng con-1731650000000
+    if (c.id && c.id.startsWith('con-')) {
+      const ts = parseInt(c.id.replace('con-', ''), 10);
+      if (!isNaN(ts) && ts > 1000000000000) {
+        const d = new Date(ts);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+    }
+    return '';
+  };
+
+  // Thống kê riêng cho đơn chốt trong ngày hôm nay (systemDate)
+  const todayBookedContracts = useMemo(() => {
+    const today = systemDate || new Date().toISOString().split('T')[0];
+    return (contracts || []).filter(c => {
+      if (!c || c.status === 'Cancelled') return false;
+      const cDate = getContractCreatedDateStr(c);
+      return cDate === today;
+    });
+  }, [contracts, systemDate]);
+
+  const todayBookedStats = useMemo(() => {
+    const count = todayBookedContracts.length;
+    const totalRevenue = todayBookedContracts.reduce((sum, c) => sum + (c.totalPrice || 0) + (c.surchargeAmount || 0), 0);
+    const totalCollected = todayBookedContracts.reduce((sum, c) => sum + (c.paidAmount || 0), 0);
+    return { count, totalRevenue, totalCollected };
+  }, [todayBookedContracts]);
+
   // Filters calculation
   const filteredContracts = useMemo(() => {
+    const today = systemDate || new Date().toISOString().split('T')[0];
+    
+    // Tính các mốc ngày cho createdDateFilter
+    let yesterdayStr = '';
+    let last7DaysStartStr = '';
+    let thisMonthPrefix = today.substring(0, 7); // YYYY-MM
+    try {
+      const todayDate = new Date(today + 'T00:00:00');
+      const yDate = new Date(todayDate);
+      yDate.setDate(yDate.getDate() - 1);
+      yesterdayStr = `${yDate.getFullYear()}-${String(yDate.getMonth() + 1).padStart(2, '0')}-${String(yDate.getDate()).padStart(2, '0')}`;
+      
+      const d7Date = new Date(todayDate);
+      d7Date.setDate(d7Date.getDate() - 6);
+      last7DaysStartStr = `${d7Date.getFullYear()}-${String(d7Date.getMonth() + 1).padStart(2, '0')}-${String(d7Date.getDate()).padStart(2, '0')}`;
+    } catch (e) {}
+
     return (contracts || []).filter(c => {
       if (!c) return false;
       const query = searchQuery.trim();
@@ -814,9 +881,28 @@ export default function ContractManager({
         matchesStatus = c.status === statusFilter;
       }
 
-      return matchesSearch && matchesStatus;
+      // Kiểm tra bộ lọc ngày chốt đơn (createdAt)
+      let matchesCreatedDate = true;
+      if (createdDateFilter !== 'ALL') {
+        const cDate = getContractCreatedDateStr(c);
+        if (!cDate) {
+          matchesCreatedDate = false;
+        } else if (createdDateFilter === 'TODAY') {
+          matchesCreatedDate = cDate === today;
+        } else if (createdDateFilter === 'YESTERDAY') {
+          matchesCreatedDate = cDate === yesterdayStr;
+        } else if (createdDateFilter === 'LAST_7_DAYS') {
+          matchesCreatedDate = cDate >= last7DaysStartStr && cDate <= today;
+        } else if (createdDateFilter === 'THIS_MONTH') {
+          matchesCreatedDate = cDate.startsWith(thisMonthPrefix);
+        } else if (createdDateFilter === 'CUSTOM') {
+          matchesCreatedDate = customCreatedDate ? cDate === customCreatedDate : true;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesCreatedDate;
     });
-  }, [contracts, searchQuery, statusFilter]);
+  }, [contracts, searchQuery, statusFilter, createdDateFilter, customCreatedDate, systemDate]);
 
   // Overall Contract Debt Metrics
   const totalContractDebt = useMemo(() => {
@@ -861,7 +947,7 @@ export default function ContractManager({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter]);
+  }, [searchQuery, statusFilter, createdDateFilter, customCreatedDate]);
 
   const totalPages = Math.ceil(filteredContracts.length / itemsPerPage) || 1;
   
@@ -1136,111 +1222,248 @@ export default function ContractManager({
           </div>
         )}
 
-        {/* Aggregate Financial Metrics Banner: Dư Nợ & Chưa Thanh Toán Cọc */}
-        {(unpaidContractsCount > 0 || pendingContractsCount > 0) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-            {/* Card 1: Dư Nợ Chưa Thu */}
-            {unpaidContractsCount > 0 && (
-              <div className="bg-gradient-to-r from-rose-50 to-rose-100/50 border border-rose-200/90 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-3xs">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="p-2 sm:p-2.5 bg-rose-200/80 text-rose-800 rounded-xl shrink-0">
-                    <CreditCard className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] sm:text-[11px] font-bold text-rose-800 uppercase tracking-wider block truncate">Dư Nợ Chưa Thu</span>
-                    <span className="font-mono text-base sm:text-lg font-black text-rose-700 block truncate mt-0.5">
-                      {totalContractDebt.toLocaleString()}đ
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
-                  className={`text-[10.5px] sm:text-xs font-bold px-2.5 py-1.5 rounded-lg shrink-0 transition cursor-pointer border shadow-3xs whitespace-nowrap ${
-                    statusFilter === 'UNPAID'
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                      : 'bg-white text-rose-800 border-rose-300 hover:bg-rose-50'
-                  }`}
-                >
-                  {statusFilter === 'UNPAID' ? '✓ Đang lọc' : `⚠️ ${unpaidContractsCount} đơn nợ`}
-                </button>
+        {/* Aggregate Metrics Banner: Đơn chốt hôm nay, Dư Nợ & Chưa Cọc */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
+          {/* Card 1: Đơn Chốt Hôm Nay */}
+          <div className={`border rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-3xs transition-all ${
+            createdDateFilter === 'TODAY' 
+              ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm' 
+              : 'bg-gradient-to-r from-emerald-50 to-teal-50/60 border-emerald-200/90 text-emerald-900'
+          }`}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`p-2 sm:p-2.5 rounded-xl shrink-0 ${createdDateFilter === 'TODAY' ? 'bg-white/20 text-white' : 'bg-emerald-200/80 text-emerald-800'}`}>
+                <Sparkles className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
               </div>
-            )}
-
-            {/* Card 2: Chưa Thanh Toán Tiền Cọc 50% Giữ Đồ */}
-            {pendingContractsCount > 0 && (
-              <div className="bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-3xs">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="p-2 sm:p-2.5 bg-amber-200/80 text-amber-800 rounded-xl shrink-0">
-                    <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">Chưa Cọc 50% Giữ Đồ</span>
-                    <span className="font-mono text-base sm:text-lg font-black text-amber-700 block truncate mt-0.5">
-                      {pendingDepositTotal.toLocaleString()}đ
+              <div className="min-w-0">
+                <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider block truncate ${createdDateFilter === 'TODAY' ? 'text-emerald-100' : 'text-emerald-800'}`}>
+                  Chốt Hôm Nay ({formatDMY(systemDate || new Date().toISOString().split('T')[0])})
+                </span>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className={`font-mono text-base sm:text-lg font-black block truncate ${createdDateFilter === 'TODAY' ? 'text-white' : 'text-emerald-700'}`}>
+                    {todayBookedStats.count} đơn
+                  </span>
+                  {todayBookedStats.totalRevenue > 0 && (
+                    <span className={`text-[11px] font-mono font-bold truncate ${createdDateFilter === 'TODAY' ? 'text-emerald-100' : 'text-emerald-650'}`}>
+                      · {todayBookedStats.totalRevenue.toLocaleString()}đ
                     </span>
-                  </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter(statusFilter === 'UNPAID_DEPOSIT' ? 'ALL' : 'UNPAID_DEPOSIT')}
-                  className={`text-[10.5px] sm:text-xs font-bold px-2.5 py-1.5 rounded-lg shrink-0 transition cursor-pointer border shadow-3xs whitespace-nowrap ${
-                    statusFilter === 'UNPAID_DEPOSIT'
-                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                      : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-50'
-                  }`}
-                >
-                  {statusFilter === 'UNPAID_DEPOSIT' ? '✓ Đang lọc' : `⏳ ${pendingContractsCount} đơn chưa cọc`}
-                </button>
               </div>
-            )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (createdDateFilter === 'TODAY') {
+                  setCreatedDateFilter('ALL');
+                } else {
+                  setCreatedDateFilter('TODAY');
+                }
+              }}
+              className={`text-[10.5px] sm:text-xs font-bold px-2.5 py-1.5 rounded-lg shrink-0 transition cursor-pointer border shadow-3xs whitespace-nowrap active:scale-95 ${
+                createdDateFilter === 'TODAY'
+                  ? 'bg-white text-emerald-800 border-white font-black'
+                  : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
+              }`}
+            >
+              {createdDateFilter === 'TODAY' ? '✓ Đang xem' : 'Xem các đơn'}
+            </button>
           </div>
-        )}
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
-          <div className="relative flex-grow">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Tìm theo mã HĐ, tên khách hàng, SĐT..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-7 py-1.5 sm:py-2 text-[11px] sm:text-xs font-normal border border-gray-250 rounded-lg sm:rounded-xl bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80 shadow-3xs"
-            />
-            {searchQuery && (
+          {/* Card 2: Dư Nợ Chưa Thu */}
+          {unpaidContractsCount > 0 && (
+            <div className="bg-gradient-to-r from-rose-50 to-rose-100/50 border border-rose-200/90 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-3xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 sm:p-2.5 bg-rose-200/80 text-rose-800 rounded-xl shrink-0">
+                  <CreditCard className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-rose-800 uppercase tracking-wider block truncate">Dư Nợ Chưa Thu</span>
+                  <span className="font-mono text-base sm:text-lg font-black text-rose-700 block truncate mt-0.5">
+                    {totalContractDebt.toLocaleString()}đ
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer"
-                title="Xóa tìm kiếm"
+                onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
+                className={`text-[10.5px] sm:text-xs font-bold px-2.5 py-1.5 rounded-lg shrink-0 transition cursor-pointer border shadow-3xs whitespace-nowrap active:scale-95 ${
+                  statusFilter === 'UNPAID'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-white text-rose-800 border-rose-300 hover:bg-rose-50'
+                }`}
               >
-                ✕
+                {statusFilter === 'UNPAID' ? '✓ Đang lọc' : `⚠️ ${unpaidContractsCount} đơn nợ`}
               </button>
+            </div>
+          )}
+
+          {/* Card 3: Chưa Thanh Toán Tiền Cọc 50% Giữ Đồ */}
+          {pendingContractsCount > 0 && (
+            <div className="bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-3xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 sm:p-2.5 bg-amber-200/80 text-amber-800 rounded-xl shrink-0">
+                  <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">Chưa Cọc 50% Giữ Đồ</span>
+                  <span className="font-mono text-base sm:text-lg font-black text-amber-700 block truncate mt-0.5">
+                    {pendingDepositTotal.toLocaleString()}đ
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'UNPAID_DEPOSIT' ? 'ALL' : 'UNPAID_DEPOSIT')}
+                className={`text-[10.5px] sm:text-xs font-bold px-2.5 py-1.5 rounded-lg shrink-0 transition cursor-pointer border shadow-3xs whitespace-nowrap active:scale-95 ${
+                  statusFilter === 'UNPAID_DEPOSIT'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-50'
+                }`}
+              >
+                {statusFilter === 'UNPAID_DEPOSIT' ? '✓ Đang lọc' : `⏳ ${pendingContractsCount} đơn chưa cọc`}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Thanh tìm kiếm & bộ lọc đôi: Trạng thái & Ngày chốt đơn */}
+        <div className="space-y-2 pt-0.5">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+            <div className="relative flex-grow">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Tìm theo mã HĐ, tên khách hàng, SĐT..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-7 py-1.5 sm:py-2 text-[11px] sm:text-xs font-normal border border-gray-250 rounded-lg sm:rounded-xl bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none placeholder-gray-400/80 shadow-3xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1 cursor-pointer"
+                  title="Xóa tìm kiếm"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Dropdown Lọc theo Trạng thái */}
+            <div className="relative sm:w-56 shrink-0">
+              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
+                <Filter className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              </div>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="w-full pl-7.5 pr-6 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
+                title="Lọc theo trạng thái hợp đồng"
+              >
+                <option value="ALL">Trạng thái: Tất cả</option>
+                <option value="UNPAID_DEPOSIT">⏳ Chưa cọc 50% ({pendingContractsCount})</option>
+                <option value="UNPAID">⚠️ Còn dư nợ ({unpaidContractsCount})</option>
+                <option value="Pending">Chờ giao đồ (Pending)</option>
+                <option value="Active">Đang cho thuê (Active)</option>
+                <option value="Completed">Đã trả đồ (Completed)</option>
+                <option value="Overdue">Quá hạn trả (Overdue)</option>
+                <option value="Cancelled">Đã hủy bỏ (Cancelled)</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[9px]">
+                ▼
+              </div>
+            </div>
+
+            {/* Dropdown Lọc theo Ngày chốt đơn */}
+            <div className="relative sm:w-60 shrink-0">
+              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-emerald-600">
+                <Calendar className="w-3.5 h-3.5" />
+              </div>
+              <select
+                value={createdDateFilter}
+                onChange={e => {
+                  const val = e.target.value as any;
+                  setCreatedDateFilter(val);
+                  if (val === 'CUSTOM' && !customCreatedDate) {
+                    setCustomCreatedDate(systemDate || new Date().toISOString().split('T')[0]);
+                  }
+                }}
+                className={`w-full pl-8 pr-6 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold border rounded-lg sm:rounded-xl cursor-pointer appearance-none truncate shadow-3xs transition-colors ${
+                  createdDateFilter !== 'ALL'
+                    ? 'border-emerald-500 bg-emerald-50/90 text-emerald-900 focus:ring-2 focus:ring-emerald-500'
+                    : 'border-gray-250 bg-gray-50/80 hover:bg-white text-gray-800 focus:ring-2 focus:ring-orange-500'
+                }`}
+                title="Lọc theo ngày chốt hợp đồng"
+              >
+                <option value="ALL">Ngày chốt: Toàn bộ thời gian</option>
+                <option value="TODAY">✨ Chốt hôm nay ({todayBookedStats.count} đơn)</option>
+                <option value="YESTERDAY">📅 Chốt hôm qua</option>
+                <option value="LAST_7_DAYS">📆 7 ngày gần nhất</option>
+                <option value="THIS_MONTH">📊 Chốt trong tháng này</option>
+                <option value="CUSTOM">🔍 Tùy chọn ngày chốt...</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[9px]">
+                ▼
+              </div>
+            </div>
+
+            {/* Ô chọn ngày khi chọn tùy chọn */}
+            {createdDateFilter === 'CUSTOM' && (
+              <div className="relative sm:w-44 shrink-0">
+                <input
+                  type="date"
+                  value={customCreatedDate}
+                  onChange={e => setCustomCreatedDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold border border-emerald-400 rounded-lg sm:rounded-xl bg-white text-emerald-950 focus:ring-2 focus:ring-emerald-500 shadow-3xs"
+                  title="Chọn ngày chốt đơn muốn lọc"
+                />
+              </div>
             )}
           </div>
 
-          <div className="relative sm:w-64 shrink-0">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-orange-600">
-              <Filter className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            </div>
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="w-full pl-7.5 pr-6 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium border border-gray-250 rounded-lg sm:rounded-xl bg-gray-50/80 hover:bg-white focus:ring-2 focus:ring-orange-500 focus:outline-none text-gray-800 cursor-pointer appearance-none truncate shadow-3xs"
-              title="Lọc theo trạng thái hợp đồng"
-            >
-              <option value="ALL">Trạng thái: Tất cả</option>
-              <option value="UNPAID_DEPOSIT">⏳ Chưa cọc 50% ({pendingContractsCount})</option>
-              <option value="UNPAID">⚠️ Còn dư nợ ({unpaidContractsCount})</option>
-              <option value="Pending">Chờ giao đồ (Pending)</option>
-              <option value="Active">Đang cho thuê (Active)</option>
-              <option value="Completed">Đã trả đồ (Completed)</option>
-              <option value="Overdue">Quá hạn trả (Overdue)</option>
-              <option value="Cancelled">Đã hủy bỏ (Cancelled)</option>
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-400 text-[9px]">
-              ▼
-            </div>
+          {/* Dải nút bấm lọc nhanh (Quick Filter Pills) */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider select-none shrink-0 mr-0.5">
+              Thời điểm chốt:
+            </span>
+
+            {[
+              { id: 'ALL', label: 'Tất cả' },
+              { id: 'TODAY', label: `✨ Hôm nay (${todayBookedStats.count})` },
+              { id: 'YESTERDAY', label: 'Hôm qua' },
+              { id: 'LAST_7_DAYS', label: '7 ngày qua' },
+              { id: 'THIS_MONTH', label: 'Tháng này' },
+            ].map(pill => {
+              const isActive = createdDateFilter === pill.id;
+              return (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setCreatedDateFilter(pill.id as any)}
+                  className={`text-[11px] sm:text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border select-none active:scale-95 ${
+                    isActive
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/80 hover:border-slate-300'
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              );
+            })}
+
+            {/* Badge thông báo trạng thái đang lọc */}
+            {createdDateFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setCreatedDateFilter('ALL')}
+                className="inline-flex items-center gap-1 text-[10.5px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md ml-auto transition-colors cursor-pointer"
+                title="Bỏ lọc theo ngày chốt"
+              >
+                <span>Bỏ lọc ngày chốt</span>
+                <span>✕</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

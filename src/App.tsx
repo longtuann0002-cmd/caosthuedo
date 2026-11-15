@@ -3389,7 +3389,8 @@ export default function App() {
     label: string,
     description: string,
     IconComponent: React.ComponentType<{ className?: string }>,
-    badgeCount?: number
+    badgeCount?: number,
+    badgeColor?: string
   ) => {
     const isActive = activeTab === tabId;
     return (
@@ -3437,7 +3438,7 @@ export default function App() {
 
         {/* Badge count */}
         {!sidebarCollapsed && badgeCount !== undefined && badgeCount > 0 && (
-          <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-xs shrink-0">
+          <span className={`${badgeColor || 'bg-rose-500'} text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-xs shrink-0`}>
             {badgeCount}
           </span>
         )}
@@ -3447,7 +3448,7 @@ export default function App() {
           <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-2xl whitespace-nowrap opacity-0 pointer-events-none group-hover/nav:opacity-100 transition-opacity z-50 flex items-center gap-1.5">
             <span>{label}</span>
             {badgeCount !== undefined && badgeCount > 0 && (
-              <span className="bg-rose-500 text-white text-[9px] px-1.5 py-0.2 rounded-full">
+              <span className={`${badgeColor || 'bg-rose-500'} text-white text-[9px] px-1.5 py-0.2 rounded-full`}>
                 {badgeCount}
               </span>
             )}
@@ -3529,7 +3530,14 @@ export default function App() {
             <div className="space-y-1">
               {renderNavItem('calendar', 'Lịch đặt đồ', 'Xếp lịch thử & thuê đồ', Calendar)}
               {renderNavItem('contracts', 'Đơn thuê', 'Hợp đồng & trạng thái', FileText, pendingOrOverdueContractsCount)}
-              {renderNavItem('equipment', 'Kho trang phục', 'Tủ đồ & phụ kiện', DressIcon)}
+              {renderNavItem(
+                'equipment', 
+                'Kho trang phục', 
+                'Tủ đồ & phụ kiện', 
+                DressIcon, 
+                cameras.filter(c => c.cleaningStatus === 'Laundry' || c.cleaningStatus === 'Mending').length,
+                'bg-blue-600'
+              )}
               {renderNavItem('customers', 'Khách hàng', 'Hồ sơ khách thuê', Users)}
               {renderNavItem('revenue', 'Doanh thu', 'Báo cáo & lợi nhuận', TrendingUp)}
               {renderNavItem('expenses', 'Khoản chi', 'Chi phí & giặt hấp', DollarSign)}
@@ -3939,16 +3947,20 @@ export default function App() {
                       setEquipmentTrackerStatusFilter('ALL');
                     }
                   }}
-                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 hover:bg-blue-100 text-blue-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none"
+                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 hover:bg-blue-100 text-blue-800 text-xs font-bold transition cursor-pointer shadow-3xs select-none shrink-0"
                   title={`${laundryCount > 0 ? `${laundryCount} bộ đang giặt hấp` : ''}${laundryCount > 0 && mendingCount > 0 ? ' · ' : ''}${mendingCount > 0 ? `${mendingCount} bộ đang sửa chữa` : ''}. Bấm để xem kho đồ.`}
                 >
-                  <span className="text-sm leading-none">🧺</span>
-                  <span>
-                    {laundryCount > 0 && <span>{laundryCount} đang giặt</span>}
-                    {laundryCount > 0 && mendingCount > 0 && <span className="mx-1 opacity-50">·</span>}
-                    {mendingCount > 0 && <span>{mendingCount} đang sửa</span>}
+                  <span className="text-sm leading-none shrink-0">🧺</span>
+                  <span className="flex items-center">
+                    {/* Trên mobile hiển thị gọn số lượng, trên tablet/desktop hiển thị đầy đủ chữ */}
+                    <span className="sm:hidden font-mono font-black">{total}</span>
+                    <span className="hidden sm:inline">
+                      {laundryCount > 0 && <span>{laundryCount} đang giặt</span>}
+                      {laundryCount > 0 && mendingCount > 0 && <span className="mx-1 opacity-50">·</span>}
+                      {mendingCount > 0 && <span>{mendingCount} đang sửa</span>}
+                    </span>
                   </span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
                 </div>
               );
             })() : null}
@@ -4002,9 +4014,16 @@ export default function App() {
               id: 'contracts', 
               label: 'Đơn thuê', 
               icon: FileText, 
-              badge: contracts.filter(c => c.status === 'Pending' || c.status === 'Overdue').length 
+              badge: contracts.filter(c => c.status === 'Pending' || c.status === 'Overdue').length,
+              badgeColor: 'bg-rose-600'
             },
-            { id: 'equipment', label: 'Kho đồ', icon: DressIcon },
+            { 
+              id: 'equipment', 
+              label: 'Kho đồ', 
+              icon: DressIcon,
+              badge: cameras.filter(c => c.cleaningStatus === 'Laundry' || c.cleaningStatus === 'Mending').length,
+              badgeColor: 'bg-blue-600'
+            },
             { id: 'customers', label: 'Khách', icon: Users },
             { id: 'revenue', label: 'Doanh thu', icon: TrendingUp },
             { id: 'expenses', label: 'Khoản chi', icon: DollarSign },
@@ -4035,7 +4054,7 @@ export default function App() {
                   </div>
 
                   {tab.badge && tab.badge > 0 ? (
-                    <span className="absolute -top-1 -right-1.5 bg-rose-600 text-white text-[8.5px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs border-2 border-white animate-pulse">
+                    <span className={`absolute -top-1 -right-1.5 ${tab.badgeColor || 'bg-rose-600'} text-white text-[8.5px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs border-2 border-white animate-pulse`}>
                       {tab.badge > 9 ? '9+' : tab.badge}
                     </span>
                   ) : null}
