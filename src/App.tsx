@@ -91,7 +91,9 @@ import {
   CloudUpload,
   CloudDownload,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Maximize,
+  Minimize
 } from 'lucide-react';
 
 const DEFAULT_USERS = [
@@ -497,6 +499,67 @@ export default function App() {
   });
 
   const morningBriefingCheckedRef = useRef(false);
+
+  // Full-screen mode handling & Auto-fullscreen on first touch for Bluefy/iOS
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const checkFs = () => {
+      const doc = document as any;
+      setIsFullscreen(Boolean(doc.fullscreenElement || doc.webkitFullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', checkFs);
+    document.addEventListener('webkitfullscreenchange', checkFs);
+
+    // Auto-enter fullscreen on first user touch anywhere in the app
+    let hasTriggered = false;
+    const triggerAutoFs = () => {
+      if (hasTriggered) return;
+      hasTriggered = true;
+      const doc = document as any;
+      const el = document.documentElement as any;
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (req) {
+          try {
+            const p = req.call(el);
+            if (p && p.catch) p.catch(() => {});
+          } catch {}
+        }
+      }
+    };
+
+    window.addEventListener('touchstart', triggerAutoFs, { passive: true, once: true });
+    window.addEventListener('click', triggerAutoFs, { passive: true, once: true });
+
+    return () => {
+      document.removeEventListener('fullscreenchange', checkFs);
+      document.removeEventListener('webkitfullscreenchange', checkFs);
+      window.removeEventListener('touchstart', triggerAutoFs);
+      window.removeEventListener('click', triggerAutoFs);
+    };
+  }, []);
+
+  const toggleFullscreen = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const doc = document as any;
+    const el = document.documentElement as any;
+    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+      const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (req) {
+        try {
+          req.call(el).then(() => setIsFullscreen(true)).catch(() => {});
+        } catch {}
+      }
+    } else {
+      const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+      if (exit) {
+        try {
+          exit.call(doc).then(() => setIsFullscreen(false)).catch(() => {});
+        } catch {}
+      }
+    }
+  };
 
   // 9:00 AM Daily Morning Operations Briefing Scheduler (Client Local Fallback)
   // Note: Central broadcast to all phones is handled by Vercel Cloud Cron at 9:00 AM.
@@ -3970,6 +4033,20 @@ export default function App() {
               </span>
             </button>
 
+            {/* Fullscreen Button */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className={`w-10 h-10 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center transition cursor-pointer shadow-3xs active:scale-95 ${
+                isFullscreen 
+                  ? 'border-orange-500 bg-orange-50 text-orange-600' 
+                  : 'border-slate-200/80 bg-slate-50/60 hover:bg-slate-100 text-slate-500 hover:text-slate-900'
+              }`}
+              title={isFullscreen ? "Thu nhỏ màn hình" : "Mở rộng toàn màn hình (Full Screen)"}
+            >
+              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </button>
+
             {/* Clean Minimal Search Button (Spotlight Trigger) */}
             <button
               type="button"
@@ -3994,8 +4071,8 @@ export default function App() {
           </div>
         </header>
 
-        {/* MOBILE NAVIGATION BAR */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-2xl border-t border-gray-200/80 shadow-[0_-8px_30px_rgba(0,0,0,0.06)] pb-[max(8px,env(safe-area-inset-bottom,4px))] pt-2 px-2 flex justify-between items-center select-none">
+        {/* MOBILE NAVIGATION BAR - SLIMMED DOWN */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-2xl border-t border-gray-200/80 shadow-[0_-8px_30px_rgba(0,0,0,0.06)] pb-[max(5px,env(safe-area-inset-bottom,2px))] pt-1.5 px-1.5 flex justify-between items-center select-none">
           {[
             { id: 'calendar', label: 'Lịch đồ', icon: Calendar },
             { 
@@ -4052,7 +4129,7 @@ export default function App() {
         </div>
 
         {/* MAIN BODY AREA */}
-        <main className="flex-grow w-full px-3 sm:px-6 md:px-8 py-3 sm:py-6 pb-24 md:pb-6 overflow-y-auto" style={{ paddingBottom: 'max(96px, calc(env(safe-area-inset-bottom, 0px) + 76px))' }}>
+        <main className="flex-grow w-full px-3 sm:px-6 md:px-8 py-3 sm:py-6 pb-16 md:pb-6 overflow-y-auto" style={{ paddingBottom: 'max(72px, calc(env(safe-area-inset-bottom, 0px) + 54px))' }}>
 
           <div className="w-full">
             {activeTab === 'calendar' && (
