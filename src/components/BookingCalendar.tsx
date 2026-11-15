@@ -1320,44 +1320,85 @@ export default function BookingCalendar({
                     } ${viewMode === 'week' ? 'min-h-[90px] sm:min-h-[160px]' : 'min-h-[70px] sm:min-h-[96px]'}`}
                     title={`Ngày ${day}/${currentMonth}. Bấm để xem chi tiết, nhấp đúp để đặt lịch nhanh.`}
                   >
-                    {/* Cell Header: Thứ (mọi ô) + Số ngày + badge booking */}
+                    {/* Cell Header: Thứ + Số ngày + badge booking */}
                     <div className="flex flex-col gap-0 pb-0.5 sm:pb-1">
-                      {/* Nhãn Thứ — hiện trong mọi ô, tính từ ngày thực tế */}
+
+                      {/* ===== DESKTOP: Dòng "Thứ X · DD" gọn trong 1 hàng ===== */}
                       {(() => {
-                        const WEEKDAY_MAP: Record<number, { short: string; full: string; color: string }> = {
-                          1: { short: 'T2', full: 'Thứ 2',    color: 'text-slate-400' },
-                          2: { short: 'T3', full: 'Thứ 3',    color: 'text-slate-400' },
-                          3: { short: 'T4', full: 'Thứ 4',    color: 'text-slate-400' },
-                          4: { short: 'T5', full: 'Thứ 5',    color: 'text-slate-400' },
-                          5: { short: 'T6', full: 'Thứ 6',    color: 'text-slate-400' },
-                          6: { short: 'T7', full: 'Thứ 7',    color: 'text-blue-400 font-black' },
-                          0: { short: 'CN', full: 'Chủ Nhật', color: 'text-rose-400 font-black' },
+                        const WEEKDAY_MAP: Record<number, { short: string; full: string }> = {
+                          1: { short: 'T.2', full: 'Thứ 2' },
+                          2: { short: 'T.3', full: 'Thứ 3' },
+                          3: { short: 'T.4', full: 'Thứ 4' },
+                          4: { short: 'T.5', full: 'Thứ 5' },
+                          5: { short: 'T.6', full: 'Thứ 6' },
+                          6: { short: 'T.7', full: 'Thứ 7' },
+                          0: { short: 'CN',  full: 'CN' },
                         };
                         const w = WEEKDAY_MAP[dObj.getDay()];
+                        const isWeekendDay = dObj.getDay() === 0 || dObj.getDay() === 6;
+                        const weekdayColor = dObj.getDay() === 0
+                          ? 'text-rose-500'
+                          : dObj.getDay() === 6
+                          ? 'text-blue-500'
+                          : (isCurrentMonth ? 'text-slate-400' : 'text-slate-300');
+                        const dayNumberColor = isToday
+                          ? '' // handled below with circle
+                          : isSelected
+                          ? 'text-orange-700'
+                          : dObj.getDay() === 0
+                          ? 'text-rose-600'
+                          : (isCurrentMonth ? 'text-gray-900' : 'text-gray-300');
+
                         return (
-                          <div className={`font-bold tracking-tight leading-none mb-0.5 select-none ${w.color} text-[7px] sm:text-[9px] text-center sm:text-left`}>
-                            <span className="sm:hidden">{w.short}</span>
-                            <span className="hidden sm:inline">{w.full}</span>
-                          </div>
+                          <>
+                            {/* MOBILE: "T.X" nhỏ trên + số ngày nổi bật dưới */}
+                            <div className="flex sm:hidden flex-col items-center gap-0 select-none">
+                              <span className={`text-[7.5px] font-extrabold uppercase tracking-wide leading-none ${weekdayColor}`}>
+                                {w.short}
+                              </span>
+                              <span className={`text-[12px] font-black leading-tight font-mono inline-flex items-center justify-center ${
+                                isToday
+                                  ? 'w-5 h-5 rounded-full bg-orange-600 text-white shadow-sm mt-0.5'
+                                  : dayNumberColor
+                              }`}>
+                                {day}
+                              </span>
+                            </div>
+
+                            {/* DESKTOP: "Thứ X" ở trên + hàng ngày + badge */}
+                            <div className="hidden sm:flex flex-col gap-0.5 select-none">
+                              <span className={`text-[9px] font-bold uppercase tracking-wide leading-none ${weekdayColor}`}>
+                                {w.full}
+                              </span>
+                              <div className="flex items-center justify-between gap-1">
+                                <span className={`text-sm font-black leading-none font-mono inline-flex items-center justify-center ${
+                                  isToday
+                                    ? 'w-6 h-6 rounded-full bg-orange-600 text-white shadow-sm'
+                                    : dayNumberColor
+                                }`}>
+                                  {day}
+                                </span>
+                                {bookingCount > 0 && (
+                                  <span className="bg-white/95 border border-gray-200 text-gray-700 text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-sm leading-none shrink-0">
+                                    {bookingCount}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </>
                         );
                       })()}
 
-                      {/* Số ngày + badge */}
-                      <div className="flex justify-between items-center">
-                        <span className={`text-xs sm:text-sm font-black inline-flex items-center justify-center leading-none ${
-                          isToday
-                            ? 'w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-orange-600 text-white shadow-3xs'
-                            : (isCurrentMonth ? (isSelected ? 'text-orange-700 font-black' : (isSunday ? 'text-rose-600' : 'text-gray-900')) : 'text-gray-300')
-                        }`}>
-                          {day}
-                        </span>
-                        {bookingCount > 0 && (
-                          <span className="bg-white/95 border border-gray-200 text-gray-700 text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.2 rounded-full shadow-3xs leading-none shrink-0">
+                      {/* MOBILE: Badge booking count dưới số ngày */}
+                      {bookingCount > 0 && (
+                        <div className="flex sm:hidden justify-center mt-0.5">
+                          <span className="bg-white/95 border border-gray-200 text-gray-700 text-[7px] font-black px-1 py-0.5 rounded-full shadow-sm leading-none">
                             {bookingCount}
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
+
 
                     {/* Booking item text blocks: Gộp theo từng Hợp Đồng / Khách Hàng */}
                     <div className="space-y-1 mt-0.5 flex-grow select-none w-full">
