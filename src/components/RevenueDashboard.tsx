@@ -1167,7 +1167,7 @@ export default function RevenueDashboard({
                 type="text"
                 placeholder="Tìm tên trang phục, tag..."
                 value={equipmentSearch}
-                onChange={(e) => setEquipmentSearch(e.target.value)}
+                onChange={(e) => { setEquipmentSearch(e.target.value); setEquipmentPage(1); }}
                 className="w-full pl-8 pr-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-orange-500 focus:bg-white transition text-gray-800"
               />
             </div>
@@ -1186,7 +1186,7 @@ export default function RevenueDashboard({
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => setEquipmentCategoryFilter(cat.id)}
+                    onClick={() => { setEquipmentCategoryFilter(cat.id); setEquipmentPage(1); }}
                     className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer shadow-xs whitespace-nowrap text-center ${
                       isCatActive
                         ? 'bg-orange-600 text-white font-black'
@@ -1208,7 +1208,7 @@ export default function RevenueDashboard({
               Không tìm thấy thiết bị nào phù hợp.
             </div>
           ) : (
-            displayEquipmentList.map((item) => {
+            paginatedEquipmentList.map((item) => {
               const latestBooking = item.bookings[0];
               return (
                 <div
@@ -1336,7 +1336,7 @@ export default function RevenueDashboard({
                   </td>
                 </tr>
               ) : (
-                displayEquipmentList.map((item) => {
+                paginatedEquipmentList.map((item) => {
                   const latestBooking = item.bookings[0];
                   return (
                     <tr 
@@ -1473,6 +1473,73 @@ export default function RevenueDashboard({
             </tbody>
           </table>
         </div>
+
+        {/* PAGINATION CONTROLS */}
+        {equipmentTotalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-100">
+            {/* Info text */}
+            <p className="text-xs text-gray-500 font-medium">
+              Hiển thị{' '}
+              <span className="font-black text-gray-800">
+                {(equipmentSafePage - 1) * EQUIPMENT_PAGE_SIZE + 1}–{Math.min(equipmentSafePage * EQUIPMENT_PAGE_SIZE, displayEquipmentList.length)}
+              </span>{' '}
+              / <span className="font-black text-gray-800">{displayEquipmentList.length}</span> trang phục
+            </p>
+
+            {/* Page buttons */}
+            <div className="flex items-center gap-1">
+              {/* Prev */}
+              <button
+                type="button"
+                disabled={equipmentSafePage <= 1}
+                onClick={() => setEquipmentPage(p => Math.max(1, p - 1))}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Trước
+              </button>
+
+              {/* Page number buttons */}
+              {Array.from({ length: equipmentTotalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === equipmentTotalPages || Math.abs(p - equipmentSafePage) <= 1)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`ellipsis-${idx}`} className="px-1.5 text-xs text-gray-400 select-none">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setEquipmentPage(p as number)}
+                      className={`min-w-[30px] px-2 py-1.5 text-xs font-black rounded-lg border transition cursor-pointer ${
+                        equipmentSafePage === p
+                          ? 'bg-orange-600 text-white border-orange-600 shadow-sm'
+                          : 'border-gray-200 bg-white text-gray-700 hover:bg-orange-50 hover:border-orange-300'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )
+              }
+
+              {/* Next */}
+              <button
+                type="button"
+                disabled={equipmentSafePage >= equipmentTotalPages}
+                onClick={() => setEquipmentPage(p => Math.min(equipmentTotalPages, p + 1))}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              >
+                Sau
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Detailed Interactive Monthly Visual Report */}
