@@ -88,6 +88,10 @@ export default function RevenueDashboard({
   const [equipmentSearch, setEquipmentSearch] = useState<string>('');
   const [equipmentCategoryFilter, setEquipmentCategoryFilter] = useState<string>('all');
 
+  // Equipment table pagination
+  const EQUIPMENT_PAGE_SIZE = 10;
+  const [equipmentPage, setEquipmentPage] = useState<number>(1);
+
   // Compute boundaries for top timeframe filters dynamically using REAL-TIME clock
   const dateRange = useMemo(() => {
     let start: Date | null = null;
@@ -533,6 +537,14 @@ export default function RevenueDashboard({
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue || b.rentalCount - a.rentalCount);
   }, [equipmentRentalAnalytics, equipmentCategoryFilter, equipmentSearch]);
+
+  // Pagination derived values for equipment table
+  const equipmentTotalPages = Math.max(1, Math.ceil(displayEquipmentList.length / EQUIPMENT_PAGE_SIZE));
+  const equipmentSafePage = Math.min(equipmentPage, equipmentTotalPages);
+  const paginatedEquipmentList = displayEquipmentList.slice(
+    (equipmentSafePage - 1) * EQUIPMENT_PAGE_SIZE,
+    equipmentSafePage * EQUIPMENT_PAGE_SIZE
+  );
 
   // Specific selected camera detail for Modal
   const modalCameraDetail = useMemo(() => {
