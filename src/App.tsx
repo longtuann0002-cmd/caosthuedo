@@ -30,6 +30,17 @@ import { compressImageFile } from './utils/imageUtils';
 import { deduplicateContracts, generateNextContractCode } from './utils/contractUtils';
 import { normalizeOutfitsBySize } from './utils/outfitUtils';
 
+/**
+ * Hợp nhất thông minh danh sách trang phục: local luôn thắng, cloud chỉ bổ sung đồ chưa có.
+ * Tránh tình trạng cloud ghi đè làm mất trang phục vừa được thêm mới ở local.
+ */
+function mergeCameras(local: Camera[], cloud: Camera[]): Camera[] {
+  const map = new Map<string, Camera>();
+  (local || []).forEach(c => { if (c && c.id) map.set(c.id, c); });
+  (cloud || []).forEach(c => { if (c && c.id && !map.has(c.id)) map.set(c.id, c); });
+  return Array.from(map.values());
+}
+
 
 // Component imports
 import BookingCalendar from './components/BookingCalendar';
@@ -1101,6 +1112,68 @@ export default function App() {
     }
   }, [loaded, snapshots]);
 
+  // 🛡️ TỰ ĐỘNG SAO LƯU HÀNG NGÀY (DAILY AUTO-SNAPSHOT CHO APP QUẦN ÁO):
+  // Mỗi ngày khi mở app, tự động chụp 1 bản lưu trữ an toàn (giữ 7 ngày gần nhất, tự động xoay vòng)
+  useEffect(() => {
+    if (!loaded) return;
+    if ((contracts || []).length === 0 && (cameras || []).length === 0) return;
+
+    const timer = setTimeout(() => {
+      const todayStr = systemDate || new Date().toISOString().split('T')[0];
+      const lastAutoBackupDate = localStorage.getItem('camlease_last_auto_backup_date');
+
+      if (lastAutoBackupDate !== todayStr) {
+        const hasTodayBackup = snapshots.some(
+          s => s && s.isAuto && (s.systemDate === todayStr || (s.date && s.date.startsWith(todayStr)))
+        );
+
+        if (!hasTodayBackup) {
+          const autoSnap = {
+            id: `snap-auto-${todayStr}-${Date.now()}`,
+            name: `[Tự động] Ngày ${formatDMY(todayStr)}`,
+            date: new Date().toISOString(),
+            systemDate: todayStr,
+            isAuto: true,
+            data: {
+              cameras,
+              contracts,
+              customers,
+              expenses,
+              registeredUsers,
+              logoText,
+              logoFontSize,
+              logoSubtitle,
+              logoSubtitleCase,
+              logoSubtitleFontSize,
+              logoIconType,
+              logoIconColor,
+              logoBase64,
+              accountSectionTitle
+            }
+          };
+
+          setSnapshots(prev => {
+            const manualSnaps = prev.filter(s => !s.isAuto);
+            const autoSnaps = [autoSnap, ...prev.filter(s => s.isAuto)].slice(0, 7);
+            const updated = [...autoSnaps, ...manualSnaps].sort(
+              (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+            );
+            saveStoredData('camlease_snapshots', updated);
+            if (isSupabaseConfigured) {
+              syncToSupabase('camlease_snapshots', updated);
+            }
+            return updated;
+          });
+
+          localStorage.setItem('camlease_last_auto_backup_date', todayStr);
+          console.log(`[Auto-Backup Trang Phục] ✅ Đã tự động tạo điểm khôi phục ngày ${todayStr}`);
+        }
+      }
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [loaded, systemDate, cameras, contracts, customers, expenses, registeredUsers]);
+
   // Load initial data block asynchronously from Supabase on mount
   useEffect(() => {
     const loadInitialData = async () => {
@@ -1125,11 +1198,12 @@ export default function App() {
         const cloudExpenses = await fetchFromSupabase('expenses');
 
         if (cloudCameras !== null) {
-          const { normalized, splitCount } = normalizeOutfitsBySize(cloudCameras as Camera[]);
+          const localCams = loadStoredData('cameras', INITIAL_CAMERAS);
+          // Hợp nhất thông minh: local luôn thắng, cloud chỉ bổ sung đồ chưa có
+          const mergedCams = mergeCameras(localCams, cloudCameras as Camera[]);
+          const { normalized, splitCount } = normalizeOutfitsBySize(mergedCams);
           setCameras(normalized);
-          // Always update localStorage cache with the authoritative cloud data
           saveStoredData('cameras', normalized);
-          // Đánh dấu hash đã đồng bộ từ Cloud để tránh kích hoạt upload ngược lại
           lastSyncedCamerasRef.current = computeCamerasSyncHash(normalized);
           setCloudSyncState('synced');
           if (splitCount > 0) {
@@ -1183,6 +1257,19 @@ export default function App() {
           setExpenses(cloudExpenses);
         } else {
           setExpenses(loadStoredData('expenses', INITIAL_EXPENSES));
+        }
+
+        // Fetch Snapshots from Supabase cloud
+        const cloudSnapshots = await fetchFromSupabase('camlease_snapshots');
+        if (cloudSnapshots && Array.isArray(cloudSnapshots) && cloudSnapshots.length > 0) {
+          setSnapshots(prev => {
+            const map = new Map<string, any>();
+            (cloudSnapshots || []).forEach((s: any) => { if (s && s.id) map.set(s.id, s); });
+            (prev || []).forEach((s: any) => { if (s && s.id) map.set(s.id, s); });
+            const merged = Array.from(map.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            saveStoredData('camlease_snapshots', merged);
+            return merged;
+          });
         }
 
         // Fetch bank config and custom payment QR from Supabase cloud
@@ -5731,6 +5818,17 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Auto-backup status banner */}
+                <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 text-[11px] text-emerald-800">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Tự động sao lưu: <strong>1 ngày/lần</strong> khi mở app (lưu 7 ngày gần nhất)</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-bold bg-white border border-emerald-200 px-1.5 py-0.5 rounded">
+                    Đã bật
+                  </span>
+                </div>
+
                 {/* Snapshot List */}
                 <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
                   {snapshots.length === 0 ? (
@@ -5744,9 +5842,16 @@ export default function App() {
                         className="bg-gray-50 border border-gray-200/80 rounded-xl p-3 flex justify-between items-center gap-4 hover:border-gray-300 transition-colors"
                       >
                         <div className="min-w-0 flex-1">
-                          <span className="block font-bold text-xs text-gray-900 truncate">
-                            {snap.name}
-                          </span>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-bold text-xs text-gray-900 truncate">
+                              {snap.name}
+                            </span>
+                            {(snap.isAuto || (snap.name || '').includes('[Tự động]')) && (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300/80 px-1.5 py-0.2 rounded shrink-0">
+                                🤖 Tự động
+                              </span>
+                            )}
+                          </div>
                           <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-gray-400 font-mono mt-1">
                             <span className="font-sans font-medium text-indigo-500 bg-indigo-50 border border-indigo-100/30 px-1 py-0.2 rounded shrink-0">
                               Hệ thống: {snap.systemDate || 'Không rõ'}
