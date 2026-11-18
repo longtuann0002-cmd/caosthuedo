@@ -502,6 +502,18 @@ export default function BookingCalendar({
     }
   }, [currentYear, currentMonth, viewMode, selectedDate]);
 
+  // Label phạm vi tuần: "T2 13 → CN 19/11" hoặc "T2 25/11 → CN 01/12" khi qua tháng
+  const weekRangeLabel = useMemo(() => {
+    if (viewMode !== 'week' || calendarDays.length === 0) return '';
+    const first = new Date(calendarDays[0].dateString);
+    const last  = new Date(calendarDays[calendarDays.length - 1].dateString);
+    const SHORT_DAY = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const fmt = (d: Date, showMonth = true) =>
+      `${SHORT_DAY[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}${showMonth ? `/${String(d.getMonth() + 1).padStart(2, '0')}` : ''}`;
+    const crossMonth = first.getMonth() !== last.getMonth();
+    return `${fmt(first, crossMonth)} → ${fmt(last, true)}/${last.getFullYear()}`;
+  }, [viewMode, calendarDays]);
+
   // Map each calendar day to contracts
   const dayBookingsMap = useMemo(() => {
     const map: Record<string, { contract: RentalContract; cameraId: string; cameraShort: string; cameraName: string; cleanName?: string; color?: string; category?: string; size?: string; timeString: string; printCount?: number; isPrinter?: boolean }[]> = {};
@@ -959,7 +971,9 @@ export default function BookingCalendar({
                       ? `Lịch thuê tháng ${String(currentMonth).padStart(2, '0')}/${currentYear}` 
                       : viewMode === 'timeline'
                       ? `Tiến độ trang phục tháng ${String(currentMonth).padStart(2, '0')}/${currentYear}`
-                      : `Lịch thuê trong tuần`}
+                      : weekRangeLabel
+                        ? `Lịch thuê ${weekRangeLabel}`
+                        : `Lịch thuê theo tuần`}
                   </h2>
                   {selectedCameraFilter !== 'ALL' && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-orange-100 text-orange-800 border border-orange-300">
@@ -1059,7 +1073,9 @@ export default function BookingCalendar({
                 </button>
 
                 <span className="px-1.5 font-black text-gray-800 text-xs text-center select-none font-mono truncate flex-1 sm:min-w-[80px]">
-                  {viewMode === 'week' ? 'Tuần này' : `${String(currentMonth).padStart(2, '0')}/${currentYear}`}
+                  {viewMode === 'week' 
+                    ? (weekRangeLabel || 'Tuần này')
+                    : `${String(currentMonth).padStart(2, '0')}/${currentYear}`}
                 </span>
 
                 <button
