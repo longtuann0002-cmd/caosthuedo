@@ -18,6 +18,8 @@ interface RevenueDashboardProps {
   cameras: Camera[];
 }
 
+const EQUIPMENT_PAGE_SIZE = 10;
+
 export default function RevenueDashboard({
   contracts,
   expenses,
@@ -89,7 +91,6 @@ export default function RevenueDashboard({
   const [equipmentCategoryFilter, setEquipmentCategoryFilter] = useState<string>('all');
 
   // Equipment table pagination
-  const EQUIPMENT_PAGE_SIZE = 10;
   const [equipmentPage, setEquipmentPage] = useState<number>(1);
 
   // Compute boundaries for top timeframe filters dynamically using REAL-TIME clock

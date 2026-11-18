@@ -326,6 +326,9 @@ export function listenToCrossDeviceAlerts(
           }
         });
       }, (err) => {
+        if (err.code === 'permission-denied' || (err.message && err.message.toLowerCase().includes('permissions'))) {
+          return;
+        }
         console.warn('Firestore subscription status:', err.message);
       });
     } catch (e) {

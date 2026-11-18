@@ -1302,7 +1302,6 @@ export default function BookingCalendar({
                 const isToday = (systemDate || new Date().toISOString().split('T')[0]) === dateString;
 
                 const dObj = new Date(dateString);
-                const isSunday = dObj.getDay() === 0;
 
                 // Determine status and style matching the legend
                 let statusStyle = 'bg-white border-gray-200 hover:border-emerald-400';
@@ -1339,8 +1338,9 @@ export default function BookingCalendar({
                     {/* Cell Header: Thứ + Số ngày + badge booking */}
                     <div className="flex flex-col gap-0 pb-0.5 sm:pb-1">
 
-                      {/* ===== DESKTOP: Dòng "Thứ X · DD" gọn trong 1 hàng ===== */}
+                      {/* ===== DESKTOP: Dòng "Thứ X · DD/MM" gọn trong 1 hàng ===== */}
                       {(() => {
+                        const cellMonth = parseInt(dateString.split('-')[1], 10);
                         const WEEKDAY_MAP: Record<number, { short: string; full: string }> = {
                           1: { short: 'T.2', full: 'Thứ 2' },
                           2: { short: 'T.3', full: 'Thứ 3' },
@@ -1351,14 +1351,13 @@ export default function BookingCalendar({
                           0: { short: 'CN',  full: 'CN' },
                         };
                         const w = WEEKDAY_MAP[dObj.getDay()];
-                        const isWeekendDay = dObj.getDay() === 0 || dObj.getDay() === 6;
                         const weekdayColor = dObj.getDay() === 0
                           ? 'text-rose-500'
                           : dObj.getDay() === 6
                           ? 'text-blue-500'
                           : (isCurrentMonth ? 'text-slate-400' : 'text-slate-300');
                         const dayNumberColor = isToday
-                          ? '' // handled below with circle
+                          ? '' // handled below with circle/badge
                           : isSelected
                           ? 'text-orange-700'
                           : dObj.getDay() === 0
@@ -1367,32 +1366,45 @@ export default function BookingCalendar({
 
                         return (
                           <>
-                            {/* MOBILE: "T.X" nhỏ trên + số ngày nổi bật dưới */}
+                            {/* MOBILE: "T.X" nhỏ trên + Ngày/Tháng */}
                             <div className="flex sm:hidden flex-col items-center gap-0 select-none">
                               <span className={`text-[7.5px] font-extrabold uppercase tracking-wide leading-none ${weekdayColor}`}>
                                 {w.short}
                               </span>
-                              <span className={`text-[12px] font-black leading-tight font-mono inline-flex items-center justify-center ${
-                                isToday
-                                  ? 'w-5 h-5 rounded-full bg-orange-600 text-white shadow-sm mt-0.5'
-                                  : dayNumberColor
-                              }`}>
-                                {day}
-                              </span>
-                            </div>
-
-                            {/* DESKTOP: "Thứ X" ở trên + hàng ngày + badge */}
-                            <div className="hidden sm:flex flex-col gap-0.5 select-none">
-                              <span className={`text-[9px] font-bold uppercase tracking-wide leading-none ${weekdayColor}`}>
-                                {w.full}
-                              </span>
-                              <div className="flex items-center justify-between gap-1">
-                                <span className={`text-sm font-black leading-none font-mono inline-flex items-center justify-center ${
+                              <div className="mt-0.5 flex items-center justify-center">
+                                <span className={`font-mono inline-flex items-center justify-center leading-none ${
                                   isToday
-                                    ? 'w-6 h-6 rounded-full bg-orange-600 text-white shadow-sm'
+                                    ? 'px-1 py-0.5 rounded bg-orange-600 text-white font-black text-[9.5px] shadow-3xs'
                                     : dayNumberColor
                                 }`}>
-                                  {day}
+                                  <span className={isToday ? 'font-black' : 'text-[11px] font-black'}>{day}</span>
+                                  <span className={`text-[8px] font-bold ${isToday ? 'text-orange-200' : 'text-gray-400'} ml-0.5`}>
+                                    /{cellMonth}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* DESKTOP: "Thứ X" + "Tháng M" ở trên + hàng Ngày/Tháng + badge */}
+                            <div className="hidden sm:flex flex-col gap-0.5 select-none">
+                              <div className="flex items-center justify-between text-[9px] font-bold leading-none mb-0.5">
+                                <span className={`uppercase tracking-wide ${weekdayColor}`}>
+                                  {w.full}
+                                </span>
+                                <span className={`text-[8.5px] font-bold font-mono ${isCurrentMonth ? 'text-gray-400' : 'text-gray-300'}`}>
+                                  Thg {cellMonth}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-1">
+                                <span className={`font-mono inline-flex items-baseline leading-none ${
+                                  isToday
+                                    ? 'px-1.5 py-0.5 rounded-md bg-orange-600 text-white shadow-3xs'
+                                    : dayNumberColor
+                                }`}>
+                                  <span className="text-sm font-black">{day}</span>
+                                  <span className={`text-[10px] font-bold ml-0.5 ${isToday ? 'text-orange-200' : 'text-gray-400'}`}>
+                                    /{cellMonth}
+                                  </span>
                                 </span>
                                 {bookingCount > 0 && (
                                   <span className="bg-white/95 border border-gray-200 text-gray-700 text-[9.5px] font-black px-1.5 py-0.5 rounded-full shadow-sm leading-none shrink-0">
